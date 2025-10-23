@@ -5,7 +5,7 @@ import './App.css';
 
 // --- Our API's "address" ---
 // This tells React to talk to our backend server on port 3001
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'https://dash-q-backend.onrender.com/api';
 
 // ##############################################
 // ##          CUSTOMER VIEW COMPONENT         ##
