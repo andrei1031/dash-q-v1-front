@@ -1,9 +1,8 @@
-// This is your new App.js file for Phase 2 (with Charts)
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
-// --- NEW: Import Chart.js components ---
+// --- Chart.js Imports ---
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -17,7 +16,7 @@ import {
 
 import './App.css';
 
-// --- NEW: Register Chart.js components ---
+// --- Register Chart.js components ---
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -27,11 +26,14 @@ ChartJS.register(
   Legend
 );
 
-// --- Our API's "address" ---
+// --- Backend API URL ---
+// Make sure this points to your deployed Render URL
 const API_URL = 'https://dash-q-backend.onrender.com/api';
 // const API_URL = 'http://localhost:3001/api'; // For local testing
 
-// --- Create Supabase Client ---
+// --- Supabase Client Setup ---
+// Make sure your Vercel Environment Variables are set:
+// REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY
 const supabase = createClient(
   process.env.REACT_APP_SUPABASE_URL,
   process.env.REACT_APP_SUPABASE_ANON_KEY
@@ -40,20 +42,24 @@ const supabase = createClient(
 // ##############################################
 // ##          CUSTOMER VIEW COMPONENT         ##
 // ##############################################
-// (This component is exactly the same as before)
 function CustomerView() {
+  // --- State Variables ---
   const [barbers, setBarbers] = useState([]);
   const [selectedBarber, setSelectedBarber] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState(''); // Added Email
   const [message, setMessage] = useState('');
-  const [file, setFile] = useState(null);
-  const [prompt, setPrompt] = useState(''); // <-- ADD THIS
-  const [generatedImage, setGeneratedImage] = useState(null); // <-- ADD THIS
-  const [isGenerating, setIsGenerating] = useState(false); // <-- ADD THIS
+  const [myQueueEntryId, setMyQueueEntryId] = useState(null); // For realtime subscription
 
-  // We're renaming this from 'isUploading' for clarity
-  const [isLoading, setIsLoading] = useState(false);
+  // --- AI State ---
+  const [file, setFile] = useState(null);
+  const [prompt, setPrompt] = useState('');
+  const [generatedImage, setGeneratedImage] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // General loading state
+
+  // --- Fetch Barbers ---
   useEffect(() => {
     const loadBarbers = async () => {
       try {
@@ -66,59 +72,123 @@ function CustomerView() {
     loadBarbers();
   }, []);
 
-  // --- NEW: Function to call the AI ---
-const handleGeneratePreview = async () => {
-  if (!file || !prompt) {
-    setMessage('Please upload a photo and enter a prompt.');
-    return;
-  }
+  // --- Effect for Notification Permission and Subscription ---
+  useEffect(() => {
+    // 1. Ask for permission
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          console.log("Notification permission granted.");
+        } else {
+          console.log("Notification permission denied.");
+        }
+      });
+    }
 
-  setIsGenerating(true);
-  setIsLoading(true); // Disable "Join Queue" button
-  setGeneratedImage(null); // Clear old image
-  setMessage('Step 1/3: Uploading your photo...');
+    // 2. Set up Supabase listener if we have an ID
+    let channel = null;
+    if (myQueueEntryId) {
+      console.log(`Subscribing to changes for queue entry ID: ${myQueueEntryId}`);
+      channel = supabase
+        .channel(`queue_entry_${myQueueEntryId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'queue_entries',
+            filter: `id=eq.${myQueueEntryId}`
+          },
+          (payload) => {
+            console.log('Change received!', payload);
+            const updatedEntry = payload.new;
+            if (updatedEntry.status === 'Up Next') {
+              console.log('My status is Up Next! Sending notification.');
+              // 3. Show Notification
+              if (Notification.permission === "granted") {
+                new Notification("You're next at Dash-Q!", {
+                  body: "Please head over to the barbershop now.",
+                  // icon: "/favicon.ico" // Optional: Make sure you have a favicon
+                });
+              } else {
+                alert("You're next at Dash-Q! Please head over now.");
+              }
+              // Unsubscribe after notification
+              if (channel) {
+                supabase.removeChannel(channel).then(() => console.log('Unsubscribed'));
+              }
+              setMyQueueEntryId(null); // Reset
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to Supabase Realtime!');
+          } else {
+            console.error('Supabase Realtime subscription error:', status, err);
+          }
+        });
+    }
 
-  // Step 1: Upload the file to Supabase Storage
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Date.now()}.${fileExt}`;
-  const filePath = `${fileName}`;
+    // 4. Cleanup
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel).then(() => console.log('Cleaned up subscription.'));
+      }
+    };
+  }, [myQueueEntryId]);
 
-  try {
-    const { error: uploadError } = await supabase.storage
-      .from('haircut_references') // Our public bucket
-      .upload(filePath, file);
+  // --- AI Preview Function ---
+  const handleGeneratePreview = async () => {
+    if (!file || !prompt) {
+      setMessage('Please upload a photo and enter a prompt.');
+      return;
+    }
 
-    if (uploadError) throw uploadError;
+    setIsGenerating(true);
+    setIsLoading(true);
+    setGeneratedImage(null);
+    setMessage('Step 1/3: Uploading your photo...');
 
-    // 2. Get the public URL
-    const { data: urlData } = supabase.storage
-      .from('haircut_references')
-      .getPublicUrl(filePath);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
 
-    const imageUrl = urlData.publicUrl;
+    try {
+      // 1. Upload file
+      const { error: uploadError } = await supabase.storage
+        .from('haircut_references')
+        .upload(filePath, file);
+      if (uploadError) throw uploadError;
 
-    // Step 2: Call our backend to run the AI
-    setMessage('Step 2/3: Generating AI haircut... (this takes ~15s)');
-    const response = await axios.post(`${API_URL}/generate-haircut`, {
-      imageUrl: imageUrl,
-      prompt: prompt
-    });
+      // 2. Get public URL
+      const { data: urlData } = supabase.storage
+        .from('haircut_references')
+        .getPublicUrl(filePath);
+      const imageUrl = urlData.publicUrl;
 
-    const newAiUrl = response.data.generatedImageUrl;
-    setGeneratedImage(newAiUrl); // Show the new image!
-    setMessage('Step 3/3: Success! Check out your preview.');
+      // 3. Call backend AI endpoint
+      setMessage('Step 2/3: Generating AI haircut... (this takes ~15-30s)');
+      const response = await axios.post(`${API_URL}/generate-haircut`, {
+        imageUrl: imageUrl,
+        prompt: prompt
+      });
 
-  } catch (error) {
-    console.error('Error in AI generation pipeline:', error);
-    setMessage('AI generation failed. Please try again.');
-  } finally {
-    setIsGenerating(false);
-    setIsLoading(false); // Re-enable "Join Queue"
-  }
-};
+      const newAiUrl = response.data.generatedImageUrl;
+      setGeneratedImage(newAiUrl);
+      setMessage('Step 3/3: Success! Check out your preview.');
 
-// --- UPDATED: handleJoinQueue function ---
-// This function will now save the AI image if it exists.
+    } catch (error) {
+      console.error('Error in AI generation pipeline:', error);
+       const errorMessage = error.response?.data?.error || error.message || 'Unknown AI error';
+      setMessage(`AI generation failed. ${errorMessage}`);
+    } finally {
+      setIsGenerating(false);
+      setIsLoading(false);
+    }
+  };
+
+  // --- Join Queue Function ---
   const handleJoinQueue = async (e) => {
     e.preventDefault();
 
@@ -130,21 +200,27 @@ const handleGeneratePreview = async () => {
     setIsLoading(true);
 
     try {
-      await axios.post(`${API_URL}/queue`, {
+      // Use the AI image if generated, otherwise null
+      const imageUrlToSave = generatedImage;
+
+      const response = await axios.post(`${API_URL}/queue`, {
         customer_name: customerName,
         customer_phone: customerPhone,
+        customer_email: customerEmail, // Send email
         barber_id: selectedBarber,
-        // *** THIS IS THE KEY ***
-        // Save the AI image if it exists, otherwise save nothing.
-        reference_image_url: generatedImage 
+        reference_image_url: imageUrlToSave
       });
 
+      const newQueueEntry = response.data;
+      setMyQueueEntryId(newQueueEntry.id); // Save ID to start listening
+
       const barberName = barbers.find(b => b.id === parseInt(selectedBarber)).full_name;
-      setMessage(`Success! You've been added to the queue for ${barberName}.`);
+      setMessage(`Success! You're #${newQueueEntry.id} in line for ${barberName}. We'll notify you via the app!`);
 
       // Clear the form
       setCustomerName('');
       setCustomerPhone('');
+      setCustomerEmail('');
       setSelectedBarber('');
       setFile(null);
       setPrompt('');
@@ -158,218 +234,234 @@ const handleGeneratePreview = async () => {
     }
   };
 
-  // This is the new <CustomerView> return block
-return (
-  <div className="card">
-    <h2>Join the Queue</h2>
-    <form onSubmit={handleJoinQueue}>
-      {/* --- Standard Queue Form --- */}
-      <div className="form-group">
-        <label>Your Name:</label>
-        <input 
-          type="text"
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-        />
-      </div>
-      <div className="form-group">
-        <label>Your Phone (for SMS):</label>
-        <input 
-          type="text"
-          value={customerPhone}
-          onChange={(e) => setCustomerPhone(e.target.value)}
-        />
-      </div>
-      <div className="form-group">
-        <label>Select a Barber:</label>
-        <select 
-          value={selectedBarber} 
-          onChange={(e) => setSelectedBarber(e.target.value)}
-        >
-          {/* ... (your barbers.map is in here) ... */}
-        </select>
-      </div>
-
-      {/* --- NEW AI GENERATOR SECTION --- */}
-      <div className="ai-generator">
-        <p className="ai-title">AI Haircut Preview (Optional)</p>
-        <div className="form-group">
-          <label>1. Upload a clear photo of yourself:</label>
-          <input 
-            type="file" 
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
-        </div>
-        <div className="form-group">
-          <label>2. Describe your desired haircut:</label>
-          <input 
-            type="text"
-            value={prompt}
-            placeholder="e.g., 'a short buzz cut' or 'blue hair'"
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-        </div>
-        <button 
-          type="button" 
-          onClick={handleGeneratePreview} 
-          className="generate-button"
-          disabled={!file || !prompt || isLoading}
-        >
-          {isGenerating ? 'Generating...' : 'Generate AI Preview'}
-        </button>
-
-        {/* --- AI Image Preview --- */}
-        {generatedImage && (
-          <div className="image-preview">
-            <p>Your AI Preview:</p>
-            <img src={generatedImage} alt="AI Generated Haircut" />
-            <p className="success-text">Happy? Click "Join Queue" to save this photo!</p>
+  return (
+      <div className="card">
+        <h2>Join the Queue</h2>
+        <form onSubmit={handleJoinQueue}>
+          {/* --- Standard Queue Form --- */}
+          <div className="form-group">
+            <label>Your Name:</label>
+            <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required/>
           </div>
-        )}
-      </div>
-      {/* --- END OF AI SECTION --- */}
+          <div className="form-group">
+            <label>Your Phone (Optional):</label>
+            <input type="text" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+          </div>
+           <div className="form-group">
+            <label>Your Email (Optional):</label>
+            <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Select a Barber:</label>
+            <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required>
+              <option value="">-- Choose a barber --</option>
+              {barbers.map((barber) => (
+                <option key={barber.id} value={barber.id}>
+                  {barber.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      <button type="submit" disabled={isLoading} className="join-queue-button">
-        {isLoading ? '...' : 'Join Queue'}
-      </button>
-    </form>
-    {message && <p className="message">{message}</p>}
-  </div>
-);
+          {/* --- AI GENERATOR SECTION --- */}
+          <div className="ai-generator">
+            <p className="ai-title">AI Haircut Preview (Optional)</p>
+            <div className="form-group">
+              <label>1. Upload a clear photo of yourself:</label>
+              <input type="file" accept="image/*" onChange={(e) => { setFile(e.target.files[0]); setGeneratedImage(null); }} />
+            </div>
+            <div className="form-group">
+              <label>2. Describe your desired haircut:</label>
+              <input type="text" value={prompt} placeholder="e.g., 'a short buzz cut' or 'blue hair'" onChange={(e) => setPrompt(e.target.value)} />
+            </div>
+            <button type="button" onClick={handleGeneratePreview} className="generate-button" disabled={!file || !prompt || isLoading || isGenerating}>
+              {isGenerating ? 'Generating...' : 'Generate AI Preview'}
+            </button>
+
+            {/* --- AI Image Preview --- */}
+             {isLoading && isGenerating && <p>Generating image...</p>}
+            {generatedImage && (
+              <div className="image-preview">
+                <p>Your AI Preview:</p>
+                <img src={generatedImage} alt="AI Generated Haircut" />
+                <p className="success-text">Happy? Click "Join Queue" to save this photo!</p>
+              </div>
+            )}
+          </div>
+          {/* --- END OF AI SECTION --- */}
+
+          <button type="submit" disabled={isLoading} className="join-queue-button">
+            {isLoading ? '...' : 'Join Queue'}
+          </button>
+        </form>
+        {message && <p className="message">{message}</p>}
+      </div>
+    );
 }
 
 
 // ##############################################
 // ##         BARBER DASHBOARD COMPONENT       ##
 // ##############################################
-// (This component is exactly the same as before)
 function BarberDashboard({ onCutComplete }) {
-  const [myQueue, setMyQueue] = useState([]);
-  const [inProgressCustomer, setInProgressCustomer] = useState(null);
+  const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
+  const [error, setError] = useState('');
 
-  const MY_BARBER_ID = 1; 
-  const MY_BARBER_NAME = "Pareng Jo";
+  // --- Hardcoded Barber ID ---
+  const MY_BARBER_ID = 1;
+  const MY_BARBER_NAME = "Pareng Jo"; // TODO: Fetch this dynamically later
 
-  const fetchQueue = async () => {
+  // --- Fetch Detailed Queue Data ---
+  const fetchQueueDetails = async () => {
+    setError(''); // Clear previous errors
     try {
-      // Get "Waiting" customers
-      const queueRes = await axios.get(`${API_URL}/queue/${MY_BARBER_ID}`);
-      setMyQueue(queueRes.data);
-
-      // Check for an "In Progress" customer
-      const { data: allEntries } = await supabase
-        .from('queue_entries')
-        .select('*')
-        .eq('barber_id', MY_BARBER_ID)
-        .eq('status', 'In Progress')
-        .limit(1);
-
-      if (allEntries.length > 0) {
-        setInProgressCustomer(allEntries[0]);
-      } else {
-        setInProgressCustomer(null);
-      }
-
-    } catch (error) {
-      console.error('Failed to fetch queue:', error);
+      const response = await axios.get(`${API_URL}/queue/details/${MY_BARBER_ID}`);
+      setQueueDetails(response.data);
+    } catch (err) {
+      console.error('Failed to fetch queue details:', err);
+      setError('Could not load queue details.');
+      setQueueDetails({ waiting: [], inProgress: null, upNext: null }); // Reset on error
     }
   };
 
+  // --- Initial Load & Refresh Signal ---
   useEffect(() => {
-    fetchQueue();
-  }, []);
+    fetchQueueDetails();
+  }, [onCutComplete]); // Re-fetch when a cut is completed (via refreshSignal prop)
 
-  // Inside BarberDashboard...
+
+  // --- Event Handlers ---
   const handleNextCustomer = async () => {
-    const nextCustomer = myQueue[0];
-    if (!nextCustomer) {
+     // Determine who to actually move next
+    const customerToMoveNext = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
+
+    if (!customerToMoveNext) {
       alert('Queue is empty!');
+      return;
+    }
+     if (queueDetails.inProgress) {
+      alert(`Please complete the cut for ${queueDetails.inProgress.customer_name} first.`);
       return;
     }
 
     try {
-      // --- THIS IS THE UPDATED PART ---
       await axios.put(`${API_URL}/queue/next`, {
-        queue_id: nextCustomer.id,
-        barber_id: MY_BARBER_ID // Send the barber's ID!
+        queue_id: customerToMoveNext.id,
+        barber_id: MY_BARBER_ID
       });
-      // --- END OF UPDATE ---
-
-      // Refresh the queue
-      fetchQueue();
-    } catch (error) {
-      console.error('Failed to update customer:', error);
+      // Refresh the queue after action
+      fetchQueueDetails();
+    } catch (err) {
+      console.error('Failed to move next customer:', err);
+       setError(err.response?.data?.error || 'Failed to call next customer.');
     }
   };
 
   const handleCompleteCut = async () => {
-    if (!inProgressCustomer) return;
+    if (!queueDetails.inProgress) return;
 
-    const price = prompt('Enter the price for this service:');
-    if (!price || isNaN(price)) {
-      alert('Invalid price. Please enter a number.');
+    const price = prompt(`Enter the price for ${queueDetails.inProgress.customer_name}:`);
+     if (price === null) return; // Handle cancel
+    const parsedPrice = parseInt(price);
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      alert('Invalid price. Please enter a positive number.');
       return;
     }
 
     try {
       await axios.post(`${API_URL}/queue/complete`, {
-        queue_id: inProgressCustomer.id,
+        queue_id: queueDetails.inProgress.id,
         barber_id: MY_BARBER_ID,
-        price: parseInt(price)
+        price: parsedPrice
       });
-      
-      onCutComplete(); 
-      fetchQueue();
 
-    } catch (error) {
-      console.error('Failed to complete cut:', error);
+      onCutComplete(); // Signal parent to refresh analytics
+      fetchQueueDetails(); // Refresh local queue state
+
+    } catch (err) {
+      console.error('Failed to complete cut:', err);
+       setError(err.response?.data?.error || 'Failed to complete cut.');
     }
   };
-  
+
+  // Determine which action button to show
   const getActionButton = () => {
-    if (inProgressCustomer) {
+    if (queueDetails.inProgress) {
       return (
         <button onClick={handleCompleteCut} className="complete-button">
-          Complete Cut for {inProgressCustomer.customer_name}
+          Complete Cut for {queueDetails.inProgress.customer_name}
+        </button>
+      );
+    } else if (queueDetails.upNext || queueDetails.waiting.length > 0) {
+       const nextPersonName = queueDetails.upNext?.customer_name || queueDetails.waiting[0]?.customer_name;
+      return (
+        <button onClick={handleNextCustomer} className="next-button">
+          Call Next: {nextPersonName}
         </button>
       );
     } else {
       return (
-        <button onClick={handleNextCustomer} className="next-button">
-          Next Customer
+        <button className="next-button disabled" disabled>
+          Queue Empty
         </button>
       );
     }
   };
 
-  return (
+
+ return (
     <div className="card">
       <h2>My Queue ({MY_BARBER_NAME})</h2>
-      
+      {error && <p className="error-message">{error}</p>}
       {getActionButton()}
 
       <h3 className="queue-subtitle">In the Chair</h3>
-      {inProgressCustomer ? (
+      {queueDetails.inProgress ? (
         <ul className="queue-list"><li className="in-progress">
-          <strong>{inProgressCustomer.customer_name}</strong>
+          <strong>{queueDetails.inProgress.customer_name}</strong>
+           {queueDetails.inProgress.reference_image_url && (
+            <a href={queueDetails.inProgress.reference_image_url} target="_blank" rel="noopener noreferrer" className="photo-link">
+              See Ref Photo
+            </a>
+          )}
         </li></ul>
       ) : (
         <p className="empty-text">Chair is empty</p>
       )}
 
+       <h3 className="queue-subtitle">Up Next</h3>
+      {queueDetails.upNext ? (
+        <ul className="queue-list"><li className="up-next">
+          <strong>{queueDetails.upNext.customer_name}</strong>
+           {queueDetails.upNext.reference_image_url && (
+            <a href={queueDetails.upNext.reference_image_url} target="_blank" rel="noopener noreferrer" className="photo-link">
+              See Ref Photo
+            </a>
+          )}
+        </li></ul>
+      ) : (
+        <p className="empty-text">Nobody is marked 'Up Next'</p>
+      )}
+
+
       <h3 className="queue-subtitle">Waiting</h3>
       <ul className="queue-list">
-        {myQueue.length === 0 ? (
-          <li className="empty-text">Your queue is empty.</li>
+        {queueDetails.waiting.length === 0 ? (
+          <li className="empty-text">Waiting queue is empty.</li>
         ) : (
-          myQueue.map((customer) => (
+          queueDetails.waiting.map((customer) => (
             <li key={customer.id}>
               {customer.customer_name}
+              {customer.reference_image_url && (
+                <a href={customer.reference_image_url} target="_blank" rel="noopener noreferrer" className="photo-link">
+                  See Ref Photo
+                </a>
+              )}
             </li>
           ))
         )}
       </ul>
+       <button onClick={fetchQueueDetails} className="refresh-button small">Refresh Queue</button>
     </div>
   );
 }
@@ -378,55 +470,55 @@ function BarberDashboard({ onCutComplete }) {
 // ##############################################
 // ##       ANALYTICS DASHBOARD COMPONENT      ##
 // ##############################################
-// --- !!! THIS COMPONENT IS ALL NEW !!! ---
 function AnalyticsDashboard({ refreshSignal }) {
-  // --- NEW: Updated state to hold all our new data ---
-  const [analytics, setAnalytics] = useState({ 
-    total_earnings: 0, 
+  const [analytics, setAnalytics] = useState({
+    total_earnings: 0,
     total_cuts: 0,
-    dailyData: [] // This will hold the array for the chart
+    dailyData: []
   });
-  
-  const MY_BARBER_ID = 1; // Still "Pareng Jo"
+  const [error, setError] = useState('');
+
+  // Hardcoded Barber ID
+  const MY_BARBER_ID = 1;
 
   const fetchAnalytics = async () => {
+    setError('');
     try {
-      // Talk to our new ENDPOINT 6
       const response = await axios.get(`${API_URL}/analytics/${MY_BARBER_ID}`);
       setAnalytics(response.data);
-    } catch (error)
- {
-      console.error('Failed to fetch analytics:', error);
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+      setError('Could not load analytics.');
+      setAnalytics({ total_earnings: 0, total_cuts: 0, dailyData: [] }); // Reset on error
     }
   };
 
+  // Fetch on initial load and when refreshSignal changes
   useEffect(() => {
     fetchAnalytics();
-  }, [refreshSignal]); // Refreshes when a cut is completed
+  }, [refreshSignal]);
 
-  // --- NEW: Prepare the data for the chart ---
+  // Chart Configuration
   const chartOptions = {
     responsive: true,
     plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Earnings per Day (Last 7 Days)',
-      },
+      legend: { position: 'top' },
+      title: { display: true, text: 'Earnings per Day (Last 7 Days)' },
     },
+    scales: { // Ensure y-axis starts at 0
+        y: { beginAtZero: true }
+    }
   };
 
   const chartData = {
-    // Format the dates to be readable (e.g., "10/24")
-    labels: analytics.dailyData.map(d => new Date(d.day).toLocaleDateString()),
+    labels: analytics.dailyData.map(d => new Date(d.day).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })), // Format date nicely
     datasets: [
       {
         label: 'Daily Earnings ($)',
-        // Get the earnings number from our data
         data: analytics.dailyData.map(d => d.daily_earnings),
-        backgroundColor: 'rgba(52, 199, 89, 0.6)', // Green color
+        backgroundColor: 'rgba(52, 199, 89, 0.6)', // Green
+        borderColor: 'rgba(52, 199, 89, 1)',
+        borderWidth: 1,
       },
     ],
   };
@@ -434,6 +526,7 @@ function AnalyticsDashboard({ refreshSignal }) {
   return (
     <div className="card analytics-card">
       <h2>Today's Dashboard</h2>
+       {error && <p className="error-message">{error}</p>}
       <div className="analytics-item">
         <span className="analytics-label">Total Earnings</span>
         <span className="analytics-value">${analytics.total_earnings}</span>
@@ -442,13 +535,17 @@ function AnalyticsDashboard({ refreshSignal }) {
         <span className="analytics-label">Total Cuts</span>
         <span className="analytics-value">{analytics.total_cuts}</span>
       </div>
-      
-      {/* --- NEW: Add the chart --- */}
+
       <div className="chart-container">
-        <Bar options={chartOptions} data={chartData} />
+        {/* Only render chart if there's data */}
+        {analytics.dailyData.length > 0 ? (
+           <Bar options={chartOptions} data={chartData} />
+        ) : (
+           <p className='empty-text'>No earnings data for the chart yet.</p>
+        )}
       </div>
 
-      <button onClick={fetchAnalytics} className="refresh-button">Refresh</button>
+      <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
     </div>
   );
 }
@@ -457,12 +554,13 @@ function AnalyticsDashboard({ refreshSignal }) {
 // ##############################################
 // ##           THE MAIN APP PAGE              ##
 // ##############################################
-// (This component is exactly the same as before)
 function App() {
   const [refreshSignal, setRefreshSignal] = useState(0);
 
+  // This function is passed down to BarberDashboard
+  // and called when a cut is completed.
   const handleCutComplete = () => {
-    setRefreshSignal(prev => prev + 1);
+    setRefreshSignal(prev => prev + 1); // Incrementing triggers useEffect in AnalyticsDashboard
   };
 
   return (
@@ -472,7 +570,9 @@ function App() {
       </header>
       <div className="container">
         <CustomerView />
+        {/* Pass the callback function to BarberDashboard */}
         <BarberDashboard onCutComplete={handleCutComplete} />
+        {/* Pass the signal state to AnalyticsDashboard */}
         <AnalyticsDashboard refreshSignal={refreshSignal} />
       </div>
     </div>
