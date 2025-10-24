@@ -36,3 +36,73 @@
     transform: rotate(360deg);
   }
 }
+
+/* --- New styles for Phase 2 --- */
+
+.complete-button {
+  width: 100%;
+  background-color: #ff9500; /* Orange */
+}
+.complete-button:hover {
+  background-color: #d98000;
+}
+
+.queue-subtitle {
+  font-size: 1.1em;
+  color: #555;
+  margin-top: 20px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 5px;
+}
+
+.in-progress {
+  font-weight: 700;
+  color: #007aff;
+  background-color: #f0f7ff;
+  border-radius: 4px;
+}
+
+.empty-text {
+  font-style: italic;
+  color: #888;
+  font-size: 0.9em;
+}
+
+/* Styles for the new Analytics Card */
+.analytics-card {
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+}
+
+.analytics-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.analytics-item:last-of-type {
+  border-bottom: none;
+}
+
+.analytics-label {
+  font-weight: 600;
+  color: #333;
+}
+
+.analytics-value {
+  font-size: 1.8em;
+  font-weight: 700;
+  color: #34c759;
+}
+
+.refresh-button {
+  margin-top: 15px;
+  width: 100%;
+  background-color: #5e5ce6; /* Indigo */
+}
+.refresh-button:hover {
+  background-color: #4946b9;
+}
