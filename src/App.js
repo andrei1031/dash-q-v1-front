@@ -1,16 +1,37 @@
-// This is your new App.js file for Phase 2
+// This is your new App.js file for Phase 2 (with Charts)
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { createClient } from '@supabase/supabase-js'; // <-- THIS LINE IS MISSING
+import { createClient } from '@supabase/supabase-js';
+
+// --- NEW: Import Chart.js components ---
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
 import './App.css';
 
-// --- Our API's "address" ---
-// !!! --- IMPORTANT --- !!!
-// Change this to your Render URL when deploying!
-const API_URL = 'https://dash-q-backend.onrender.com/api'; // For local testing
+// --- NEW: Register Chart.js components ---
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
-// --- NEW: Create Supabase Client ---
-// (It reads the variables you just put in Vercel)
+// --- Our API's "address" ---
+const API_URL = 'https://dash-q-backend.onrender.com/api';
+// const API_URL = 'http://localhost:3001/api'; // For local testing
+
+// --- Create Supabase Client ---
 const supabase = createClient(
   process.env.REACT_APP_SUPABASE_URL,
   process.env.REACT_APP_SUPABASE_ANON_KEY
@@ -51,7 +72,6 @@ function CustomerView() {
         customer_phone: customerPhone,
         barber_id: selectedBarber
       });
-      // We'll use the barber's name in the success message
       const barberName = barbers.find(b => b.id === parseInt(selectedBarber)).full_name;
       setMessage(`Success! You've been added to the queue for ${barberName}.`);
       setCustomerName('');
@@ -108,31 +128,27 @@ function CustomerView() {
 // ##############################################
 // ##         BARBER DASHBOARD COMPONENT       ##
 // ##############################################
-// --- !!! THIS COMPONENT HAS BEEN UPDATED !!! ---
-function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
+// (This component is exactly the same as before)
+function BarberDashboard({ onCutComplete }) {
   const [myQueue, setMyQueue] = useState([]);
   const [inProgressCustomer, setInProgressCustomer] = useState(null);
 
-  // !!! --- SIMPLIFICATION FOR PHASE 1 --- !!!
-  const MY_BARBER_ID = 1; // We're still "John Cuts" / "Pareng Jo"
-  const MY_BARBER_NAME = "Pareng Jo"; // Hardcode name for the title
+  const MY_BARBER_ID = 1; 
+  const MY_BARBER_NAME = "Pareng Jo";
 
-  // --- Data Fetching ---
   const fetchQueue = async () => {
     try {
       // Get "Waiting" customers
       const queueRes = await axios.get(`${API_URL}/queue/${MY_BARBER_ID}`);
       setMyQueue(queueRes.data);
 
-      // --- NEW ---
       // Check for an "In Progress" customer
-      // (This is not efficient, but it's simple for Phase 2)
       const { data: allEntries } = await supabase
         .from('queue_entries')
         .select('*')
         .eq('barber_id', MY_BARBER_ID)
         .eq('status', 'In Progress')
-        .limit(1); // Should only ever be one
+        .limit(1);
 
       if (allEntries.length > 0) {
         setInProgressCustomer(allEntries[0]);
@@ -145,12 +161,10 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
     }
   };
 
-  // This effect runs when the component loads
   useEffect(() => {
     fetchQueue();
   }, []);
 
-  // --- Event Handlers ---
   const handleNextCustomer = async () => {
     const nextCustomer = myQueue[0];
     if (!nextCustomer) {
@@ -159,22 +173,18 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
     }
 
     try {
-      // Talk to our backend's ENDPOINT 4
       await axios.put(`${API_URL}/queue/next`, {
         queue_id: nextCustomer.id
       });
-      // Refresh the queue
       fetchQueue();
     } catch (error) {
       console.error('Failed to update customer:', error);
     }
   };
 
-  // --- NEW ---
   const handleCompleteCut = async () => {
     if (!inProgressCustomer) return;
 
-    // Ask the barber for the price
     const price = prompt('Enter the price for this service:');
     if (!price || isNaN(price)) {
       alert('Invalid price. Please enter a number.');
@@ -182,17 +192,13 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
     }
 
     try {
-      // Talk to our new ENDPOINT 5
       await axios.post(`${API_URL}/queue/complete`, {
         queue_id: inProgressCustomer.id,
         barber_id: MY_BARBER_ID,
         price: parseInt(price)
       });
       
-      // Tell the AnalyticsDashboard to refresh!
       onCutComplete(); 
-      
-      // Refresh our own queue
       fetchQueue();
 
     } catch (error) {
@@ -200,18 +206,14 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
     }
   };
   
-  // --- NEW ---
-  // The logic for what button to show
   const getActionButton = () => {
     if (inProgressCustomer) {
-      // If someone is in the chair, show the "Complete" button
       return (
         <button onClick={handleCompleteCut} className="complete-button">
           Complete Cut for {inProgressCustomer.customer_name}
         </button>
       );
     } else {
-      // If the chair is empty, show the "Next" button
       return (
         <button onClick={handleNextCustomer} className="next-button">
           Next Customer
@@ -220,14 +222,12 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
     }
   };
 
-  // --- JSX (The HTML part) ---
   return (
     <div className="card">
       <h2>My Queue ({MY_BARBER_NAME})</h2>
       
       {getActionButton()}
 
-      {/* --- NEW: Show "In Progress" customer --- */}
       <h3 className="queue-subtitle">In the Chair</h3>
       {inProgressCustomer ? (
         <ul className="queue-list"><li className="in-progress">
@@ -259,7 +259,12 @@ function BarberDashboard({ onCutComplete }) { // We pass in a new "prop"
 // ##############################################
 // --- !!! THIS COMPONENT IS ALL NEW !!! ---
 function AnalyticsDashboard({ refreshSignal }) {
-  const [analytics, setAnalytics] = useState({ total_earnings: 0, total_cuts: 0 });
+  // --- NEW: Updated state to hold all our new data ---
+  const [analytics, setAnalytics] = useState({ 
+    total_earnings: 0, 
+    total_cuts: 0,
+    dailyData: [] // This will hold the array for the chart
+  });
   
   const MY_BARBER_ID = 1; // Still "Pareng Jo"
 
@@ -268,16 +273,42 @@ function AnalyticsDashboard({ refreshSignal }) {
       // Talk to our new ENDPOINT 6
       const response = await axios.get(`${API_URL}/analytics/${MY_BARBER_ID}`);
       setAnalytics(response.data);
-    } catch (error) {
+    } catch (error)
+ {
       console.error('Failed to fetch analytics:', error);
     }
   };
 
-  // This effect runs when the component loads
-  // AND when the "refreshSignal" changes
   useEffect(() => {
     fetchAnalytics();
-  }, [refreshSignal]); // The signal comes from the parent App
+  }, [refreshSignal]); // Refreshes when a cut is completed
+
+  // --- NEW: Prepare the data for the chart ---
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Earnings per Day (Last 7 Days)',
+      },
+    },
+  };
+
+  const chartData = {
+    // Format the dates to be readable (e.g., "10/24")
+    labels: analytics.dailyData.map(d => new Date(d.day).toLocaleDateString()),
+    datasets: [
+      {
+        label: 'Daily Earnings ($)',
+        // Get the earnings number from our data
+        data: analytics.dailyData.map(d => d.daily_earnings),
+        backgroundColor: 'rgba(52, 199, 89, 0.6)', // Green color
+      },
+    ],
+  };
 
   return (
     <div className="card analytics-card">
@@ -290,6 +321,12 @@ function AnalyticsDashboard({ refreshSignal }) {
         <span className="analytics-label">Total Cuts</span>
         <span className="analytics-value">{analytics.total_cuts}</span>
       </div>
+      
+      {/* --- NEW: Add the chart --- */}
+      <div className="chart-container">
+        <Bar options={chartOptions} data={chartData} />
+      </div>
+
       <button onClick={fetchAnalytics} className="refresh-button">Refresh</button>
     </div>
   );
@@ -299,14 +336,11 @@ function AnalyticsDashboard({ refreshSignal }) {
 // ##############################################
 // ##           THE MAIN APP PAGE              ##
 // ##############################################
-// --- !!! THIS COMPONENT IS UPDATED !!! ---
+// (This component is exactly the same as before)
 function App() {
-  // This "signal" state is used to tell the analytics
-  // dashboard to refresh itself when a cut is completed.
   const [refreshSignal, setRefreshSignal] = useState(0);
 
   const handleCutComplete = () => {
-    // Just change the value to trigger the effect
     setRefreshSignal(prev => prev + 1);
   };
 
