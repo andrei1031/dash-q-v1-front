@@ -1,14 +1,20 @@
 // This is your new App.js file for Phase 2
 import React, { useState, useEffect } from 'react';
-import axios from 'axios'; // Our tool for making API calls
+import axios from 'axios';
+import { createClient } from '@supabase/supabase-js'; // <-- THIS LINE IS MISSING
 import './App.css';
 
 // --- Our API's "address" ---
 // !!! --- IMPORTANT --- !!!
 // Change this to your Render URL when deploying!
-// const API_URL = 'https://dash-q-backend.onrender.com/api';
-const API_URL = 'http://localhost:3001/api'; // For local testing
+const API_URL = 'https://dash-q-backend.onrender.com/api'; // For local testing
 
+// --- NEW: Create Supabase Client ---
+// (It reads the variables you just put in Vercel)
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY
+);
 
 // ##############################################
 // ##          CUSTOMER VIEW COMPONENT         ##
