@@ -61,7 +61,10 @@ function AuthForm() {
         e.preventDefault();
         setLoading(true);
         setMessage('');
-
+        // Inside AuthForm JSX, the main submit button:
+        <button type="submit" disabled={loading}>
+            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
+        </button>
         try {
             if (isLogin) {
                 // --- LOGIN via Backend (Username/Password) ---
