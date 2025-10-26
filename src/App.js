@@ -470,17 +470,27 @@ function BarberDashboard({ onCutComplete }) {
 // ##############################################
 // ##       ANALYTICS DASHBOARD COMPONENT      ##
 // ##############################################
+// --- UPDATED Version ---
 function AnalyticsDashboard({ refreshSignal }) {
+  // --- Updated state to hold all new data ---
   const [analytics, setAnalytics] = useState({
-    total_earnings: 0,
-    total_cuts: 0,
-    dailyData: []
+    // Today
+    totalEarningsToday: 0,
+    totalCutsToday: 0,
+    // Week
+    totalEarningsWeek: 0,
+    totalCutsWeek: 0,
+    dailyData: [], // For chart
+    busiestDay: { name: 'N/A', earnings: 0 },
+    // Current
+    currentQueueSize: 0
   });
   const [error, setError] = useState('');
 
   // Hardcoded Barber ID
   const MY_BARBER_ID = 1;
 
+  // --- Fetch Expanded Analytics ---
   const fetchAnalytics = async () => {
     setError('');
     try {
@@ -489,7 +499,12 @@ function AnalyticsDashboard({ refreshSignal }) {
     } catch (err) {
       console.error('Failed to fetch analytics:', err);
       setError('Could not load analytics.');
-      setAnalytics({ total_earnings: 0, total_cuts: 0, dailyData: [] }); // Reset on error
+      // Reset state on error
+      setAnalytics({
+         totalEarningsToday: 0, totalCutsToday: 0,
+         totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [],
+         busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0
+      });
     }
   };
 
@@ -498,25 +513,32 @@ function AnalyticsDashboard({ refreshSignal }) {
     fetchAnalytics();
   }, [refreshSignal]);
 
-  // Chart Configuration
+  // --- Calculate Averages ---
+  const avgPriceToday = analytics.totalCutsToday > 0
+    ? (analytics.totalEarningsToday / analytics.totalCutsToday).toFixed(2)
+    : '0.00';
+  const avgPriceWeek = analytics.totalCutsWeek > 0
+    ? (analytics.totalEarningsWeek / analytics.totalCutsWeek).toFixed(2)
+    : '0.00';
+
+
+  // --- Chart Configuration (Same as before) ---
   const chartOptions = {
     responsive: true,
     plugins: {
       legend: { position: 'top' },
       title: { display: true, text: 'Earnings per Day (Last 7 Days)' },
     },
-    scales: { // Ensure y-axis starts at 0
-        y: { beginAtZero: true }
-    }
+    scales: { y: { beginAtZero: true } }
   };
 
   const chartData = {
-    labels: analytics.dailyData.map(d => new Date(d.day).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })), // Format date nicely
+    labels: analytics.dailyData.map(d => new Date(d.day + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })), // Ensure consistent date parsing
     datasets: [
       {
         label: 'Daily Earnings ($)',
         data: analytics.dailyData.map(d => d.daily_earnings),
-        backgroundColor: 'rgba(52, 199, 89, 0.6)', // Green
+        backgroundColor: 'rgba(52, 199, 89, 0.6)',
         borderColor: 'rgba(52, 199, 89, 1)',
         borderWidth: 1,
       },
@@ -525,19 +547,55 @@ function AnalyticsDashboard({ refreshSignal }) {
 
   return (
     <div className="card analytics-card">
-      <h2>Today's Dashboard</h2>
-       {error && <p className="error-message">{error}</p>}
-      <div className="analytics-item">
-        <span className="analytics-label">Total Earnings</span>
-        <span className="analytics-value">${analytics.total_earnings}</span>
-      </div>
-      <div className="analytics-item">
-        <span className="analytics-label">Total Cuts</span>
-        <span className="analytics-value">{analytics.total_cuts}</span>
+      <h2>Dashboard</h2>
+      {error && <p className="error-message">{error}</p>}
+
+      {/* --- TODAY Section --- */}
+      <h3 className="analytics-subtitle">Today</h3>
+      <div className="analytics-grid">
+         <div className="analytics-item">
+            <span className="analytics-label">Earnings</span>
+            <span className="analytics-value">${analytics.totalEarningsToday}</span>
+          </div>
+          <div className="analytics-item">
+            <span className="analytics-label">Cuts</span>
+            <span className="analytics-value">{analytics.totalCutsToday}</span>
+          </div>
+           <div className="analytics-item">
+            <span className="analytics-label">Avg Price</span>
+            <span className="analytics-value small">${avgPriceToday}</span>
+          </div>
+          <div className="analytics-item">
+            <span className="analytics-label">Queue Size</span>
+            <span className="analytics-value small">{analytics.currentQueueSize}</span>
+          </div>
       </div>
 
+
+      {/* --- WEEK Section --- */}
+       <h3 className="analytics-subtitle">Last 7 Days</h3>
+       <div className="analytics-grid">
+          <div className="analytics-item">
+            <span className="analytics-label">Total Earnings</span>
+            <span className="analytics-value">${analytics.totalEarningsWeek}</span>
+          </div>
+          <div className="analytics-item">
+            <span className="analytics-label">Total Cuts</span>
+            <span className="analytics-value">{analytics.totalCutsWeek}</span>
+          </div>
+           <div className="analytics-item">
+            <span className="analytics-label">Avg Price</span>
+            <span className="analytics-value small">${avgPriceWeek}</span>
+          </div>
+           <div className="analytics-item">
+            <span className="analytics-label">Busiest Day</span>
+            <span className="analytics-value small">{analytics.busiestDay.name} (${analytics.busiestDay.earnings})</span>
+          </div>
+       </div>
+
+
+      {/* --- CHART --- */}
       <div className="chart-container">
-        {/* Only render chart if there's data */}
         {analytics.dailyData.length > 0 ? (
            <Bar options={chartOptions} data={chartData} />
         ) : (
