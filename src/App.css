@@ -112,6 +112,12 @@ body {
 .form-group input[type="file"] {
   padding: 8px;
 }
+.form-group small {
+    font-size: 0.8em;
+    color: #777;
+    display: block;
+    margin-top: 4px;
+}
 
 
 /* Buttons */
@@ -169,13 +175,14 @@ button:disabled {
 }
 .error-message.small { /* For minor errors like toggle fail */
     font-size: 0.8em; margin-top: 5px; padding: 5px;
+    background: none; border: none; color: #cf1322;
 }
 
 
 /* Queue Subtitles & Lists */
 .queue-subtitle {
   font-size: 1.1em; color: #555; margin-top: 20px; margin-bottom: 5px;
-  border-bottom: 1px solid #f0f0f0; padding-bottom: 5px;
+  border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; font-weight: 600; /* Make subtitle bold */
 }
 .queue-list {
   list-style: none; padding: 0; margin: 0 0 15px 0;
@@ -187,15 +194,15 @@ button:disabled {
 .queue-list li:last-child { border-bottom: none; }
 
 /* Queue Item Status Styles */
-.in-progress { font-weight: 700; color: #007aff; background-color: #f0f7ff; border-radius: 4px; padding: 10px 5px; }
-.up-next { font-weight: 700; color: #e67e22; background-color: #fff8f0; border-radius: 4px; padding: 10px 5px; }
+.in-progress { font-weight: 700; color: #007aff; background-color: #f0f7ff; border-radius: 4px; padding: 10px 5px; margin-bottom: 5px;}
+.up-next { font-weight: 700; color: #e67e22; background-color: #fff8f0; border-radius: 4px; padding: 10px 5px; margin-bottom: 5px;}
 .empty-text { font-style: italic; color: #888; font-size: 0.9em; padding: 10px 5px; }
 
 /* Barber Action Buttons */
-.next-button { width: 100%; background-color: #34c759; }
+.next-button { width: 100%; background-color: #34c759; margin-bottom: 10px;}
 .next-button:hover:not(:disabled) { background-color: #2a9e46; }
 .next-button.disabled { background-color: #aaa; cursor: not-allowed; }
-.complete-button { width: 100%; background-color: #ff9500; }
+.complete-button { width: 100%; background-color: #ff9500; margin-bottom: 10px;}
 .complete-button:hover { background-color: #d98000; }
 
 /* Barber Availability Toggle */
@@ -221,7 +228,7 @@ button:disabled {
 .analytics-value { font-size: 1.5em; font-weight: 700; color: #34c759; }
 .analytics-value.small { font-size: 1.2em; color: #555; }
 .chart-container { margin-top: 20px; margin-bottom: 15px; position: relative; }
-.chart-container > div { height: 250px !important; width: 100% !important; } /* Ensure chart has height */
+.chart-container > div { height: 250px !important; width: 100% !important; }
 .refresh-button { width: 100%; background-color: #5856d6; }
 .refresh-button:hover { background-color: #4946b9; }
 .refresh-button.small { width: auto; padding: 6px 10px; font-size: 0.8em; margin-top: 10px; }
@@ -232,8 +239,8 @@ button:disabled {
 .ai-title { font-size: 1.1em; font-weight: 600; color: #333; margin-top: 0; margin-bottom: 15px; }
 .generate-button { width: 100%; background-color: #5e5ce6; margin-bottom: 15px; }
 .generate-button:hover:not(:disabled) { background-color: #4946b9; }
-.image-preview img { width: 100%; max-width: 350px; border-radius: 8px; margin-top: 10px; border: 1px solid #eee; }
-.success-text { font-weight: 600; color: #34c759; font-size: 0.9em; margin-top: 5px; }
+.image-preview img { display: block; width: 100%; max-width: 350px; border-radius: 8px; margin: 10px auto 0 auto; border: 1px solid #eee; }
+.success-text { font-weight: 600; color: #34c759; font-size: 0.9em; margin-top: 5px; text-align: center; }
 .join-queue-button { width: 100%; font-size: 1.1em; background-color: #007aff; }
 
 /* Photo Link */
@@ -247,7 +254,7 @@ button:disabled {
 .queue-list.live li:last-child { border-bottom: none; }
 .queue-list.live li.my-position { background-color: #e6f7ff; border-left: 4px solid #007aff; font-weight: 600; }
 .queue-list.live li.up-next-public { background-color: #fff8f0; border-left: 4px solid #e67e22; font-weight: 600; }
-.queue-status { font-size: 0.8em; font-weight: 500; color: #777; background-color: #eee; padding: 2px 6px; border-radius: 10px; text-transform: capitalize; }
+.queue-status { font-size: 0.8em; font-weight: 500; color: #777; background-color: #eee; padding: 2px 6px; border-radius: 10px; text-transform: capitalize; white-space: nowrap; }
 .up-next-public .queue-status { background-color: #e67e22; color: white; }
 .my-position .queue-status { background-color: #007aff; color: white; }
 .leave-queue-button { background-color: #ff3b30; width: 100%; }
@@ -257,14 +264,14 @@ button:disabled {
 .loading-fullscreen { display: flex; justify-content: center; align-items: center; min-height: 100vh; font-size: 1.5em; color: #555; }
 
 /* Responsive Adjustments */
-@media (max-width: 1250px) { /* Adjust breakpoint as needed */
+@media (max-width: 1250px) { /* Adjust breakpoint for 3 columns */
     .container {
         flex-direction: column;
         align-items: center;
     }
     .card {
         width: 90%;
-        max-width: 600px; /* Allow cards to be wider on medium screens */
+        max-width: 600px;
     }
 }
 @media (max-width: 768px) {
@@ -278,17 +285,18 @@ button:disabled {
         justify-content: space-between;
     }
      .card {
-        width: 95%;
+        width: 95%; /* Take more width on small screens */
         padding: 15px;
     }
      .analytics-grid {
-         grid-template-columns: 1fr; /* Stack analytics items on small screens */
+         grid-template-columns: 1fr; /* Stack analytics items */
      }
      .availability-toggle {
          flex-direction: column;
          align-items: flex-start;
          gap: 5px;
          padding: 8px;
+         width: 100%; /* Make toggle wider */
      }
      .availability-toggle button { width: 100%; }
 }
