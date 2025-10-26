@@ -405,3 +405,55 @@ button:disabled {
     height: 250px !important; /* Force height for chart canvas */
     width: 100% !important;
 }
+/* --- Add these styles for Login Role Toggle --- */
+
+.login-role-select {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+
+.login-role-select label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.role-toggle {
+    display: flex;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    overflow: hidden; /* Ensures rounded corners contain buttons */
+}
+
+.role-toggle button {
+    flex: 1; /* Each button takes half the space */
+    padding: 10px;
+    margin: 0;
+    border: none;
+    background-color: #f0f0f0;
+    color: #555;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    border-radius: 0; /* Remove individual radius */
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.role-toggle button:first-child {
+    border-right: 1px solid #ccc; /* Separator */
+}
+
+.role-toggle button.active {
+    background-color: #007aff;
+    color: white;
+    font-weight: 600;
+}
+
+.form-group.pin-input {
+    margin-top: 10px;
+}
