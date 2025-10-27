@@ -336,30 +336,39 @@ function CustomerView({ session }) { // Accept session if needed
    const [isGenerating, setIsGenerating] = useState(false);
    const [isLoading, setIsLoading] = useState(false); // For joining queue
 
-   // Fetch Available Barbers
-   useEffect(() => {
-        const loadAvailableBarbers = async () => {
-          setMessage('Loading available barbers...');
-          try {
-            // This endpoint now correctly filters by is_available=true on the backend
-            const response = await axios.get(`${API_URL}/barbers`);
-            setBarbers(response.data || []);
-             setMessage('');
-          } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
+    const fetchPublicQueue = async (barberId) => {
+        if (!barberId) return;
+        setQueueMessage('Loading queue...');
+        try {
+            // This endpoint returns ID, customer_name, status, created_at
+            const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
+            setLiveQueue(response.data || []);
+            setQueueMessage('');
+        } catch (error) { console.error("Failed fetch public queue:", error); setQueueMessage('Could not load queue.'); setLiveQueue([]); }
         };
-        loadAvailableBarbers();
-    }, []); // Run only once
 
-   // Fetch Public Queue Data
-   const fetchPublicQueue = async (barberId) => {
-      if (!barberId) return;
-      setQueueMessage('Loading queue...');
-      try {
-        const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
-        setLiveQueue(response.data || []);
-        setQueueMessage('');
-      } catch (error) { console.error("Failed fetch public queue:", error); setQueueMessage('Could not load queue.'); setLiveQueue([]); }
-    };
+    // --- Fetch Available Barbers (Runs every 15s) ---
+    useEffect(() => {
+            const loadBarbers = async () => {
+            setMessage('Loading available barbers...');
+            try {
+                // This endpoint now correctly filters by is_available=true on the backend
+                const response = await axios.get(`${API_URL}/barbers`);
+                setBarbers(response.data || []);
+                setMessage('');
+            } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
+            };
+
+            // 1. Initial Load
+            loadBarbers();
+
+            // 2. Set up Auto-Refresh every 15 seconds
+            const intervalId = setInterval(loadBarbers, 15000); // Refresh every 15 seconds
+
+            // 3. Cleanup: Clear the interval when the component unmounts
+            return () => clearInterval(intervalId);
+
+        }, []); // Runs only once
 
     // Realtime and Notification Effect
    useEffect(() => {
@@ -466,13 +475,21 @@ function CustomerView({ session }) { // Accept session if needed
 
         } catch (error) {
         console.error('Failed to join queue:', error);
-        // Display specific error from backend if available
-        setMessage(error.response?.data?.error || 'Failed to join queue. Please try again.');
-        // Reset queue state on failure
+        // Check for our new specific error code
+        if (error.response && error.response.status === 409) {
+            setMessage(error.response.data.error + ' The list will refresh automatically.');
+            // Force a reload of the barber list immediately on this specific error
+            // by setting state to trigger the useEffect to fetch fresh data.
+            // NOTE: Since the useEffect runs continuously, a forced reload might not be strictly needed,
+            // but it provides instant visual feedback. For simplicity, we just display the error.
+
+        } else {
+            setMessage(error.response?.data?.error || 'Failed to join queue. Please try again.');
+        }
         setMyQueueEntryId(null);
         setJoinedBarberId(null);
         } finally {
-        setIsLoading(false); // Stop loading indicator
+        setIsLoading(false);
         }
     };
     // Leave Queue Handler
