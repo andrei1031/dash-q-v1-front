@@ -4,19 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 
 // --- Chart.js Imports ---
 import { Bar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
 import './App.css';
 
-// --- Register Chart.js components ---
+// --- Register Chart.js ---
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 // --- Backend API URL ---
@@ -48,151 +40,125 @@ if (supabaseUrl && supabaseAnonKey) {
 
 function AuthForm() {
     // State for username/email/password etc.
-    const [username, setUsername] = useState(''); // Used for Login & Signup
-    const [email, setEmail] = useState(''); // Only NEEDED for Signup
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState(''); // For Signup
-    // Removed barberCode state
+    const [fullName, setFullName] = useState('');
+    const [barberCode, setBarberCode] = useState(''); // For Barber Signup
+    const [pin, setPin] = useState(''); // Barber PIN input for login
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [selectedRole, setSelectedRole] = useState('customer'); // 'customer' or 'barber'
-    const [barberCode, setBarberCode] = useState(''); // Keep for barber signup
 
-    const [pin, setPin] = useState(''); // Barber PIN input for login
     const handleAuth = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('');
+        e.preventDefault();
+        setLoading(true);
+        setMessage('');
 
-    try {
-        if (isLogin) {
-            // --- LOGIN Logic (UPDATED) ---
-            console.log(`Attempting login for username: ${username} as role: ${selectedRole}`);
-            if (!username || !password) throw new Error("Username and password required.");
-            if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required for barber login.");
+        try {
+            if (isLogin) {
+                // --- LOGIN Logic (Username/Password) ---
+                if (!username || !password) throw new Error("Username and password required.");
+                if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required for barber login.");
 
-            // Call backend login endpoint, now including role and pin
-            const response = await axios.post(`${API_URL}/login/username`, {
-                username: username.trim(),
-                password: password,
-                role: selectedRole, // Send the selected role
-                pin: selectedRole === 'barber' ? pin : undefined // Send PIN only if barber
-            });
+                // 1. Call backend to verify credentials and get user email
+                const response = await axios.post(`${API_URL}/login/username`, {
+                    username: username.trim(), password: password, role: selectedRole, pin: selectedRole === 'barber' ? pin : undefined
+                });
 
-            // Backend verified credentials and role (if barber).
-            // Now use email+pass with Supabase client to set session.
-            if (response.data.user?.email && supabase?.auth) {
-                 console.log("Credentials verified by backend for:", response.data.user.email, "Signing in client-side...");
-                 const { error: clientSignInError } = await supabase.auth.signInWithPassword({
-                     email: response.data.user.email,
-                     password: password,
-                 });
-                 if (clientSignInError) { throw clientSignInError; } // Let outer catch handle display
-                  console.log("Client-side session established.");
-                 // Auth listener in App will now detect session and check actual role
-             } else {
-                throw new Error("Login failed: Invalid response from server.");
-             }
+                // 2. If backend verified, use email+pass with Supabase client to set session.
+                if (response.data.user?.email && supabase?.auth) {
+                     const { error: clientSignInError } = await supabase.auth.signInWithPassword({
+                         email: response.data.user.email, password: password,
+                     });
+                     if (clientSignInError) { throw clientSignInError; }
+                 } else { throw new Error("Login failed: Invalid response from server."); }
 
-        } else {
-            // --- SIGN UP Logic (UPDATED) ---
-            console.log(`Attempting signup for username: ${username} as role: ${selectedRole}`);
-             if (!email.trim() || !fullName.trim()) { throw new Error("Email and Full Name required."); }
-             // Require barber code only if signing up as barber
-             if (selectedRole === 'barber' && !barberCode.trim()) { throw new Error("Barber Code required for barber signup."); }
-
-            // Call backend signup endpoint, sending role and code
-            const response = await axios.post(`${API_URL}/signup/username`, {
-                username: username.trim(),
-                email: email.trim(),
-                password: password,
-                fullName: fullName.trim(),
-                role: selectedRole, // Send the role
-                barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined // Send code only if barber
-            });
-            setMessage(response.data.message || 'Signup successful!');
-            setIsLogin(true); // Switch to login view
-            // Clear all fields
-            setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setSelectedRole('customer'); // Reset role
+            } else {
+                // --- SIGN UP Logic ---
+                 if (!email.trim() || !fullName.trim()) { throw new Error("Email and Full Name are required for signup."); }
+                
+                // Call backend signup endpoint
+                const response = await axios.post(`${API_URL}/signup/username`, {
+                    username: username.trim(), email: email.trim(), password: password, fullName: fullName.trim(),
+                    role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined
+                });
+                setMessage(response.data.message || 'Signup successful!');
+                setIsLogin(true); // Switch to login view after signup
+                // Clear all fields
+                setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setPin(''); setSelectedRole('customer');
+            }
+        } catch (error) {
+            console.error('Auth error:', error);
+            setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'An unexpected error occurred.'}`);
+        } finally {
+            setLoading(false);
         }
-    } catch (error) {
-        console.error('Auth error:', error);
-        setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'An unexpected error occurred.'}`);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
-    // Render Auth Form (Removed Barber Code Input)
-    // Replace the existing return block in AuthForm with this:
-return (
-    <div className="card auth-card">
-        <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
-        <form onSubmit={handleAuth}>
+    // Render Auth Form
+    return (
+        <div className="card auth-card">
+            <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
+            <form onSubmit={handleAuth}>
+                {/* Username */}
+                <div className="form-group"> <label>Username:</label> <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/> </div>
+                {/* Password */}
+                <div className="form-group"> <label>Password:</label> <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/> </div>
 
-            {/* --- Fields for BOTH Login and Signup --- */}
-            <div className="form-group">
-                <label>Username:</label>
-                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/>
-            </div>
-            <div className="form-group">
-                <label>Password:</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/>
-            </div>
-
-            {/* --- Login Specific Fields --- */}
-            {isLogin && (
-                <div className="login-role-select">
-                    <label>Login As:</label>
-                    <div className="role-toggle">
-                        <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
-                        <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
-                    </div>
-                    {selectedRole === 'barber' && ( // PIN only if barber login
-                        <div className="form-group pin-input">
-                            <label>Barber PIN:</label>
-                            <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" />
+                {/* --- Login Specific Fields (Role Toggle & PIN) --- */}
+                {isLogin && (
+                    <div className="login-role-select">
+                        <label>Login As:</label>
+                        <div className="role-toggle">
+                            <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
+                            <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
                         </div>
-                    )}
-                </div>
-            )}
-
-            {/* --- Signup Specific Fields --- */}
-            {!isLogin && (
-              <>
-                {/* Role Toggle for Signup */}
-                <div className="signup-role-select">
-                    <label>Sign Up As:</label>
-                    <div className="role-toggle">
-                         <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
-                         <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
+                        {selectedRole === 'barber' && ( // PIN only if barber login
+                            <div className="form-group pin-input">
+                                <label>Barber PIN:</label>
+                                <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" />
+                            </div>
+                        )}
                     </div>
-                </div>
-                {/* Email for Signup */}
-                <div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div>
-                {/* Full Name for Signup */}
-                <div className="form-group"> <label>Full Name:</label> <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/> </div>
-                {/* Barber Code for Signup (Conditional) */}
-                {selectedRole === 'barber' && (
-                     <div className="form-group">
-                        <label>Barber Code:</label>
-                        <input type="text" value={barberCode} placeholder="Enter secret barber code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} />
-                        <small>Required to sign up as a barber.</small>
-                     </div>
                 )}
-              </>
-            )}
 
-            {/* Submit Button */}
-            <button type="submit" disabled={loading}>{loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}</button>
-        </form>
-        {/* Message Area */}
-        {message && <p className={`message ${message.includes('successful') || message.includes('created') ? 'success' : 'error'}`}>{message}</p>}
-        {/* Toggle Button */}
-        <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); /* Reset role/pin on toggle */ }} className="toggle-auth-button">{isLogin ? 'Need an account? Sign Up' : 'Have an account? Login'}</button>
-    </div>
-);
+                {/* --- Signup Specific Fields --- */}
+                {!isLogin && (
+                  <>
+                    {/* Role Toggle for Signup */}
+                    <div className="signup-role-select">
+                        <label>Sign Up As:</label>
+                        <div className="role-toggle">
+                             <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
+                             <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
+                        </div>
+                    </div>
+                    {/* Email for Signup */}
+                    <div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div>
+                    {/* Full Name for Signup */}
+                    <div className="form-group"> <label>Full Name:</label> <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/> </div>
+                    {/* Barber Code for Signup (Conditional) */}
+                    {selectedRole === 'barber' && (
+                         <div className="form-group">
+                            <label>Barber Code:</label>
+                            <input type="text" value={barberCode} placeholder="Enter secret barber code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} />
+                            <small>Required to sign up as a barber.</small>
+                         </div>
+                    )}
+                  </>
+                )}
+
+                {/* Submit Button */}
+                <button type="submit" disabled={loading}>{loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}</button>
+            </form>
+            {/* Message Area */}
+            {message && <p className={`message ${message.includes('successful') || message.includes('created') ? 'success' : 'error'}`}>{message}</p>}
+            {/* Toggle Button */}
+            <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); /* Reset states on toggle */ }} className="toggle-auth-button">{isLogin ? 'Need an account? Sign Up' : 'Have an account? Login'}</button>
+        </div>
+    );
 }
 
 
@@ -230,7 +196,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
 }
 
 // Main Layout for Logged-In Barbers
-function BarberAppLayout({ session, barberProfile, setBarberProfile }) { // Removed checkUserRole prop
+function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     const [refreshSignal, setRefreshSignal] = useState(0);
 
     const handleLogout = async () => {
@@ -270,11 +236,13 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) { // Remo
             <div className="container">
                 {currentBarberId ? (
                    <>
+                     {/* My Queue (BarberDashboard) */}
                      <BarberDashboard
                         barberId={currentBarberId}
                         barberName={currentBarberName}
                         onCutComplete={handleCutComplete}
                      />
+                     {/* Analytics Dashboard */}
                      <AnalyticsDashboard
                         barberId={currentBarberId}
                         refreshSignal={refreshSignal}
@@ -308,6 +276,7 @@ function CustomerAppLayout({ session }) {
             </header>
             <div className="container">
                 <CustomerView session={session} />
+                {/* This is the only screen visible to the customer after login */}
             </div>
         </div>
     );
