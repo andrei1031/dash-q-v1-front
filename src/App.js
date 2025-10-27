@@ -73,7 +73,6 @@ function AuthForm() {
                          email: response.data.user.email, password: password,
                      });
                      if (clientSignInError) { throw clientSignInError; }
-                     // Auth listener in App will now detect session and trigger role check/redirect
                  } else { throw new Error("Login failed: Invalid response from server."); }
 
             } else {
@@ -614,22 +613,30 @@ function App() {
   const [barberProfile, setBarberProfile] = useState(null); // Holds { id, user_id, full_name, is_available } for logged in barber
   const [loadingRole, setLoadingRole] = useState(true); // Tracks initial session/role check
 
-  // --- NEW: Tawk.to Chat Widget Integration ---
+  // --- NEW: Tawk.to Chat Widget Integration (FIXED) ---
   useEffect(() => {
     // Tawk.to setup code (Initializes the global Tawk_API object)
-    var Tawk_API = Tawk_API || {};
+    var Tawk_API = window.Tawk_API || {};
     var Tawk_LoadStart = new Date();
     
     // Function to create and insert the script element
     (function(){
         var s1 = document.createElement("script"), s0 = document.getElementsByTagName("script")[0];
         s1.async = true;
-        s1.src = 'https://embed.tawk.to/68ffae1526583a19516fcf37/1j8jc00ua'; // Replace with your actual Tawk.to URL
+        s1.src = 'https://embed.tawk.to/68ffae1526583a19516fcf37/1j8jc00ua'; // Use your actual URL
         s1.charset = 'UTF-8';
         s1.setAttribute('crossorigin','*');
-        s0.parentNode.insertBefore(s1, s0);
+        // Ensure script is inserted before the first script tag found
+        if (s0 && s0.parentNode) {
+            s0.parentNode.insertBefore(s1, s0);
+        } else {
+             // Fallback if no script tags exist (unlikely)
+             document.body.appendChild(s1); 
+        }
     })();
 
+    // Cleanup is not standard for Tawk.to but is included for completeness
+    return () => { /* No removal logic */ };
   }, []); // Empty dependency array ensures it runs only once on mount
 
 
