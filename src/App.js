@@ -553,7 +553,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
     // Handler for completing a cut
     const handleCompleteCut = async () => {
         if (!queueDetails.inProgress) return;
-        const price = prompt(`Enter price for ${queueDetails.inProgress.customer_name}:`);
+        const price = prompt(`Tips from Mr.${queueDetails.inProgress.customer_name}:`);
         if (price === null) return; const p = parseInt(price);
         if (isNaN(p) || p < 0) { alert('Invalid price.'); return; }
         setError('');
