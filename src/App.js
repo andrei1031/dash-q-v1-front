@@ -202,9 +202,9 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
 
     // --- Auto-Offline on Browser/Tab Close ---
     useEffect(() => {
-        const handleBeforeUnload = async (e) => {
+        const handleBeforeUnload = (e) => { // Removed async, not reliable with beacon
             if (barberProfile?.id && session?.user) {
-                // Use sendBeacon for reliable request on page close
+                // Use sendBeacon for reliable sync request on page close
                 navigator.sendBeacon(
                     `${API_URL}/barber/availability`, 
                     JSON.stringify({ 
@@ -292,7 +292,7 @@ function CustomerAppLayout({ session }) {
          if (!supabase?.auth) return;
          
          try {
-             // --- FIX: Tell backend to clear the session flag ---
+             // --- Tell backend to clear the session flag ---
              await axios.put(`${API_URL}/logout/flag`, { 
                  userId: session.user.id 
              });
@@ -322,7 +322,7 @@ function CustomerAppLayout({ session }) {
 // ##############################################
 
 // --- CustomerView (Handles Joining Queue & Live View for Customers) ---
-function CustomerView({ session }) {
+function CustomerView({ session }) { // Accept session if needed
    const [barbers, setBarbers] = useState([]); // Available barbers
    const [selectedBarber, setSelectedBarber] = useState('');
    const [customerName, setCustomerName] = useState('');
@@ -336,7 +336,7 @@ function CustomerView({ session }) {
    const [liveQueue, setLiveQueue] = useState([]);
    const [queueMessage, setQueueMessage] = useState('');
    
-   // --- NEW: EWT State (Moved to top level) ---
+   // --- NEW: EWT State ---
    const [estimatedWait, setEstimatedWait] = useState(0);
    const [peopleWaiting, setPeopleWaiting] = useState(0);
 
@@ -345,11 +345,11 @@ function CustomerView({ session }) {
    const [prompt, setPrompt] = useState('');
    const [generatedImage, setGeneratedImage] = useState(null);
    const [isGenerating, setIsGenerating] = useState(false);
-   const [isLoading, setIsLoading] = useState(false);
+   const [isLoading, setIsLoading] = useState(false); // For joining queue
 
    // --- NEW: Service State ---
-   const [services, setServices] = useState([]);
-   const [selectedServiceId, setSelectedServiceId] = useState('');
+   const [services, setServices] = useState([]); // List of services from API
+   const [selectedServiceId, setSelectedServiceId] = useState(''); // Selected service ID
 
 
    // Fetch Public Queue Data
@@ -388,7 +388,6 @@ function CustomerView({ session }) {
       try {
         const response = await axios.get(`${API_URL}/barbers`);
         setBarbers(response.data || []);
-         // Clear message only if it's the loading message
          setMessage(prev => (prev === 'Loading available barbers...' ? '' : prev));
       } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
     };
@@ -399,19 +398,21 @@ function CustomerView({ session }) {
 
 }, []); // Runs only once on mount
 
-    // --- Realtime and Notification Effect (For AFTER joining) ---
+    // Realtime and Notification Effect (For AFTER joining)
    useEffect(() => {
         if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
 
         let queueChannel = null;
-        let refreshInterval = null;
+        let refreshInterval = null; // Periodic refresh timer
 
         // Only subscribe if the user has joined a queue
         if (joinedBarberId && supabase?.channel) {
             console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
             queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
+                    console.log('Queue change! Payload:', payload);
                     fetchPublicQueue(joinedBarberId); // Refresh list on any change
+
                     // Check for MY notification trigger
                     if (payload.eventType === 'UPDATE' && payload.new.id === myQueueEntryId && payload.new.status === 'Up Next') {
                         if (Notification.permission === "granted") { new Notification("You're next at Dash-Q!", { body: "Please head over now." }); }
@@ -419,7 +420,7 @@ function CustomerView({ session }) {
                     }
                 })
                 .subscribe((status, err) => {
-                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); fetchPublicQueue(joinedBarberId); }
+                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); fetchPublicQueue(joinedBarberId); } // Fetch on subscribe
                      else { console.error('Supabase Realtime subscription error:', status, err); setQueueMessage('Live updates unavailable.'); }
                 });
             
@@ -433,7 +434,7 @@ function CustomerView({ session }) {
     }, [joinedBarberId, myQueueEntryId]); // Rerun if joinedBarberId or myQueueEntryId changes
 
 
-    // --- NEW: EWT Calculation Effect (Runs whenever selectedBarber or liveQueue changes) ---
+    // --- NEW: EWT Calculation Effect (Runs BEFORE joining) ---
     useEffect(() => {
         // Fetch the queue for the *selected* barber to calculate EWT
         if (selectedBarber) {
@@ -452,13 +453,13 @@ function CustomerView({ session }) {
                 return;
             }
             
-            // Filter for people NOT "In Progress" (i.e., 'Waiting' or 'Up Next')
+            // "People Waiting" = Waiting + Up Next
             const waitingOrUpNext = liveQueue.filter(
                 entry => entry.status === 'Waiting' || entry.status === 'Up Next'
             );
             setPeopleWaiting(waitingOrUpNext.length);
 
-            // Calculate total duration for *all* people in the queue (including 'In Progress')
+            // "Estimated Wait" = Sum of *all* durations (Waiting, Up Next, In Progress)
             const totalWait = liveQueue.reduce((sum, entry) => {
                 // Use a default duration (e.g., 30 mins) if service data is missing
                 const duration = entry.services?.duration_minutes || 30; 
@@ -473,8 +474,8 @@ function CustomerView({ session }) {
 
 
    // AI Preview Handler
-   const handleGeneratePreview = async () => { 
-    if (!file || !prompt) { setMessage('Please upload a photo and enter a prompt.'); return; }
+   const handleGeneratePreview = async () => {
+        if (!file || !prompt) { setMessage('Please upload a photo and enter a prompt.'); return; }
         setIsGenerating(true); setIsLoading(true); setGeneratedImage(null); setMessage('Step 1/3: Uploading...');
         const filePath = `${Date.now()}.${file.name.split('.').pop()}`;
         try {
@@ -490,13 +491,13 @@ function CustomerView({ session }) {
             setGeneratedImage(response.data.generatedImageUrl); setMessage('Step 3/3: Success! Check preview.');
         } catch (error) { console.error('AI generation pipeline error:', error); setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
         } finally { setIsGenerating(false); setIsLoading(false); }
-   };
+    };
 
     // Join Queue Handler
    const handleJoinQueue = async (e) => {
         e.preventDefault();
-        if (!customerName || !selectedBarber || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
-        if (myQueueEntryId) { setMessage('You are already checked in! Please leave your current queue spot first.'); return; }
+        if (!customerName || !selectedBarber || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; } // ADDED service check
+        if (myQueueEntryId) { setMessage('You are already checked in! Please leave your current queue spot first.'); return; } // Prevent rejoining
 
         setIsLoading(true); setMessage('Joining queue...');
         try {
@@ -513,65 +514,51 @@ function CustomerView({ session }) {
             setMyQueueEntryId(newEntry.id); setJoinedBarberId(parseInt(selectedBarber));
             const barberName = barbers.find(b => b.id === parseInt(selectedBarber))?.full_name || `Barber #${selectedBarber}`;
             setMessage(`Success! You joined for ${barberName}. We'll notify you! See queue below.`);
-            // Clear form fields
-            setCustomerName(''); setCustomerPhone(''); setCustomerEmail(''); setFile(null); setPrompt(''); setSelectedServiceId('');
+            // Clear only form fields needed for re-entry
+            setCustomerName(''); setCustomerPhone(''); setCustomerEmail(''); setFile(null); setPrompt(''); setSelectedServiceId(''); // <-- CLEAR SERVICE ID
+            // Keep selectedBarber for the queue view title
         } catch (error) { 
             console.error('Failed to join queue:', error); 
             const errorMessage = error.response?.data?.error || error.message;
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Please try again.'); 
-            setMyQueueEntryId(null); setJoinedBarberId(null); 
+            setMyQueueEntryId(null); setJoinedBarberId(null); // Reset queue state on failure
         } finally { setIsLoading(false); }
     };
 
     // Leave Queue Handler
-   // Inside CustomerView function...
-
-// Leave Queue Handler (MODIFIED)
-const handleLeaveQueue = async () => {
-    if (!myQueueEntryId) return;
-
-    // ... (Unsubscribe logic) ...
-    if (joinedBarberId && supabase?.removeChannel) {
-        supabase.removeChannel(supabase.channel(`public_queue_${joinedBarberId}`))
-            .then(() => console.log('Unsubscribed on leaving queue.'));
-    }
-
-    try {
-        // --- 2. Send Delete Request to Backend ---
-        await axios.delete(`${API_URL}/queue/${myQueueEntryId}`);
+   const handleLeaveQueue = async () => { // Make async
+        if (!myQueueEntryId) return; // Nothing to leave
         
-        console.log(`Successfully left queue ${myQueueEntryId}`);
-        setMessage("You have successfully left the queue.");
+        // --- 1. Unsubscribe from Realtime (do this first) ---
+        if (joinedBarberId && supabase?.removeChannel) {
+            supabase.removeChannel(supabase.channel(`public_queue_${joinedBarberId}`))
+                .then(() => console.log('Unsubscribed on leaving queue.'));
+        }
 
-        // --- 3. Reset Frontend State (Only on Success) ---
-        // This MUST be inside the try block to ensure it only happens if the delete worked.
-        setMyQueueEntryId(null);
-        setJoinedBarberId(null);
-        setLiveQueue([]);
-        setQueueMessage('');
-        setSelectedBarber('');
-        setGeneratedImage(null);
-        setFile(null);
-        setPrompt('');
-        setSelectedServiceId('');
-        
-    } catch (error) {
-        console.error("Failed to leave queue:", error);
-        setMessage("Error leaving queue. Please try again.");
-    }
+        try {
+            // --- 2. Send Delete Request to Backend ---
+            await axios.delete(`${API_URL}/queue/${myQueueEntryId}`);
+            console.log(`Successfully left queue ${myQueueEntryId}`);
+            setMessage("You have successfully left the queue."); // Set success message
+            
+            // --- 3. Reset Frontend State (Only on Success) ---
+            setMyQueueEntryId(null);
+            setJoinedBarberId(null);
+            setLiveQueue([]);
+            // Keep the success message by not clearing it here
+            setQueueMessage('');
+            setSelectedBarber('');
+            setGeneratedImage(null);
+            setFile(null);
+            setPrompt('');
+            setSelectedServiceId('');
+            
+        } catch (error) {
+            console.error("Failed to leave queue:", error);
+            setMessage("Error leaving queue. Please try again.");
+        }
+    };
 
-    // --- 3. Reset Frontend State (Only on Success) ---
-    setMyQueueEntryId(null);
-    setJoinedBarberId(null);
-    setLiveQueue([]);
-    // Keep the success message visible by not clearing it
-    setQueueMessage('');
-    setSelectedBarber('');
-    setGeneratedImage(null);
-    setFile(null);
-    setPrompt('');
-    setSelectedServiceId('');
-};
 
    // --- Render Customer View ---
    return (
@@ -589,13 +576,14 @@ const handleLeaveQueue = async () => {
                       <label>Select Service:</label>
                       <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required>
                           <option value="">-- Choose service --</option>
-                          {services.map((service) => (
+                          {services.map((service) => ( // <--- USES 'services' state
                             <option key={service.id} value={service.id}>
-                                {service.name} ({service.duration_minutes} min / ₱{service.price_php})
+                                {service.name} ({service.duration_minutes} min / ₱{service.price_php}) {/* <-- PHP Symbol */}
                             </option>
                           ))}
                       </select>
                   </div>
+                  {/* --- END SERVICE SELECTION --- */}
                   
                   <div className="form-group">
                       <label>Select Available Barber:</label>
@@ -710,11 +698,11 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
     // Handler for completing a cut
     const handleCompleteCut = async () => {
         if (!queueDetails.inProgress) return;
-        
+
         // --- 1. Retrieve Service Name and Price ---
         const serviceName = queueDetails.inProgress.services?.name || 'Service';
         const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
-
+        
         // --- 2. Prompt for the TIP amount ---
         const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
         
