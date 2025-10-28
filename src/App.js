@@ -453,10 +453,7 @@ function CustomerView({ session }) { // Accept session if needed
         setIsLoading(true); setMessage('Joining queue...');
         try {
             // Check availability again before inserting (This ensures the backend is working correctly)
-            const { data: barberStatus, error: statusError } = await axios.get(`${API_URL}/barbers}`);
-            if (statusError || !barberStatus.is_available) {
-                 throw new Error("This barber is currently unavailable. Please refresh and choose another.");
-            }
+            
             
             const imageUrlToSave = generatedImage;
             const response = await axios.post(`${API_URL}/queue`, {
