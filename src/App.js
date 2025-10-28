@@ -223,19 +223,18 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     }, [barberProfile, session]); // Dependency on profile/session ensures data is current
 
     const handleLogout = async () => {
-     if (!supabase?.auth || !session?.user) return; // Check for session
+        if (!barberProfile || !session?.user || !supabase?.auth) return;
 
         try {
-            // --- FIX: Tell backend to clear the session flag ---
-            await axios.put(`${API_URL}/logout/flag`, { 
-                userId: session.user.id 
-             });
-        } catch (error) {
-            console.error("Error clearing customer session flag:", error);
-             // Continue to log out even if flag clearing fails
+            // 1. Attempt to set status offline
+            await axios.put(`${API_URL}/barber/availability`, {
+                 barberId: barberProfile.id, isAvailable: false, userId: session.user.id
+            });
+        } catch (error) { console.error("Error setting offline on logout:", error); }
+        finally {
+            // 2. CRITICAL: Clear the session in browser storage and redirect
+            await supabase.auth.signOut(); 
         }
-
-         await supabase.auth.signOut();
     };
 
 
@@ -291,7 +290,17 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
 function CustomerAppLayout({ session }) {
     const handleLogout = async () => {
          if (!supabase?.auth) return;
-        await supabase.auth.signOut();
+         
+         try {
+             // --- FIX: Tell backend to clear the session flag ---
+             await axios.put(`${API_URL}/logout/flag`, { 
+                 userId: session.user.id 
+             });
+         } catch (error) {
+             console.error("Error clearing customer session flag:", error);
+         }
+         
+         await supabase.auth.signOut();
     };
 
     return (
@@ -326,6 +335,10 @@ function CustomerView({ session }) { // Accept session if needed
    const [joinedBarberId, setJoinedBarberId] = useState(null);
    const [liveQueue, setLiveQueue] = useState([]);
    const [queueMessage, setQueueMessage] = useState('');
+   
+   // --- NEW: EWT State ---
+   const [estimatedWait, setEstimatedWait] = useState(0);
+   const [myQueuePosition, setMyQueuePosition] = useState(0);
 
    // AI State
    const [file, setFile] = useState(null);
@@ -338,11 +351,13 @@ function CustomerView({ session }) { // Accept session if needed
    const [services, setServices] = useState([]); // List of services from API
    const [selectedServiceId, setSelectedServiceId] = useState(''); // Selected service ID
 
+
    // Fetch Public Queue Data
    const fetchPublicQueue = async (barberId) => {
       if (!barberId) return;
       setQueueMessage('Loading queue...');
       try {
+        // This endpoint now returns ID, name, status, created_at, AND services(duration_minutes)
         const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
         setLiveQueue(response.data || []);
         setQueueMessage('');
@@ -353,7 +368,6 @@ function CustomerView({ session }) { // Accept session if needed
    useEffect(() => {
         const fetchServices = async () => {
             try {
-                // Endpoint to fetch service menu (including duration and price)
                 const response = await axios.get(`${API_URL}/services`);
                 setServices(response.data || []);
             } catch (error) {
@@ -367,11 +381,11 @@ function CustomerView({ session }) { // Accept session if needed
    // Fetch Available Barbers (Runs every 15s)
    useEffect(() => {
     const loadBarbers = async () => {
-      setMessage('Loading available barbers...');
       try {
         const response = await axios.get(`${API_URL}/barbers`);
         setBarbers(response.data || []);
-         setMessage('');
+         // Clear message only if it's the loading message
+         setMessage(prev => (prev === 'Loading available barbers...' ? '' : prev));
       } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
     };
 
@@ -381,7 +395,7 @@ function CustomerView({ session }) { // Accept session if needed
 
 }, []); // Runs only once on mount
 
-    // Realtime and Notification Effect
+    // --- Realtime and Notification Effect ---
    useEffect(() => {
         if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
 
@@ -416,8 +430,66 @@ function CustomerView({ session }) { // Accept session if needed
         };
     }, [joinedBarberId, myQueueEntryId]); // Rerun if joinedBarberId or myQueueEntryId changes
 
+    // --- NEW: EWT Calculation Effect ---
+    useEffect(() => {
+        const calculateWaitTime = () => {
+            if (!myQueueEntryId || liveQueue.length === 0) {
+                setEstimatedWait(0);
+                setMyQueuePosition(0);
+                return;
+            }
+            
+            // Find the customer's own index in the full queue (includes In Progress)
+            const myIndex = liveQueue.findIndex(entry => entry.id === myQueueEntryId);
+            
+            if (myIndex === -1) { // Not found (maybe just left?)
+                 setEstimatedWait(0);
+                 setMyQueuePosition(0);
+                 return;
+            }
+            
+            // Set current position (0-based index + 1)
+            // Filter out "In Progress" for "waiting" count
+            const waitingOrUpNext = liveQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
+            const myWaitingIndex = waitingOrUpNext.findIndex(entry => entry.id === myQueueEntryId);
+            setMyQueuePosition(myWaitingIndex !== -1 ? myWaitingIndex + 1 : 0); // Position in line (e.g., "3rd")
+            
+            // Get everyone in front (index 0 up to myIndex)
+            const peopleInFront = liveQueue.slice(0, myIndex);
+            
+            // Sum their durations
+            const totalWait = peopleInFront.reduce((sum, entry) => {
+                // Use a default duration (e.g., 30 mins) if service data is missing (for old entries)
+                const duration = entry.services?.duration_minutes || 30; 
+                return sum + duration;
+            }, 0);
+            
+            setEstimatedWait(totalWait);
+        };
+        
+        calculateWaitTime();
+    }, [liveQueue, myQueueEntryId]); // Recalculate when queue or user ID changes
+
+
    // AI Preview Handler
-   const handleGeneratePreview = async () => { /* ... code from previous version ... */ };
+   const handleGeneratePreview = async () => {
+        if (!file || !prompt) { setMessage('Please upload a photo and enter a prompt.'); return; }
+        setIsGenerating(true); setIsLoading(true); setGeneratedImage(null); setMessage('Step 1/3: Uploading...');
+        const filePath = `${Date.now()}.${file.name.split('.').pop()}`;
+        try {
+            if (!supabase?.storage) throw new Error("Supabase storage not available.");
+            const { error: uploadError } = await supabase.storage.from('haircut_references').upload(filePath, file);
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from('haircut_references').getPublicUrl(filePath);
+            if (!urlData?.publicUrl) throw new Error("Could not get public URL for uploaded file."); // Add check
+            const imageUrl = urlData.publicUrl;
+
+            setMessage('Step 2/3: Generating AI haircut... (takes ~15-30s)');
+            const response = await axios.post(`${API_URL}/generate-haircut`, { imageUrl, prompt });
+            setGeneratedImage(response.data.generatedImageUrl); setMessage('Step 3/3: Success! Check preview.');
+        } catch (error) { console.error('AI generation pipeline error:', error); setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
+        } finally { setIsGenerating(false); setIsLoading(false); }
+    };
 
     // Join Queue Handler
    const handleJoinQueue = async (e) => {
@@ -427,10 +499,7 @@ function CustomerView({ session }) { // Accept session if needed
 
         setIsLoading(true); setMessage('Joining queue...');
         try {
-            // Check availability again before inserting (This ensures the backend is working correctly)
-            // BUG WAS HERE: This line was using the wrong API path in the previous error logs.
-            // The fix is to ensure the backend is robust enough to handle the ID. 
-            // We rely on the /api/barbers list being correct.
+            // Backend handles availability check, no need for redundant check here
             
             const imageUrlToSave = generatedImage;
             const response = await axios.post(`${API_URL}/queue`, {
@@ -449,6 +518,7 @@ function CustomerView({ session }) { // Accept session if needed
         } catch (error) { 
             console.error('Failed to join queue:', error); 
             const errorMessage = error.response?.data?.error || error.message;
+            // Display specific error from backend (like "barber unavailable")
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Please try again.'); 
             setMyQueueEntryId(null); setJoinedBarberId(null); // Reset queue state on failure
         } finally { setIsLoading(false); }
@@ -476,7 +546,7 @@ function CustomerView({ session }) { // Accept session if needed
                   <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} /></div>
                   <div className="form-group"><label>Your Email (Optional):</label><input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} /></div>
                   
-                  {/* --- SERVICE SELECTION DROPDOWN (NEW) --- */}
+                  {/* --- SERVICE SELECTION DROPDOWN --- */}
                   <div className="form-group">
                       <label>Select Service:</label>
                       <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required>
@@ -511,7 +581,22 @@ function CustomerView({ session }) { // Accept session if needed
            <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
                <h2>Live Queue for {barbers.find(b => b.id === joinedBarberId)?.full_name || `Barber #${joinedBarberId}`}</h2>
                {queueMessage && <p className="message">{queueMessage}</p>}
-               <ul className="queue-list live">{liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''}`}><span>{index + 1}. {entry.id === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
+               
+                {/* --- NEW: EWT Display --- */}
+                <div className="ewt-container">
+                    <div className="ewt-item">
+                        <span>Currently waiting</span>
+                        {/* We show position in line (excluding 'In Progress') */}
+                        <strong>{myQueuePosition} {myQueuePosition === 1 ? 'person' : 'people'}</strong> 
+                    </div>
+                    <div className="ewt-item">
+                        <span>Estimated wait</span>
+                        <strong>~ {estimatedWait} min</strong>
+                    </div>
+                </div>
+                {/* --- END EWT Display --- */}
+               
+               <ul className="queue-list live">{liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
                <button onClick={handleLeaveQueue} className='leave-queue-button'>Leave Queue / Join Another</button>
            </div>
         )}
@@ -584,20 +669,18 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
     };
 
     // Handler for completing a cut
-    // Handler for completing a cut (FIXED VERSION)
     const handleCompleteCut = async () => {
         if (!queueDetails.inProgress) return;
-
-        // --- 1. Retrieve Service Name and Price from the queue item ---
-        // (This data comes from the /api/queue/details endpoint)
+        
+        // --- 1. Retrieve Service Name and Price ---
         const serviceName = queueDetails.inProgress.services?.name || 'Service';
         const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
 
         // --- 2. Prompt for the TIP amount ---
         const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
-
+        
         if (tipAmount === null) return; // Handle user canceling prompt
-
+        
         // --- 3. Validate the Tip ---
         const parsedTip = parseInt(tipAmount);
         if (isNaN(parsedTip) || parsedTip < 0) {
@@ -609,16 +692,14 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
         
         // --- 4. Send Completion Request to Backend ---
         try {
-          // Send 'tip_amount' (which the backend expects)
           await axios.post(`${API_URL}/queue/complete`, {
             queue_id: queueDetails.inProgress.id,
             barber_id: barberId,
-            tip_amount: parsedTip // <-- THE FIX IS HERE
+            tip_amount: parsedTip // <-- Send 'tip_amount'
           });
 
           onCutComplete(); // Signal parent to refresh analytics
           
-          // Calculate total for alert (optional)
           const totalProfitLogged = servicePrice + parsedTip;
           alert(`Cut completed! Total logged profit: ₱${totalProfitLogged.toFixed(2)}`);
 
@@ -627,6 +708,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
           setError(err.response?.data?.error || 'Failed to complete cut. Server error.');
         }
     };
+
+
     // Determine which button to show
     const getActionButton = () => {
         if (queueDetails.inProgress) return <button onClick={handleCompleteCut} className="complete-button">Complete: {queueDetails.inProgress.customer_name}</button>;
@@ -666,7 +749,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
     const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] }; // <-- ₱ Symbol
 
     // Render the analytics dashboard UI
-    return ( <div className="card analytics-card"><h2>Dashboard</h2>{error && <p className="error-message">{error}</p>}<h3 className="analytics-subtitle">Today</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Earnings</span><span className="analytics-value">₱{analytics.totalEarningsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Cuts</span><span className="analytics-value">{analytics.totalCutsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceToday}</span></div><div className="analytics-item"><span className="analytics-label">Queue Size</span><span className="analytics-value small">{analytics.currentQueueSize ?? 0}</span></div></div><h3 className="analytics-subtitle">Last 7 Days</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Total Earnings</span><span className="analytics-value">₱{analytics.totalEarningsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{analytics.totalCutsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceWeek}</span></div><div className="analytics-item"><span className="analytics-label">Busiest Day</span><span className="analytics-value small">₱{analytics.busiestDay?.earnings ?? 0}</span></div></div><div className="chart-container">{dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}</div><button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button></div> );
+    return ( <div className="card analytics-card"><h2>Dashboard</h2>{error && <p className="error-message">{error}</p>}<h3 className="analytics-subtitle">Today</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Earnings</span><span className="analytics-value">₱{analytics.totalEarningsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Cuts</span><span className="analytics-value">{analytics.totalCutsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceToday}</span></div><div className="analytics-item"><span className="analytics-label">Queue Size</span><span className="analytics-value small">{analytics.currentQueueSize ?? 0}</span></div></div><h3 className="analytics-subtitle">Last 7 Days</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Total Earnings</span><span className="analytics-value">₱{analytics.totalEarningsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{analytics.totalCutsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceWeek}</span></div><div className="analytics-item"><span className="analytics-label">Busiest Day</span><span className="analytics-value small">{analytics.busiestDay?.name ?? 'N/A'} (₱{analytics.busiestDay?.earnings ?? 0})</span></div></div><div className="chart-container">{dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}</div><button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button></div> );
 }
 
 
