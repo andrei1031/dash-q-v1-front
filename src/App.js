@@ -223,18 +223,19 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     }, [barberProfile, session]); // Dependency on profile/session ensures data is current
 
     const handleLogout = async () => {
-        if (!barberProfile || !session?.user || !supabase?.auth) return;
+     if (!supabase?.auth || !session?.user) return; // Check for session
 
         try {
-            // 1. Attempt to set status offline
-            await axios.put(`${API_URL}/barber/availability`, {
-                 barberId: barberProfile.id, isAvailable: false, userId: session.user.id
-            });
-        } catch (error) { console.error("Error setting offline on logout:", error); }
-        finally {
-            // 2. CRITICAL: Clear the session in browser storage and redirect
-            await supabase.auth.signOut(); 
+            // --- FIX: Tell backend to clear the session flag ---
+            await axios.put(`${API_URL}/logout/flag`, { 
+                userId: session.user.id 
+             });
+        } catch (error) {
+            console.error("Error clearing customer session flag:", error);
+             // Continue to log out even if flag clearing fails
         }
+
+         await supabase.auth.signOut();
     };
 
 
