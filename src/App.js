@@ -453,7 +453,7 @@ function CustomerView({ session }) { // Accept session if needed
         setIsLoading(true); setMessage('Joining queue...');
         try {
             // Check availability again before inserting (This ensures the backend is working correctly)
-            const { data: barberStatus, error: statusError } = await axios.get(`${API_URL}/barber/profile/${selectedBarber}`);
+            const { data: barberStatus, error: statusError } = await axios.get(`${API_URL}/barbers}`);
             if (statusError || !barberStatus.is_available) {
                  throw new Error("This barber is currently unavailable. Please refresh and choose another.");
             }
@@ -739,7 +739,7 @@ function App() {
      setLoadingRole(true); // Indicate we are checking the role
      try {
          // Call backend endpoint to get profile based on user_id
-         const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
+         const response = await axios.get(`${API_URL}/barbers}`);
          // If backend returns a profile (status 200), user is a barber
          setUserRole('barber');
          setBarberProfile(response.data); // Store the fetched profile data
