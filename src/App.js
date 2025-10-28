@@ -622,6 +622,11 @@ function CustomerView({ session }) {
         ) : (
            <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
                <h2>Live Queue for {barbers.find(b => b.id === parseInt(joinedBarberId))?.full_name || `Barber #${joinedBarberId}`}</h2> {/* Added parseInt */}
+               
+               <div className="queue-number-display">
+                    Your Queue Number is: <strong>#{myQueueEntryId}</strong>
+               </div>
+               
                {queueMessage && <p className="message">{queueMessage}</p>}
                
                 {/* --- EWT Display (Also shown after joining) --- */}
