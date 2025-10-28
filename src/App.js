@@ -584,20 +584,21 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
     };
 
     // Handler for completing a cut
+    // Handler for completing a cut (FIXED VERSION)
     const handleCompleteCut = async () => {
         if (!queueDetails.inProgress) return;
 
-        // --- Retrieve Service Name and Price ---
-        // Ensure services data is available, default to 0 if not (for old entries)
+        // --- 1. Retrieve Service Name and Price from the queue item ---
+        // (This data comes from the /api/queue/details endpoint)
         const serviceName = queueDetails.inProgress.services?.name || 'Service';
         const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
-        
-        // 1. Prompt for the TIP amount
-        const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). Please enter TIP amount (e.g., 50):`);
-        
+
+        // --- 2. Prompt for the TIP amount ---
+        const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
+
         if (tipAmount === null) return; // Handle user canceling prompt
-        
-        // 2. Validate the tip
+
+        // --- 3. Validate the Tip ---
         const parsedTip = parseInt(tipAmount);
         if (isNaN(parsedTip) || parsedTip < 0) {
           alert('Invalid tip amount. Please enter a non-negative number (or 0).');
@@ -606,17 +607,18 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
 
         setError(''); // Clear previous errors
         
-        // 3. Send Completion Request
+        // --- 4. Send Completion Request to Backend ---
         try {
+          // Send 'tip_amount' (which the backend expects)
           await axios.post(`${API_URL}/queue/complete`, {
             queue_id: queueDetails.inProgress.id,
             barber_id: barberId,
-            tip_amount: parsedTip // <--- FIX: Send 'tip_amount'
+            tip_amount: parsedTip // <-- THE FIX IS HERE
           });
 
           onCutComplete(); // Signal parent to refresh analytics
           
-          // Calculate total for alert
+          // Calculate total for alert (optional)
           const totalProfitLogged = servicePrice + parsedTip;
           alert(`Cut completed! Total logged profit: ₱${totalProfitLogged.toFixed(2)}`);
 
