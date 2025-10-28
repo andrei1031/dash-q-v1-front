@@ -528,13 +528,9 @@ function CustomerView({ session }) {
 
 // Leave Queue Handler (MODIFIED)
 const handleLeaveQueue = async () => {
-    if (!myQueueEntryId) return; // Nothing to leave
+    if (!myQueueEntryId) return;
 
-    if (!window.confirm("Are you sure you want to leave the queue?")) {
-        return;
-    }
-
-    // --- 1. Unsubscribe from Realtime (do this first) ---
+    // ... (Unsubscribe logic) ...
     if (joinedBarberId && supabase?.removeChannel) {
         supabase.removeChannel(supabase.channel(`public_queue_${joinedBarberId}`))
             .then(() => console.log('Unsubscribed on leaving queue.'));
@@ -543,16 +539,25 @@ const handleLeaveQueue = async () => {
     try {
         // --- 2. Send Delete Request to Backend ---
         await axios.delete(`${API_URL}/queue/${myQueueEntryId}`);
-
+        
         console.log(`Successfully left queue ${myQueueEntryId}`);
-        setMessage("You have successfully left the queue."); // Set success message
+        setMessage("You have successfully left the queue.");
 
+        // --- 3. Reset Frontend State (Only on Success) ---
+        // This MUST be inside the try block to ensure it only happens if the delete worked.
+        setMyQueueEntryId(null);
+        setJoinedBarberId(null);
+        setLiveQueue([]);
+        setQueueMessage('');
+        setSelectedBarber('');
+        setGeneratedImage(null);
+        setFile(null);
+        setPrompt('');
+        setSelectedServiceId('');
+        
     } catch (error) {
         console.error("Failed to leave queue:", error);
-        setMessage("Error leaving queue. Please try again."); // Show error
-        // Don't reset state if backend failed, so user can try again
-        // Or maybe re-subscribe? For now, we'll just show error.
-        return; // Stop execution
+        setMessage("Error leaving queue. Please try again.");
     }
 
     // --- 3. Reset Frontend State (Only on Success) ---
