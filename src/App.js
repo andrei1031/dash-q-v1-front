@@ -475,7 +475,7 @@ function CustomerView({ session }) {
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
    const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // State for customer's chat
-   
+   const [displayWait, setDisplayWait] = useState(0); // This will be our countdown timer
    // --- Moved Calculations inside component body ---
    // These will re-calculate whenever liveQueue changes
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
@@ -849,7 +849,7 @@ function CustomerView({ session }) {
        };
    }, [myQueueEntryId]);
    // --- END OF NEW HOOKS ---
-   
+
    // AI Preview Handler
 const handleGeneratePreview = async () => {
     // Check if file and prompt exist
