@@ -377,7 +377,7 @@ function CustomerAppLayout({ session }) {
 // These are defined once and won't be recreated on every render.
 let blinkInterval = null;
 let originalTitle = document.title;
-const alertTitle = "!! IT'S YOUR TURN !!";
+const alertTitle = "IT'S YOUR TURN!";
 
 /**
  * Starts the blinking browser tab.
@@ -893,8 +893,8 @@ const handleGeneratePreview = async () => {
             style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}
         >
             <div className="modal-content">
-                <h2>Your Turn is one customer away!</h2>
-                <p>The barber is ready for you after this.</p>
+                <h2>Your Turn turn!</h2>
+                <p>The barber is ready for you.</p>
                 <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
             </div>
         </div>
