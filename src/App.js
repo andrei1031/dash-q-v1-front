@@ -489,9 +489,15 @@ function CustomerView({ session }) {
             const socket = socketRef.current;
             const customerUserId = session.user.id;
 
-            socket.emit('register', customerUserId);
-
-            socket.on('connect', () => { console.log(`[Customer] WebSocket connected.`); });
+            socket.on('connect', () => { 
+                    console.log(`[Customer] WebSocket connected.`);
+                    socket.emit('register', customerUserId);
+                    
+                    // --- ADD THIS LINE ---
+                    // Tell the server which queue entry this socket represents
+                    socket.emit('registerQueueEntry', myQueueEntryId); 
+                    // --- END ADD ---
+                });
 
             const messageListener = (incomingMessage) => {
                 console.log(`[Customer] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
