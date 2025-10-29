@@ -507,8 +507,8 @@ function CustomerView({ session }) {
 
    useEffect(() => {
      // --- Define Your Shop's Location & Warning Distance ---
-     const BARBERSHOP_LAT = 16.414830431367967; // <-- REPLACE THIS
-     const BARBERSHOP_LON = 120.59712292628716; // <-- REPLACE THIS
+     const BARBERSHOP_LAT = 16.414830431367967; 
+     const BARBERSHOP_LON = 120.59712292628716; 
      const DISTANCE_THRESHOLD_METERS = 1500; // Warn if > 500 meters (0.5 km)
 
      // Check if geolocation is available in the browser
