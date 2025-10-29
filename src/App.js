@@ -1176,23 +1176,33 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
 
     const handleCancel = async (customerToCancel) => {
-        if (!customerToCancel) return;
+        // --- ADD LOG ---
+        console.log("[handleCancel] Clicked for customer:", customerToCancel); 
+        if (!customerToCancel) {
+            console.error("[handleCancel] No customer data provided.");
+            return;
+        }
 
-        // --- Confirmation ---
         const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This cannot be undone and will not log earnings.`);
-        if (!confirmCancel) return;
-        // --- End Confirmation ---
-
-        setError(''); // Clear previous errors
+        if (!confirmCancel) {
+            console.log("[handleCancel] User aborted cancellation."); // --- ADD LOG ---
+            return;
+        }
+        
+        // --- ADD LOG ---
+        console.log("[handleCancel] Sending PUT request to /api/queue/cancel", { queue_id: customerToCancel.id, barber_id: barberId });
+        setError(''); 
         try {
-            await axios.put(`${API_URL}/queue/cancel`, {
+            const response = await axios.put(`${API_URL}/queue/cancel`, {
                 queue_id: customerToCancel.id,
-                barber_id: barberId // Pass the current barber's ID
+                barber_id: barberId 
             });
-            // Realtime update should refresh the queue, no need to call fetchQueueDetails manually
-            // Optionally show a success message: alert('Customer marked as cancelled.');
+            // --- ADD LOG ---
+            console.log("[handleCancel] Success response:", response.data);
+            // Realtime update should refresh the queue
         } catch (err) {
-            console.error('Failed to cancel customer:', err);
+            // --- ADD LOG ---
+            console.error('[handleCancel] Failed to cancel customer:', err.response?.data || err.message); 
             setError(err.response?.data?.error || 'Failed to mark as cancelled.');
         }
     };
