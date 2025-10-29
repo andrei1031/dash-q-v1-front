@@ -449,6 +449,7 @@ function CustomerView({ session }) {
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
+   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // State for customer's chat
    
    // --- Moved Calculations inside component body ---
    // These will re-calculate whenever liveQueue changes
@@ -456,6 +457,26 @@ function CustomerView({ session }) {
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
    const currentBarberName = barbers.find(b => b.id === parseInt(joinedBarberId))?.full_name || `Barber #${joinedBarberId}`;
 
+   // --- NEW: Moved sendCustomerMessage inside CustomerView ---
+   const socketRef = useRef(null); // Add the socket ref here
+   const sendCustomerMessage = (recipientId, messageText) => {
+        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
+            const messageData = {
+                senderId: session.user.id, // Customer's user ID
+                recipientId: recipientId,   // Barber's user ID
+                message: messageText
+            };
+            socketRef.current.emit('chat message', messageData);
+            // Optimistically update local state for the customer's view
+             setChatMessagesFromBarber(prev => [
+                 ...prev,
+                 { senderId: session.user.id, message: messageText } // Add my sent message
+             ]);
+        } else {
+            console.warn("[Customer] Cannot send message, socket disconnected?");
+            setMessage("Chat disconnected, please refresh."); // User feedback
+        }
+   };
 
    // Fetch Public Queue Data
    // --- MODIFIED: Added useCallback and loading state ---
@@ -812,25 +833,6 @@ const handleGeneratePreview = async () => {
         stopBlinking();
    };
 
-   const sendCustomerMessage = (recipientId, messageText) => {
-        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
-            const messageData = {
-                senderId: session.user.id, // Customer's user ID
-                recipientId: recipientId,   // Barber's user ID
-                message: messageText
-            };
-            socketRef.current.emit('chat message', messageData);
-            // Optimistically update local state for the customer's view
-             setChatMessagesFromBarber(prev => [
-                 ...prev,
-                 { senderId: session.user.id, message: messageText } // Add my sent message
-             ]);
-        } else {
-            console.warn("[Customer] Cannot send message, socket disconnected?");
-            setMessage("Chat disconnected, please refresh."); // User feedback
-        }
-   };
-
     // --- ADDED DEBUG LOG ---
    console.log("RENDERING CustomerView:", {
        myQueueEntryId,
@@ -1054,7 +1056,11 @@ const handleGeneratePreview = async () => {
 
                {/* --- Chat Window --- */}
                {isChatOpen && chatTargetBarberUserId && (
-                   <ChatWindow currentUser_id={session.user.id} otherUser_id={chatTargetBarberUserId} />
+                   <ChatWindow 
+                        currentUser_id={session.user.id} 
+                        otherUser_id={chatTargetBarberUserId} 
+                        messages={chatMessagesFromBarber} // Pass the correct messages state
+                        onSendMessage={sendCustomerMessage} />
                )}
 
                {/* --- Leave Button --- */}
@@ -1078,68 +1084,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [unreadMessages, setUnreadMessages] = useState({}); // e.g., { "customer-user-id-123": true, "customer-user-id-456": true }
     
     // --- NEW: WebSocket Connection Effect for Barber ---
-    // --- REVISED: Customer WebSocket Connection & Message Handling ---
-    useEffect(() => {
-        // Only connect if logged in AND joined a queue
-        if (session?.user?.id && joinedBarberId) {
-            // Connect only if not already connected
-            if (!socketRef.current) {
-                console.log("[Customer] Connecting WebSocket...");
-                socketRef.current = io(SOCKET_URL);
-                const socket = socketRef.current;
-                const customerUserId = session.user.id;
-
-                socket.emit('register', customerUserId);
-
-                socket.on('connect', () => { console.log(`[Customer] WebSocket connected.`); });
-
-                // --- Revised Message Listener ---
-                const messageListener = (incomingMessage) => {
-                    console.log("[Customer] Received chat message:", incomingMessage);
-                    // Check if message is from the barber we are currently queued for
-                    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
-                    const currentChatTargetBarberUserId = targetBarber?.user_id;
-                    if (currentChatTargetBarberUserId && incomingMessage.senderId === currentChatTargetBarberUserId) {
-                        // Add message to local state
-                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-
-                        if (!isChatOpen) {
-                            console.log("[Customer] Chat closed. Marking as unread.");
-                            setHasUnreadFromBarber(true);
-                        } else {
-                            console.log("[Customer] Chat open. Not marking as unread.");
-                        }
-                    } else {
-                         console.log("[Customer] Msg from unexpected sender or barber ID unknown:", incomingMessage.senderId, currentChatTargetBarberUserId);
-                    }
-                };
-                socket.on('chat message', messageListener);
-                // --- End Revised Listener ---
-
-                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-            }
-        } else {
-             // If not logged in or not in queue, ensure socket is disconnected
-             if (socketRef.current) {
-                console.log("[Customer] Disconnecting WebSocket (not needed).");
-                socketRef.current.disconnect();
-                socketRef.current = null;
-             }
-        }
-
-        // Cleanup: Disconnect when dependencies change (e.g., leaving queue) or component unmounts
-        return () => {
-            if (socketRef.current) {
-                console.log("[Customer] Cleaning up WebSocket connection on effect change/unmount.");
-                socketRef.current.disconnect();
-                socketRef.current = null;
-            }
-        };
-    // Dependencies: Connect/disconnect based on login status and queue status
-    // Listen for messages based on the current target barber ID and whether chat is open
-    }, [session, joinedBarberId, isChatOpen, barbers]); // Refined dependencies
-    // --- END NEW WebSocket Effect ---
 
     // Fetch queue details function
     // Fetch queue details function
