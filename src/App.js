@@ -1,26 +1,3 @@
-/**
- * Calculates the distance between two lat/lon points in meters
- * using the Haversine formula.
- */
-function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth's radius in meters
-  const phi1 = (lat1 * Math.PI) / 180; // φ, λ in radians
-  const phi2 = (lat2 * Math.PI) / 180;
-  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-    Math.cos(phi1) *
-      Math.cos(phi2) *
-      Math.sin(deltaLambda / 2) *
-      Math.sin(deltaLambda / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  const d = R * c; // in meters
-  return d;
-}
-
 import React, { useState, useEffect, useCallback, useRef } from 'react'; // --- MODIFIED: Added useCallback ---
 import io from 'socket.io-client';
 import axios from 'axios';
@@ -45,6 +22,7 @@ const API_URL = 'https://dash-q-backend.onrender.com/api';
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
+
 let supabase;
 if (supabaseUrl && supabaseAnonKey) {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -58,6 +36,30 @@ if (supabaseUrl && supabaseAnonKey) {
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: new Error('Supabase client not configured') }) }) }) }),
     storage: { from: () => ({ upload: () => {throw new Error('Supabase storage not configured')}, getPublicUrl: () => ({ data: { publicUrl: null } }) }) }
   };
+}
+
+// --- Helper Function: Calculate Distance Between Two Coordinates (Haversine Formula) ---
+/**
+ * Calculates the distance between two lat/lon points in meters
+ * using the Haversine formula.
+ */
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const phi1 = (lat1 * Math.PI) / 180; // φ, λ in radians
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) *
+      Math.cos(phi2) *
+      Math.sin(deltaLambda / 2) *
+      Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  const d = R * c; // in meters
+  return d;
 }
 
 // ##############################################
