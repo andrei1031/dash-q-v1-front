@@ -789,3 +789,22 @@ button:disabled {
     flex-grow: 1; /* Allow name to take up space */
     margin-right: 5px; /* Space before icon */
 }
+.cancel-button {
+  /* Style similarly to complete/next, maybe red? */
+  background-color: #dc3545; /* Red */
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  margin-top: 5px; /* Add some space if needed */
+   margin-left: 10px; /* Space from complete button */
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9em; /* Slightly smaller maybe */
+}
+
+.action-buttons-container {
+    margin-bottom: 15px; /* Space below buttons */
+    display: flex; /* Align buttons side-by-side */
+    justify-content: center; /* Center buttons */
+    gap: 10px; /* Space between buttons */
+}

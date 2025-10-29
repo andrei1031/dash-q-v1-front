@@ -1175,6 +1175,28 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     };
 
+    const handleCancel = async (customerToCancel) => {
+        if (!customerToCancel) return;
+
+        // --- Confirmation ---
+        const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This cannot be undone and will not log earnings.`);
+        if (!confirmCancel) return;
+        // --- End Confirmation ---
+
+        setError(''); // Clear previous errors
+        try {
+            await axios.put(`${API_URL}/queue/cancel`, {
+                queue_id: customerToCancel.id,
+                barber_id: barberId // Pass the current barber's ID
+            });
+            // Realtime update should refresh the queue, no need to call fetchQueueDetails manually
+            // Optionally show a success message: alert('Customer marked as cancelled.');
+        } catch (err) {
+            console.error('Failed to cancel customer:', err);
+            setError(err.response?.data?.error || 'Failed to mark as cancelled.');
+        }
+    };
+
     // --- NEW: Function to send message from Barber ---
     const sendBarberMessage = (recipientId, messageText) => {
         if (messageText.trim() && socketRef.current && session?.user?.id) {
@@ -1260,7 +1282,31 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             {/* --- END NEW DISPLAY --- */}
 
             {error && <p className="error-message">{error}</p>}
-            {getActionButton()}
+            <div className="action-buttons-container">
+                        {queueDetails.inProgress ? (
+                            <>
+                                <button onClick={handleCompleteCut} className="complete-button">
+                                    Complete: #{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}
+                                </button>
+                                {/* --- NEW Cancel Button for In Progress --- */}
+                                <button onClick={() => handleCancel(queueDetails.inProgress)} className="cancel-button">
+                                    Cancel / No-Show
+                                </button>
+                            </>
+                        ) : queueDetails.upNext ? (
+                             <button onClick={handleNextCustomer} className="next-button">
+                                Call: #{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}
+                            </button>
+                            // Optionally add cancel for Up Next too:
+                            // <button onClick={() => handleCancel(queueDetails.upNext)} className="cancel-button small">Cancel Up Next</button>
+                        ) : queueDetails.waiting.length > 0 ? (
+                            <button onClick={handleNextCustomer} className="next-button">
+                                Call: #{queueDetails.waiting[0].id} - {queueDetails.waiting[0].customer_name}
+                            </button>
+                        ) : (
+                            <button className="next-button disabled" disabled>Queue Empty</button>
+                        )}
+            </div>
             <h3 className="queue-subtitle">In Chair</h3>
             {queueDetails.inProgress ? (
                 <ul className="queue-list"><li className="in-progress">
