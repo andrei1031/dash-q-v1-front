@@ -625,21 +625,29 @@ button:disabled {
 }
 /* === Add this to app.css === */
 
-/* --- Current Serving Display (NEW) --- */
+/* === Add this to app.css (REPLACE the old styles) === */
+
 .current-serving-display {
   display: flex;
-  justify-content: space-around;
+  justify-content: center; /* Center the items */
   width: 100%;
   margin: 15px 0;
-  padding: 10px;
   background-color: #f4f4f4;
   border-radius: 8px;
+  padding: 10px 0; /* Vertical padding */
 }
 
 .serving-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 50%; /* <-- Force each item to take 50% width */
+  box-sizing: border-box; 
+}
+
+/* Add a divider between the two */
+.serving-item.now-serving {
+   border-right: 1px solid #ddd;
 }
 
 .serving-item span {
@@ -655,7 +663,7 @@ button:disabled {
 
 /* Specific colors */
 .serving-item.now-serving strong {
-  color: #dc3545; /* Red (like your leave button) */
+  color: #dc3545; /* Red */
 }
 
 .serving-item.up-next strong {
