@@ -1119,9 +1119,26 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         <div className="card">
             <h2>My Queue ({barberName || '...'})</h2>
 
-            {/* ... (Keep Now Serving / Up Next display) ... */}
-            {/* ... (Keep error message and action button) ... */}
+            {/* --- NEW: "Now Serving / Up Next" Display --- */}
+            {/* This uses the same CSS as the customer page */}
+            <div className="current-serving-display">
+                <div className="serving-item now-serving">
+                    <span>Now Serving</span>
+                    <strong>
+                        {queueDetails.inProgress ? `Customer #${queueDetails.inProgress.id}` : '---'}
+                    </strong>
+                </div>
+                <div className="serving-item up-next">
+                    <span>Up Next</span>
+                    <strong>
+                        {queueDetails.upNext ? `Customer #${queueDetails.upNext.id}` : '---'}
+                    </strong>
+                </div>
+            </div>
+            {/* --- END NEW DISPLAY --- */}
 
+            {error && <p className="error-message">{error}</p>}
+            {getActionButton()}
             <h3 className="queue-subtitle">In Chair</h3>
             {queueDetails.inProgress ? (
                 <ul className="queue-list">
