@@ -1310,8 +1310,11 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
 
     const openChat = (customer) => {
-        if (customer && customer.profiles && customer.profiles.id) {
-            setOpenChatCustomerId(customer.profiles.id); // Set the customer's USER ID
+        // --- FIX: Ensure customer.profiles.id exists before proceeding ---
+        const customerUserId = customer?.profiles?.id;
+
+        if (customerUserId) {
+            setOpenChatCustomerId(customerUserId); // Set the customer's USER ID
             const customerUserId = customer.profiles.id;
 
             // --- NEW: Mark as read ---
