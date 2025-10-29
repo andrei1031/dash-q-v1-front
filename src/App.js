@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // --- MODIFIED: Added useCallback ---
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
@@ -316,6 +316,41 @@ function CustomerAppLayout({ session }) {
     );
 }
 
+// ##############################################
+// ##      BLINKING TAB HELPER FUNCTIONS       ##
+// ##############################################
+// --- NEW: Moved blinking logic outside the component ---
+// These are defined once and won't be recreated on every render.
+let blinkInterval = null;
+let originalTitle = document.title;
+const alertTitle = "!! IT'S YOUR TURN !!";
+
+/**
+ * Starts the blinking browser tab.
+ */
+function startBlinking() {
+    if (blinkInterval) return; // Already blinking
+    
+    originalTitle = document.title; // Capture the title *at the time of starting*
+    let isOriginalTitle = true;
+  
+    blinkInterval = setInterval(() => {
+        document.title = isOriginalTitle ? alertTitle : originalTitle;
+        isOriginalTitle = !isOriginalTitle;
+    }, 1000); // Blinks every 1 second
+}
+
+/**
+ * Stops the blinking browser tab and resets the title.
+ */
+function stopBlinking() {
+    if (!blinkInterval) return; // Not blinking
+    
+    clearInterval(blinkInterval);
+    blinkInterval = null;
+    document.title = originalTitle; // Reset to original
+}
+
 
 // ##############################################
 // ##      CHILD COMPONENTS (Customer/Barber)  ##
@@ -329,7 +364,7 @@ function CustomerView({ session }) {
    const [customerPhone, setCustomerPhone] = useState('');
    const [customerEmail, setCustomerEmail] = useState('');
    const [message, setMessage] = useState('');
-   const [player_id, setPlayerId] = useState(null); // <-- ADD THIS
+   const [player_id, setPlayerId] = useState(null); 
 
    // --- FIX: Initialize state from localStorage ---
    const [myQueueEntryId, setMyQueueEntryId] = useState(
@@ -351,6 +386,9 @@ function CustomerView({ session }) {
    const [isLoading, setIsLoading] = useState(false);
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
+
+   // --- NEW: State for the "Your Turn" modal ---
+   const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
 
 
    // Fetch Public Queue Data
@@ -414,6 +452,28 @@ function CustomerView({ session }) {
 
 }, []); // Runs only once on mount
 
+    // --- NEW: Effect to manage stopBlinking listeners ---
+    useEffect(() => {
+        // Define handlers
+        const handleFocus = () => stopBlinking();
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                stopBlinking();
+            }
+        };
+
+        // Add listeners
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("visibilitychange", handleVisibility);
+
+        // Cleanup: remove listeners when component unmounts
+        return () => {
+            window.removeEventListener("focus", handleFocus);
+            document.removeEventListener("visibilitychange", handleVisibility);
+        };
+    }, []); // Empty dependency array, runs once on mount
+
+
     // Realtime and Notification Effect (For AFTER joining)
    useEffect(() => {
         if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
@@ -427,15 +487,23 @@ function CustomerView({ session }) {
             queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
                     fetchPublicQueue(joinedBarberId); // Refresh list on any change
+                    
+                    // --- MODIFIED: This is the main trigger ---
                     if (payload.eventType === 'UPDATE' && payload.new.id === myQueueEntryId && payload.new.status === 'Up Next') {
-                        console.log('My status is Up Next! Triggering alerts.');
+                        console.log('My status is Up Next! Triggering ALL alerts.');
 
-                        // --- NEW: 1. Vibrate (if on a mobile device) ---
+                        // --- 1. Start Blinking Tab ---
+                        startBlinking();
+
+                        // --- 2. Show Modal Pop-up ---
+                        setIsYourTurnModalOpen(true);
+
+                        // --- 3. Vibrate (if on a mobile device) ---
                         if (navigator.vibrate) {
                             navigator.vibrate([500, 200, 500]); // Vibrate pattern (on, off, on)
                         }
 
-                        // --- NEW: 2. Play Sound (if browser allows) ---
+                        // --- 4. Play Sound (if browser allows) ---
                         try {
                             // Assumes you added "buzzer.mp3" to the /public folder
                             const audio = new Audio('/buzzer.mp3'); 
@@ -444,17 +512,16 @@ function CustomerView({ session }) {
                             console.error("Audio play failed:", e);
                         }
 
-                        // --- 3. Send Web Notification (for background/locked screen) ---
+                        // --- 5. Send Web Notification (for background/locked screen) ---
                         if (Notification.permission === "granted") {
                             new Notification("You're next at Dash-Q!", {
                                 body: "Please head over to the barbershop now.",
                                 // icon: "/favicon.ico" // Optional
                             });
-                        } else {
-                            // Fallback for browsers without notification permission
-                            alert("You're next at Dash-Q! Please head over now.");
-                        }
+                        } 
+                        // Note: The modal pop-up (step 2) acts as the fallback for "alert()"
                     }
+                    // --- END MODIFICATION ---
                 })
                 .subscribe((status, err) => {
                      if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); fetchPublicQueue(joinedBarberId); }
@@ -542,7 +609,7 @@ function CustomerView({ session }) {
                 barber_id: selectedBarber,
                 reference_image_url: imageUrlToSave,
                 service_id: selectedServiceId,
-                player_id: player_id // <-- ADD THIS NEW FIELD
+                player_id: player_id // <-- This field is correct
             });
             
             const newEntry = response.data;
@@ -607,10 +674,35 @@ function CustomerView({ session }) {
         }
     };
 
+   // --- NEW: Handler for the modal's "Okay" button ---
+   const handleModalClose = () => {
+        setIsYourTurnModalOpen(false); // Hide the modal
+        stopBlinking(); // Stop the tab blinking
+   };
+
 
    // --- Render Customer View ---
    return (
       <div className="card">
+        {/* --- NEW: "Your Turn" Modal --- */}
+        {/* This HTML is added here. It uses the CSS class to show/hide. */}
+        <div 
+            id="your-turn-modal-overlay" 
+            className="modal-overlay"
+            // Use inline style to toggle display based on React state
+            style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }} 
+        >
+            <div className="modal-content">
+                <h2>It's Your Turn!</h2>
+                <p>The barber is ready for you now.</p>
+                {/* Add the onClick handler here */}
+                <button id="close-modal-btn" onClick={handleModalClose}>
+                    Okay!
+                </button>
+            </div>
+        </div>
+        {/* --- END NEW MODAL --- */}
+
         {!myQueueEntryId ? (
            <> {/* --- JOIN FORM JSX --- */}
                <h2>Join the Queue</h2>
@@ -843,7 +935,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
     const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Earnings per Day (Last 7 Days)' } }, scales: { y: { beginAtZero: true } } };
     const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : []; // Ensure it's an array
     // Prepare chart data
-    const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] }; // <-- ₱ Symbol
+    const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] }; // <-- ₱ Symbol
 
     // Render the analytics dashboard UI
     return ( <div className="card analytics-card"><h2>Dashboard</h2>{error && <p className="error-message">{error}</p>}<h3 className="analytics-subtitle">Today</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Earnings</span><span className="analytics-value">₱{analytics.totalEarningsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Cuts</span><span className="analytics-value">{analytics.totalCutsToday ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceToday}</span></div><div className="analytics-item"><span className="analytics-label">Queue Size</span><span className="analytics-value small">{analytics.currentQueueSize ?? 0}</span></div></div><h3 className="analytics-subtitle">Last 7 Days</h3><div className="analytics-grid"><div className="analytics-item"><span className="analytics-label">Total Earnings</span><span className="analytics-value">₱{analytics.totalEarningsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{analytics.totalCutsWeek ?? 0}</span></div><div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceWeek}</span></div><div className="analytics-item"><span className="analytics-label">Busiest Day</span><span className="analytics-value small">{analytics.busiestDay?.name ?? 'N/A'} (₱{analytics.busiestDay?.earnings ?? 0})</span></div></div><div 
@@ -865,7 +957,8 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         <p className="carbon-footnote">
             By going digital, you reduce your carbon footprint from transportation, paper, and plastic.
         </p>
-        </div><div className="chart-container">{dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}</div><button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button></div> );
+    </div>
+        <div className="chart-container">{dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}</div><button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button></div> );
 }
 
 
