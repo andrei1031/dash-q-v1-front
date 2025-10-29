@@ -859,7 +859,20 @@ function CustomerView({ session }) {
 
                {/* --- Chat Button --- */}
                {!isChatOpen && myQueueEntryId && (
-                   <button onClick={() => { /* ... (keep existing onClick logic) ... */ }} className="chat-toggle-button">Chat with Barber</button>
+                   <button onClick={() => { 
+                    // Find the barber's user_id based on joinedBarberId
+                    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+                    
+                    // --- THIS IS THE CRITICAL CHECK ---
+                    if (targetBarber && targetBarber.user_id) { 
+                        setChatTargetBarberUserId(targetBarber.user_id);
+                        setIsChatOpen(true); // <--- This line isn't being reached
+                    } else {
+                        // --- THIS MUST BE HAPPENING ---
+                        console.error("Could not find barber user ID for chat.", { joinedBarberId, barbers, targetBarber }); 
+                        setMessage("Could not initiate chat: Barber details missing."); // Show user feedback
+                    }
+                    }} className="chat-toggle-button">Chat with Barber</button>
                )}
                {isChatOpen && (<button onClick={() => setIsChatOpen(false)} className="chat-toggle-button close">Close Chat</button>)}
 
