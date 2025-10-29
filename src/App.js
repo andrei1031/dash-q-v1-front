@@ -575,31 +575,37 @@ function CustomerView({ session }) {
         let queueChannel = null;
         let refreshInterval = null;
 
-        // Only subscribe if the user has joined a queue
-        if (joinedBarberId && supabase?.channel) {
+        if (joinedBarberId && myQueueEntryId && supabase?.channel) { // Ensure myQueueEntryId is also set
             console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
             queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
-                    console.log("Realtime Update Received:", payload); // Add log
-                    fetchPublicQueue(joinedBarberId); // Refresh list on any change
+                    console.log("Realtime Update Received:", payload);
+                    
+                    // --- Check if THIS user's status changed ---
+                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
+                        const newStatus = payload.new.status;
+                        console.log(`My status updated to: ${newStatus}`);
 
-                    // Check if *my* status updated to 'Up Next'
-                    if (payload.eventType === 'UPDATE' &&
-                        payload.new.id.toString() === myQueueEntryId && // Compare as strings
-                        payload.new.status === 'Up Next')
-                    {
-                        console.log('My status is Up Next! Triggering ALL alerts.');
-                        startBlinking();
-                        setIsYourTurnModalOpen(true);
-                        if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
-                        try {
-                            const audio = new Audio('/buzzer.mp3');
-                            audio.play().catch(e => console.warn("Audio autoplay blocked.", e));
-                        } catch (e) { console.error("Audio play failed:", e); }
-                        if (Notification.permission === "granted") {
-                            new Notification("You're next at Dash-Q!", { body: "Please head over now." });
+                        if (newStatus === 'Up Next') {
+                            // --- Trigger "Your Turn" alerts (Existing logic) ---
+                            console.log('My status is Up Next! Triggering ALL alerts.');
+                            startBlinking();
+                            setIsYourTurnModalOpen(true);
+                            if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+                        } 
+                        // --- NEW: Check for Complete or Cancelled ---
+                        else if (newStatus === 'Done') {
+                            console.log('My status is Done! Triggering Complete modal.');
+                            setIsServiceCompleteModalOpen(true);
+                            stopBlinking(); // Ensure blinking stops
+                        } else if (newStatus === 'Cancelled') {
+                            console.log('My status is Cancelled! Triggering Cancelled modal.');
+                            setIsCancelledModalOpen(true);
+                            stopBlinking(); // Ensure blinking stops
                         }
-                    }
+                    } 
+                    // --- Always refresh the queue list regardless of who changed ---
+                    fetchPublicQueue(joinedBarberId);
                 })
                 .subscribe((status, err) => {
                      if (status === 'SUBSCRIBED') {
