@@ -668,7 +668,65 @@ function CustomerView({ session }) {
 
 
    // AI Preview Handler
-   const handleGeneratePreview = async () => { /* ... (keep existing code) ... */ };
+const handleGeneratePreview = async () => {
+    // Check if file and prompt exist
+    if (!file || !prompt) { 
+        setMessage('Please upload a photo and enter a prompt.'); 
+        return; 
+    }
+    
+    // Set loading/generating states
+    setIsGenerating(true); 
+    setIsLoading(true); // Also set general loading state
+    setGeneratedImage(null); // Clear previous image
+    setMessage('Step 1/3: Uploading...'); 
+    
+    // Create a unique file path
+    const filePath = `${Date.now()}.${file.name.split('.').pop()}`;
+    
+    try {
+        // Check if Supabase storage is configured
+        if (!supabase?.storage) throw new Error("Supabase storage not available.");
+        
+        // Upload the file to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+            .from('haircut_references') // Your bucket name
+            .upload(filePath, file);
+            
+        if (uploadError) throw uploadError; // Throw error if upload fails
+        
+        // Get the public URL of the uploaded file
+        const { data: urlData } = supabase.storage
+            .from('haircut_references')
+            .getPublicUrl(filePath);
+            
+        if (!urlData?.publicUrl) throw new Error("Could not get public URL for uploaded file.");
+        
+        const imageUrl = urlData.publicUrl; // Store the URL
+        
+        // Update status message
+        setMessage('Step 2/3: Generating AI haircut... (takes ~15-30s)');
+        
+        // Call your backend endpoint to trigger AI generation
+        const response = await axios.post(`${API_URL}/generate-haircut`, { 
+            imageUrl, // Send the image URL
+            prompt    // Send the user's prompt
+        });
+        
+        // Set the generated image URL received from the backend
+        setGeneratedImage(response.data.generatedImageUrl); 
+        setMessage('Step 3/3: Success! Check preview.'); // Update status message
+        
+    } catch (error) { 
+        // Handle errors during the process
+        console.error('AI generation pipeline error:', error); 
+        setMessage(`AI failed: ${error.response?.data?.error || error.message}`); // Show error message
+    } finally { 
+        // Reset loading states regardless of success or failure
+        setIsGenerating(false); 
+        setIsLoading(false); 
+    }
+};
 
     // Join Queue Handler
    const handleJoinQueue = async (e) => {
@@ -678,7 +736,15 @@ function CustomerView({ session }) {
         setIsLoading(true); setMessage('Joining queue...');
         try {
             const imageUrlToSave = generatedImage;
-            const response = await axios.post(`${API_URL}/queue`, { /* ... (keep existing data) ... */ });
+            const response = await axios.post(`${API_URL}/queue`, {
+                customer_name: customerName,
+                customer_phone: customerPhone,
+                customer_email: customerEmail,
+                barber_id: selectedBarber,
+                reference_image_url: imageUrlToSave, // Note: imageUrlToSave is defined just above this line
+                service_id: selectedServiceId,
+                player_id: player_id // <-- Make sure player_id state is correctly set
+            });
             const newEntry = response.data;
             const newBarberId = parseInt(selectedBarber);
             setMyQueueEntryId(newEntry.id.toString()); // Store as string
@@ -801,8 +867,52 @@ function CustomerView({ session }) {
                             <div className="ewt-item"><span>Estimated wait</span><strong>~ {estimatedWait} min</strong></div>
                         </div>
                     )}
-                    {/* AI Section */}
-                    <div className="ai-generator"> {/* ... (keep existing AI JSX) ... */} </div>
+                    {/* --- AI Section --- */}
+                    <div className="ai-generator">
+                        <p className="ai-title">AI Haircut Preview (Optional)</p>
+                        {/* File Upload */}
+                        <div className="form-group">
+                            <label>1. Upload photo:</label>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={(e) => { 
+                                    setFile(e.target.files[0]); // Get the first file selected
+                                    setGeneratedImage(null); // Clear previous preview on new file select
+                                }} 
+                            />
+                        </div>
+                        {/* Prompt Input */}
+                        <div className="form-group">
+                            <label>2. Describe haircut:</label>
+                            <input 
+                                type="text" 
+                                value={prompt} 
+                                placeholder="e.g., 'buzz cut', 'modern mullet'" // Added example
+                                onChange={(e) => setPrompt(e.target.value)} 
+                            />
+                        </div>
+                        {/* Generate Button */}
+                        <button 
+                            type="button" 
+                            onClick={handleGeneratePreview} 
+                            className="generate-button" 
+                            // Disable button if no file/prompt, or if loading/generating
+                            disabled={!file || !prompt || isLoading || isGenerating} 
+                        >
+                            {isGenerating ? 'Generating...' : 'Generate AI Preview'}
+                        </button>
+                        {/* Loading Indicator */}
+                        {isLoading && isGenerating && <p className='loading-text'>Generating preview...</p>} 
+                        {/* Image Preview */}
+                        {generatedImage && (
+                            <div className="image-preview">
+                                <p>AI Preview:</p>
+                                <img src={generatedImage} alt="AI Generated Haircut Preview"/>
+                                <p className="success-text">Like it? Join the queue!</p>
+                            </div>
+                        )}
+                    </div>
                     {/* Join Button */}
                     <button type="submit" disabled={isLoading || isGenerating || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : (barbers.length === 0 ? 'No Barbers Available' : 'Join Queue')}</button>
                 </form>
@@ -811,15 +921,15 @@ function CustomerView({ session }) {
            </>
         ) : (
            <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
-               {/* --- MODIFIED: Added check for joinedBarberId before rendering header --- */}
+               {/* Header: Show barber name only if joinedBarberId exists */}
                <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
 
-               {/* --- Your Queue Number --- */}
+               {/* Your Queue Number */}
                <div className="queue-number-display">
                    Your Queue Number is: <strong>#{myQueueEntryId}</strong>
                </div>
 
-               {/* --- Now Serving / Up Next --- */}
+               {/* Now Serving / Up Next Display */}
                <div className="current-serving-display">
                    <div className="serving-item now-serving">
                        <span>Now Serving</span>
@@ -831,12 +941,11 @@ function CustomerView({ session }) {
                    </div>
                </div>
 
-                {/* --- Display queue message OR loading indicator --- */}
+                {/* Status Messages: Display errors or loading indicator */}
                {queueMessage && <p className="message error">{queueMessage}</p>}
-               {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>} {/* Show loading text */}
+               {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
 
-
-               {/* --- EWT Display (after joining) --- */}
+               {/* EWT Display (after joining) */}
                <div className="ewt-container">
                    <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
                    <div className="ewt-item"><span>Estimated wait</span><strong>~ {estimatedWait} min</strong></div>
@@ -1125,12 +1234,14 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 <div className="serving-item now-serving">
                     <span>Now Serving</span>
                     <strong>
+                        {/* Display Customer ID if someone is 'In Progress', otherwise show '---' */}
                         {queueDetails.inProgress ? `Customer #${queueDetails.inProgress.id}` : '---'}
                     </strong>
                 </div>
                 <div className="serving-item up-next">
                     <span>Up Next</span>
                     <strong>
+                        {/* Display Customer ID if someone is 'Up Next', otherwise show '---' */}
                         {queueDetails.upNext ? `Customer #${queueDetails.upNext.id}` : '---'}
                     </strong>
                 </div>
