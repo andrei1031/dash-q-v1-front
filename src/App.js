@@ -466,6 +466,8 @@ function CustomerView({ session }) {
    const [isChatOpen, setIsChatOpen] = useState(false);
    const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
+   const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
+   const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
 
    // --- Moved Calculations inside component body ---
    // These will re-calculate whenever liveQueue changes
@@ -786,6 +788,36 @@ const handleGeneratePreview = async () => {
         }
     };
 
+    // --- NEW: Function to reset state and return to Join form ---
+   const handleReturnToJoin = () => {
+        console.log("Resetting customer view to Join Queue form.");
+        // Close all modals
+        setIsServiceCompleteModalOpen(false);
+        setIsCancelledModalOpen(false);
+        setIsYourTurnModalOpen(false); // Also close 'Your Turn' if somehow open
+        stopBlinking(); // Ensure blinking stops
+
+        // Clear local storage
+        localStorage.removeItem('myQueueEntryId');
+        localStorage.removeItem('joinedBarberId');
+
+        // Reset state variables
+        setMyQueueEntryId(null);
+        setJoinedBarberId(null); // This triggers useEffect cleanup for subscription
+        setLiveQueue([]);
+        setQueueMessage('');
+        setSelectedBarber('');
+        setGeneratedImage(null);
+        setFile(null);
+        setPrompt('');
+        setSelectedServiceId('');
+        setMessage(''); // Clear any previous status messages
+        setIsChatOpen(false); // Close chat if open
+        setChatTargetBarberUserId(null);
+
+        // No need to explicitly navigate, removing myQueueEntryId handles it
+   };
+
    // --- Handler for the modal's "Okay" button ---
    const handleModalClose = () => {
         setIsYourTurnModalOpen(false);
@@ -807,7 +839,8 @@ const handleGeneratePreview = async () => {
 
    // --- Render Customer View ---
    return (
-      <div className="card">
+      <div className="card"> {/* <<< Starting point */}
+
         {/* --- "Your Turn" Modal --- */}
         <div
             id="your-turn-modal-overlay"
@@ -818,6 +851,30 @@ const handleGeneratePreview = async () => {
                 <h2>It's Your Turn!</h2>
                 <p>The barber is ready for you now.</p>
                 <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
+            </div>
+        </div>
+
+        {/* --- Service Complete Modal --- */}
+        <div
+            className="modal-overlay"
+            style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}
+        >
+            <div className="modal-content">
+                <h2>Service Complete!</h2>
+                <p>Thank you for visiting!</p>
+                <button id="close-complete-modal-btn" onClick={handleReturnToJoin}>Okay</button>
+            </div>
+        </div>
+
+        {/* --- Cancelled Modal --- */}
+        <div
+            className="modal-overlay"
+            style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}
+        >
+            <div className="modal-content">
+                <h2>Appointment Cancelled</h2>
+                <p>Your queue entry was cancelled.</p>
+                <button id="close-cancel-modal-btn" onClick={handleReturnToJoin}>Okay</button>
             </div>
         </div>
 
