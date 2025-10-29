@@ -339,6 +339,7 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
                         barberId={currentBarberId}
                         barberName={currentBarberName}
                         onCutComplete={handleCutComplete}
+                        session={session}
                      />
                      {/* Analytics Dashboard */}
                      <AnalyticsDashboard
@@ -891,9 +892,56 @@ function CustomerView({ session }) {
 
 // --- BarberDashboard (Handles Barber's Queue Management) ---
 // Accepts props: barberId, barberName, onCutComplete
-function BarberDashboard({ barberId, barberName, onCutComplete }) {
+function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
     const [error, setError] = useState('');
+    const socketRef = useRef(null); // --- NEW: Ref for WebSocket ---
+    const [chatMessages, setChatMessages] = useState({}); // --- NEW: Store messages {customerId: [msgs]} ---
+    const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // --- NEW: Which chat is open? ---
+    
+    // --- NEW: WebSocket Connection Effect for Barber ---
+    useEffect(() => {
+        if (!session?.user?.id) return; // Need user ID to register
+
+        // Connect to WebSocket server
+        socketRef.current = io(SOCKET_URL);
+        const socket = socketRef.current;
+        const barberUserId = session.user.id;
+
+        console.log(`Barber connecting WebSocket as user ${barberUserId}`);
+        // Register this barber user with the server
+        socket.emit('register', barberUserId);
+
+        // Listen for incoming chat messages
+        socket.on('chat message', (incomingMessage) => {
+          console.log(`[Barber] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
+          
+          // Store message associated with the sender (customer)
+          setChatMessages(prev => {
+              const customerId = incomingMessage.senderId;
+              const existingMessages = prev[customerId] || [];
+              return {
+                  ...prev,
+                  [customerId]: [...existingMessages, incomingMessage]
+              };
+          });
+          
+          // TODO: Add notification for new message (e.g., highlight customer)
+          // TODO: If chat window for this customer is open, show message immediately
+        });
+
+        // Handle connection errors
+        socket.on('connect_error', (err) => {
+            console.error("[Barber] WebSocket Connection Error:", err);
+        });
+
+        // Cleanup on unmount
+        return () => {
+          console.log("[Barber] Disconnecting WebSocket.");
+          socket.disconnect();
+        };
+      }, [session]); // Depend on session to get user ID
+    // --- END NEW WebSocket Effect ---
 
     // Fetch queue details function
     const fetchQueueDetails = async () => {
@@ -997,6 +1045,27 @@ function BarberDashboard({ barberId, barberName, onCutComplete }) {
         }
     };
 
+    // --- NEW: Function to send message from Barber ---
+    const sendBarberMessage = (recipientId, messageText) => {
+        if (messageText.trim() && socketRef.current && session?.user?.id) {
+            const messageData = {
+                senderId: session.user.id, // Barber's user ID
+                recipientId: recipientId,   // Customer's user ID
+                message: messageText
+            };
+            socketRef.current.emit('chat message', messageData);
+            
+            // Optimistically update local state for the barber's view
+             setChatMessages(prev => {
+              const customerId = recipientId;
+              const existingMessages = prev[customerId] || [];
+              return {
+                  ...prev,
+                  [customerId]: [...existingMessages, { senderId: session.user.id, message: messageText }]
+              };
+          });
+        }
+    };
 
     // Determine which button to show
     const getActionButton = () => {
