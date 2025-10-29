@@ -736,7 +736,7 @@ function CustomerView({ session }) {
                     />
                 </div>
                 <div className="form-group">
-                    <label>Your Email (Optional):</label>
+                    <label>Your Email:</label>
                     <input 
                         type="email" 
                         value={customerEmail} 
