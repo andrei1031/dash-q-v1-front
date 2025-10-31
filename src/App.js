@@ -476,6 +476,7 @@ function CustomerView({ session }) {
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
    const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // State for customer's chat
    const [displayWait, setDisplayWait] = useState(0); // This will be our countdown timer
+   const liveQueueRef = useRef([]);
    // --- Moved Calculations inside component body ---
    // These will re-calculate whenever liveQueue changes
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
@@ -635,6 +636,7 @@ function CustomerView({ session }) {
    const fetchPublicQueue = useCallback(async (barberId) => {
       if (!barberId) {
           setLiveQueue([]);
+          liveQueueRef.current = [];
           setIsQueueLoading(false); // Stop loading if no barber
           return;
       }
@@ -799,26 +801,62 @@ function CustomerView({ session }) {
     // --- EWT Calculation (based on liveQueue) ---
     useEffect(() => {
         const calculateWaitTime = () => {
+            const oldQueue = liveQueueRef.current || []; // Get the queue *before* this update
+            const newQueue = liveQueue;
             const relevantEntries = liveQueue.filter(
                 entry => entry.status === 'Waiting' || entry.status === 'Up Next'
             );
             setPeopleWaiting(relevantEntries.length);
 
-            // Calculate wait time based ONLY on people ahead of the current user
-            const myIndex = liveQueue.findIndex(entry => entry.id.toString() === myQueueEntryId);
-            const peopleAhead = myIndex !== -1 ? liveQueue.slice(0, myIndex) : liveQueue; // If not found (or before joining), consider everyone
+            // --- 2. Calculate the NEW "real" total wait time ---
+           const myIndexNew = newQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+           const peopleAheadNew = myIndexNew !== -1 ? newQueue.slice(0, myIndexNew) : newQueue;
+           const newTotalWait = peopleAheadNew.reduce((sum, entry) => {
+               if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) {
+                   return sum + (entry.services?.duration_minutes || 30);
+               }
+               return sum;
+           }, 0);
 
-            const totalWait = peopleAhead.reduce((sum, entry) => {
-                // Include 'In Progress' duration if someone is being served
-                if (entry.status === 'Waiting' || entry.status === 'Up Next' || entry.status === 'In Progress') {
-                    const duration = entry.services?.duration_minutes || 30; // Default 30 mins
-                    return sum + duration;
-                }
-                return sum;
-            }, 0);
+            setEstimatedWait(newTotalWait);
+            // --- 3. Smart Countdown Logic ---
+           setDisplayWait(currentDisplayWait => {
+               // Find who left (if anyone)
+               const leaver = oldQueue.find(oldEntry => {
+                   return !newQueue.some(newEntry => newEntry.id === oldEntry.id);
+               });
 
-            setEstimatedWait(totalWait);
-        };
+               // Find if the leaver was in front of me
+               const myIndexOld = oldQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+               const leaverIndexOld = leaver ? oldQueue.findIndex(e => e.id === leaver.id) : -1;
+
+               // CHECK 1: Did someone in front of me leave?
+               if (leaver && myIndexOld !== -1 && leaverIndexOld !== -1 && leaverIndexOld < myIndexOld) {
+                   const leaverDuration = leaver.services?.duration_minutes || 30;
+                   console.log(`Leaver detected in front: ${leaver.id}, duration: ${leaverDuration}`);
+                   
+                   // THIS IS YOUR LOGIC: Subtract leaver's time from current countdown
+                   const newCountdown = currentDisplayWait - leaverDuration;
+                   return newCountdown > 0 ? newCountdown : 0; // Don't go below 0
+               }
+               
+               // CHECK 2: Is this the first time loading?
+               if (currentDisplayWait === 0) {
+                   return newTotalWait; // Set the initial timer
+               }
+
+               // CHECK 3: Did the timer get "stuck" (e.g. higher than the new total)?
+               // This happens if a barber finishes a cut.
+               if (newTotalWait < currentDisplayWait) {
+                    return newTotalWait; // Reset to the new, lower total
+               }
+               
+               // ELSE: No one left in front, timer isn't stuck.
+               // This happens on a 15s refresh or if someone joined *behind* me.
+               // Let the 1-minute timer continue its countdown.
+               return currentDisplayWait; 
+           });
+       };
 
         calculateWaitTime();
     }, [liveQueue, myQueueEntryId]); // Recalculate when queue or my position changes
