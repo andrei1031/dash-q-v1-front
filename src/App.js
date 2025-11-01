@@ -191,13 +191,15 @@ function AuthForm() {
                         This web based application was proudly developed by:
                         <br/>
                         <strong>Aquino, Zaldy Castro Jr.</strong>
+                        <br/>
                         <strong>Galima, Denmark Perpose</strong>
+                        <br/>
                         <strong>Saldivar, Reuben Andrei Santos</strong>
-                        <br />
-                        <br />
+                        <br/>
+                        <br/>
                         from
-                        <br />
-                        <br />
+                        <br/>
+                        <br/>
                         <strong>University of the Cordilleras</strong>
                     </p>
                     <button 
