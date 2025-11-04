@@ -1328,9 +1328,26 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
     const [unreadMessages, setUnreadMessages] = useState({}); // e.g., { "customer-user-id-123": true, "customer-user-id-456": true }
     
+
+    const ReferenceImageLink = ({ entry }) => {
+        if (!entry || !entry.reference_image_url) {
+            return null;
+        }
+
+        return (
+            <a 
+                href={entry.reference_image_url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="ref-image-link"
+                title="View AI Haircut Reference"
+            >
+                ✂️ AI Ref
+            </a>
+        );
+    };
     // --- NEW: WebSocket Connection Effect for Barber ---
 
-    // Fetch queue details function
     // Fetch queue details function
         const fetchQueueDetails = async () => {
             console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
@@ -1666,6 +1683,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             {queueDetails.inProgress ? (
                 <ul className="queue-list"><li className="in-progress">
                     <strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>
+                    <ReferenceImageLink entry={queueDetails.inProgress} />
                     {/* --- MODIFIED --- */}
                     <button
                         onClick={() => openChat(queueDetails.inProgress)}
@@ -1687,6 +1705,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             {queueDetails.upNext ? (
                 <ul className="queue-list"><li className="up-next">
                     <strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong>
+                    <ReferenceImageLink entry={queueDetails.upNext} />
                     {/* --- MODIFIED --- */}
                      <button
                         onClick={() => openChat(queueDetails.upNext)}
@@ -1710,6 +1729,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 queueDetails.waiting.map(c => (
                     <li key={c.id}>
                         #{c.id} - {c.customer_name}
+                        <ReferenceImageLink entry={c} />
                         {/* --- MODIFIED --- */}
                         <button
                             onClick={() => openChat(c)}
