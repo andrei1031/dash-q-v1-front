@@ -520,6 +520,8 @@ function CustomerView({ session }) {
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false); // To prevent spamming the modal
    const locationWatchId = useRef(null); // To store the ID of the location watcher
+   const [imageOptions, setImageOptions] = useState([]); // Holds the array of 4-6 URLs
+    const [selectedAiImage, setSelectedAiImage] = useState(null); // The customer's final choice
 
    // --- ADD THIS NEW HANDLER ---
    const handleCloseInstructions = () => {
@@ -880,62 +882,31 @@ function CustomerView({ session }) {
 
    // AI Preview Handler
 const handleGeneratePreview = async () => {
-    // Check if file and prompt exist
-    if (!file || !prompt) { 
-        setMessage('Please upload a photo and enter a prompt.'); 
-        return; 
-    }
-    
-    // Set loading/generating states
-    setIsGenerating(true); 
-    setIsLoading(true); // Also set general loading state
-    setGeneratedImage(null); // Clear previous image
-    setMessage('Step 1/3: Uploading...'); 
-    
-    // Create a unique file path
-    const filePath = `${Date.now()}.${file.name.split('.').pop()}`;
-    
+    if (!prompt) { /* ... */ return; }
+
+    setIsGenerating(true); setIsLoading(true); 
+    setImageOptions([]); // Clear previous options
+    setSelectedAiImage(null); // Clear previous selection
+
     try {
-        // Check if Supabase storage is configured
-        if (!supabase?.storage) throw new Error("Supabase storage not available.");
-        
-        // Upload the file to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-            .from('haircut_references') // Your bucket name
-            .upload(filePath, file);
-            
-        if (uploadError) throw uploadError; // Throw error if upload fails
-        
-        // Get the public URL of the uploaded file
-        const { data: urlData } = supabase.storage
-            .from('haircut_references')
-            .getPublicUrl(filePath);
-            
-        if (!urlData?.publicUrl) throw new Error("Could not get public URL for uploaded file.");
-        
-        const imageUrl = urlData.publicUrl; // Store the URL
-        
-        // Update status message
-        setMessage('Step 2/3: Generating AI haircut... (takes ~15-30s)');
-        
-        // Call your backend endpoint to trigger AI generation
-        const response = await axios.post(`${API_URL}/generate-haircut`, { 
-            imageUrl, // Send the image URL
-            prompt    // Send the user's prompt
-        });
-        
-        // Set the generated image URL received from the backend
-        setGeneratedImage(response.data.generatedImageUrl); 
-        setMessage('Step 3/3: Success! Check preview.'); // Update status message
-        
-    } catch (error) { 
-        // Handle errors during the process
-        console.error('AI generation pipeline error:', error); 
-        setMessage(`AI failed: ${error.response?.data?.error || error.message}`); // Show error message
-    } finally { 
-        // Reset loading states regardless of success or failure
-        setIsGenerating(false); 
-        setIsLoading(false); 
+        setMessage('Generating 4 haircut options...');
+
+        // Call backend (Endpoint 7)
+        const response = await axios.post(`${API_URL}/generate-haircut`, { prompt });
+
+        if (response.data?.generatedImageUrls) {
+            setImageOptions(response.data.generatedImageUrls); // Save the array of URLs
+            setMessage('Success! Choose your preferred option.');
+        } else {
+             throw new Error('No images received.');
+        }
+
+    } catch (error) {
+        console.error('AI generation pipeline error:', error);
+        setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
+    } finally {
+        setIsGenerating(false);
+        setIsLoading(false);
     }
 };
 
@@ -955,7 +926,9 @@ const handleGeneratePreview = async () => {
                 reference_image_url: imageUrlToSave, // Note: imageUrlToSave is defined just above this line
                 service_id: selectedServiceId,
                 player_id: player_id, // <-- Make sure player_id state is correctly set
-                user_id: session.user.id // <-- ADD THIS LINE
+                user_id: session.user.id, // <-- ADD THIS LINE
+                ai_haircut_image_url: shareAiImage ? selectedAiImage : null, // Send selected URL if sharing is true
+                share_ai_image: shareAiImage
             });
             const newEntry = response.data;
             const newBarberId = parseInt(selectedBarber);
@@ -1207,10 +1180,10 @@ const handleGeneratePreview = async () => {
                         {/* Generate Button */}
                         <button 
                             type="button" 
-                            onClick={handleGeneratePreview} 
+                            onClick={handleGeneratePreview}
                             className="generate-button" 
-                            // Disable button if no file/prompt, or if loading/generating
-                            disabled={!file || !prompt || isLoading || isGenerating} 
+                            // --- MODIFIED: Only checks if prompt exists ---
+                            disabled={!prompt || isLoading || isGenerating}
                         >
                             {isGenerating ? 'Generating...' : 'Generate AI Preview'}
                         </button>
@@ -1220,7 +1193,33 @@ const handleGeneratePreview = async () => {
                         {generatedImage && (
                             <div className="image-preview">
                                 <p>AI Preview:</p>
-                                <img src={generatedImage} alt="AI Generated Haircut Preview"/>
+                                {imageOptions.length > 0 && (
+                        <div className="ai-selection-grid-section">
+                            <h3>4. Choose Your Style:</h3>
+                            <div className="selection-grid">
+                                {imageOptions.map((url, index) => (
+                                    <div 
+                                        key={index} 
+                                        onClick={() => setSelectedAiImage(url)} 
+                                        className={`image-option ${selectedAiImage === url ? 'selected' : ''}`}
+                                    >
+                                        <img src={url} alt={`Option ${index + 1}`} />
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Share & Join Button Logic */}
+                            {selectedAiImage && (
+                                <div className="join-with-ai-options">
+                                    <div className="form-group checkbox-group">
+                                        <input type="checkbox" id="share-ai" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
+                                        <label htmlFor="share-ai">Share selected style with the barber?</label>
+                                    </div>
+                                    <p className="success-text">Ready to join!</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                                 <p className="success-text">Like it? Join the queue!</p>
                             </div>
                         )}
