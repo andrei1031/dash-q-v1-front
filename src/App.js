@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // --- MODIFIED: Added useCallback ---
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
+// Note: Konva imports are removed as they are no longer needed
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,19 +10,14 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Toolti
 
 import './App.css';
 
+// --- Global Constants ---
 const SOCKET_URL = 'https://dash-q-backend.onrender.com'; // Your backend URL
-// const SOCKET_URL = 'http://localhost:3001'; // For local testing
-// --- Register Chart.js components ---
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-
-// --- Backend API URL ---
 const API_URL = 'https://dash-q-backend.onrender.com/api';
-// const API_URL = 'http://localhost:3001/api'; // For local testing
 
 // --- Supabase Client Setup ---
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-
 
 let supabase;
 if (supabaseUrl && supabaseAnonKey) {
@@ -38,28 +34,19 @@ if (supabaseUrl && supabaseAnonKey) {
   };
 }
 
-// --- Helper Function: Calculate Distance Between Two Coordinates (Haversine Formula) ---
+// --- Helper Function: Calculate Distance ---
 /**
  * Calculates the distance between two lat/lon points in meters
- * using the Haversine formula.
  */
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371e3; // Earth's radius in meters
-  const phi1 = (lat1 * Math.PI) / 180; // φ, λ in radians
+  const phi1 = (lat1 * Math.PI) / 180;
   const phi2 = (lat2 * Math.PI) / 180;
   const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
   const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-    Math.cos(phi1) *
-      Math.cos(phi2) *
-      Math.sin(deltaLambda / 2) *
-      Math.sin(deltaLambda / 2);
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  const d = R * c; // in meters
-  return d;
+  return R * c; // in meters
 }
 
 // ##############################################
@@ -68,7 +55,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 // Props: currentUser_id, otherUser_id, messages = [], onSendMessage
 function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage }) {
   const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef(null); // Ref to scroll to bottom
+  const messagesEndRef = useRef(null);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -78,24 +65,22 @@ function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (newMessage.trim() && onSendMessage) {
-      // Use the provided handler to send the message
-      onSendMessage(otherUser_id, newMessage);
+      onSendMessage(otherUser_id, newMessage); // Call parent handler
       setNewMessage(''); // Clear input
     } else {
-        console.warn("[ChatWindow] Cannot send message, handler missing or message empty.");
+      console.warn("[ChatWindow] Cannot send message, handler missing or message empty.");
     }
   };
 
   return (
     <div className="chat-window">
       <div className="message-list">
-        {/* Render messages passed down as props */}
         {messages.map((msg, index) => (
           <div key={index} className={msg.senderId === currentUser_id ? 'my-message' : 'other-message'}>
             {msg.message}
           </div>
         ))}
-        <div ref={messagesEndRef} /> {/* Element to scroll to */}
+        <div ref={messagesEndRef} />
       </div>
       <form onSubmit={handleSendMessage} className="message-input-form">
         <input
@@ -104,7 +89,6 @@ function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
         />
-        {/* Disable send if no handler? Might not be needed */}
         <button type="submit" disabled={!onSendMessage}>Send</button>
       </form>
     </div>
@@ -115,1200 +99,586 @@ function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage
 // ##############################################
 // ##          LOGIN/SIGNUP COMPONENTS         ##
 // ##############################################
-
 function AuthForm() {
-    // State for username/email/password etc.
-    const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(true);
+    const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(true); // For signup modal
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
-    const [barberCode, setBarberCode] = useState(''); // For Barber Signup
-    const [pin, setPin] = useState(''); // Barber PIN input for login
+    const [barberCode, setBarberCode] = useState('');
+    const [pin, setPin] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
-    const [selectedRole, setSelectedRole] = useState('customer'); // 'customer' or 'barber'
-    
+    const [selectedRole, setSelectedRole] = useState('customer');
 
     const handleAuth = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setMessage('');
-
+        e.preventDefault(); setLoading(true); setMessage('');
         try {
             if (isLogin) {
-                // --- LOGIN Logic (Username/Password) ---
-                if (!username || !password) throw new Error("Username and password required.");
-                if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required for barber login.");
-
-                // 1. Call backend to verify credentials and get user email
-                const response = await axios.post(`${API_URL}/login/username`, {
-                    username: username.trim(), password: password, role: selectedRole, pin: selectedRole === 'barber' ? pin : undefined
-                });
-
-                // 2. If backend verified, use email+pass with Supabase client to set session.
-                if (response.data.user?.email && supabase?.auth) {
-                     const { error: clientSignInError } = await supabase.auth.signInWithPassword({
-                         email: response.data.user.email, password: password,
-                     });
-                     if (clientSignInError) { throw clientSignInError; }
-                 } else { throw new Error("Login failed: Invalid response from server."); }
-
+                 if (!username || !password) throw new Error("Username/password required.");
+                 if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required.");
+                 const response = await axios.post(`${API_URL}/login/username`, { username: username.trim(), password, role: selectedRole, pin: selectedRole === 'barber' ? pin : undefined });
+                 if (response.data.user?.email && supabase?.auth) {
+                      const { error } = await supabase.auth.signInWithPassword({ email: response.data.user.email, password });
+                      if (error) throw error;
+                  } else { throw new Error("Login failed: Invalid server response."); }
             } else {
-                // --- SIGN UP Logic ---
-                 if (!email.trim() || !fullName.trim()) { throw new Error("Email and Full Name are required for signup."); }
-                 if (selectedRole === 'barber' && !barberCode.trim()) { throw new Error("Barber Code required for barber signup."); }
-
-                // Call backend signup endpoint
-                const response = await axios.post(`${API_URL}/signup/username`, {
-                    username: username.trim(), email: email.trim(), password: password, fullName: fullName.trim(),
-                    role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined
-                });
-                setMessage(response.data.message || 'Signup successful!');
-                setIsLogin(true); // Switch to login view after signup
-                // Clear all fields after successful signup
-                setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setPin(''); setSelectedRole('customer');
+                 if (!email.trim() || !fullName.trim()) throw new Error("Email/Full Name required.");
+                 if (selectedRole === 'barber' && !barberCode.trim()) throw new Error("Barber Code required.");
+                 const response = await axios.post(`${API_URL}/signup/username`, { username: username.trim(), email: email.trim(), password, fullName: fullName.trim(), role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined });
+                 setMessage(response.data.message || 'Account created! You can now log in.');
+                 setIsLogin(true);
+                 setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setPin(''); setSelectedRole('customer');
             }
-        } catch (error) {
-            console.error('Auth error:', error);
-            setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'An unexpected error occurred.'}`);
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { console.error('Auth error:', error); setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'Unexpected error.'}`); }
+        finally { setLoading(false); }
     };
 
-    // Render Auth Form
     return (
         <div className="card auth-card">
+            {/* --- Welcome Modal (Only shows on Sign Up) --- */}
             <div
                 className="modal-overlay"
                 style={{ display: (isWelcomeModalOpen && !isLogin) ? 'flex' : 'none' }}
             >
                 <div className="modal-content">
                     <h2>Welcome to Dash-Q!</h2>
-                    <p>
-                        This web based application was proudly developed by:
-                        <br/>
-                        <strong>Aquino, Zaldy Castro Jr.</strong>
-                        <br/>
-                        <strong>Galima, Denmark Perpose</strong>
-                        <br/>
-                        <strong>Saldivar, Reuben Andrei Santos</strong>
-                        <br/>
-                        <br/>
-                        from
-                        <br/>
-                        <br/>
-                        <strong>University of the Cordilleras</strong>
+                    <p>This application was proudly developed by:<br/>
+                       <strong>Aquino, Zaldy Castro Jr.</strong><br/>
+                       <strong>Galima, Denmark Perpose</strong><br/>
+                       <strong>Saldivar, Reuben Andrei Santos</strong>
+                       <br/><br/>from<br/><br/>
+                       <strong>University of the Cordilleras</strong>
                     </p>
-                    <button 
-                        id="close-welcome-modal-btn" 
-                        onClick={() => setIsWelcomeModalOpen(false)}
-                    >
+                    <button id="close-welcome-modal-btn" onClick={() => setIsWelcomeModalOpen(false)}>
                         Get Started
                     </button>
                 </div>
             </div>
-            {/* --- END ADD --- */}
+
             <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
             <form onSubmit={handleAuth}>
-                {/* Username */}
-                <div className="form-group"> <label>Username:</label> <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/> </div>
-                {/* Password */}
-                <div className="form-group"> <label>Password:</label> <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/> </div>
-
-                {/* --- Login Specific Fields (Role Toggle & PIN) --- */}
-                {isLogin && (
-                    <div className="login-role-select">
-                        <label>Login As:</label>
-                        <div className="role-toggle">
-                            <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
-                            <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
-                        </div>
-                        {selectedRole === 'barber' && ( // PIN only if barber login
-                            <div className="form-group pin-input">
-                                <label>Barber PIN:</label>
-                                <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" />
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* --- Signup Specific Fields --- */}
-                {!isLogin && (
-                  <>
-                    {/* Role Toggle for Signup */}
-                    <div className="signup-role-select">
-                        <label>Sign Up As:</label>
-                        <div className="role-toggle">
-                             <button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button>
-                             <button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button>
-                        </div>
-                    </div>
-                    {/* Email for Signup */}
-                    <div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div>
-                    {/* Full Name for Signup */}
-                    <div className="form-group"> <label>Full Name:</label> <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/> </div>
-                    {/* Barber Code for Signup (Conditional) */}
-                    {selectedRole === 'barber' && (
-                         <div className="form-group">
-                            <label>Barber Code:</label>
-                            <input type="text" value={barberCode} placeholder="Enter secret barber code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} />
-                            <small>Required to sign up as a barber.</small>
-                         </div>
-                    )}
-                  </>
-                )}
-
-                {/* Submit Button */}
-                <button type="submit" disabled={loading}>{loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}</button>
+                <div className="form-group"><label>Username:</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/></div>
+                <div className="form-group"><label>Password:</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/></div>
+                {isLogin && (<div className="login-role-select"><label>Login As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div>{selectedRole === 'barber' && (<div className="form-group pin-input"><label>Barber PIN:</label><input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" /></div>)}</div>)}
+                {!isLogin && (<><div className="signup-role-select"><label>Sign Up As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div></div><div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div><div className="form-group"><label>Full Name:</label><input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/></div>{selectedRole === 'barber' && (<div className="form-group"><label>Barber Code:</label><input type="text" value={barberCode} placeholder="Secret code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} /><small>Required.</small></div>)}</>)}
+                <button type="submit" disabled={loading}>{loading ? '...' : (isLogin ? 'Login' : 'Sign Up')}</button>
             </form>
-            {/* Message Area */}
-            {message && <p className={`message ${message.includes('successful') || message.includes('created') ? 'success' : 'error'}`}>{message}</p>}
-            {/* Toggle Button */}
-            <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); /* Reset states on toggle */ }} className="toggle-auth-button">{isLogin ? 'Need an account? Sign Up' : 'Have an account? Login'}</button>
+            {message && <p className={`message ${message.includes('successful') || message.includes('created') || message.includes('can now log in') ? 'success' : 'error'}`}>{message}</p>}
+            <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); }} className="toggle-auth-button">{isLogin ? 'Need account? Sign Up' : 'Have account? Login'}</button>
         </div>
     );
 }
 
-
 // ##############################################
 // ##      BARBER-SPECIFIC COMPONENTS          ##
 // ##############################################
-
 function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
     const isAvailable = barberProfile?.is_available || false;
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-
     const handleToggle = async () => {
         if (!barberProfile || !session?.user) return;
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
         const newAvailability = !isAvailable;
         try {
             const response = await axios.put(`${API_URL}/barber/availability`, {
                 barberId: barberProfile.id, isAvailable: newAvailability, userId: session.user.id
             });
-            onAvailabilityChange(response.data.is_available); // Notify parent
-        } catch (err) {
-            console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update.");
-        } finally { setLoading(false); }
+            onAvailabilityChange(response.data.is_available);
+        } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
+        finally { setLoading(false); }
     };
-
-    return (
-        <div className="availability-toggle">
-            <p>Status: <strong>{isAvailable ? 'Available' : 'Offline'}</strong></p>
-            <button onClick={handleToggle} disabled={loading} className={isAvailable ? 'go-offline-button' : 'go-online-button'}>{loading ? '...' : (isAvailable ? 'Go Offline' : 'Go Online')}</button>
-             {error && <p className="error-message small">{error}</p>}
-        </div>
-    );
+    return ( <div className="availability-toggle"><p>Status: <strong>{isAvailable ? 'Available' : 'Offline'}</strong></p><button onClick={handleToggle} disabled={loading} className={isAvailable ? 'go-offline-button' : 'go-online-button'}>{loading ? '...' : (isAvailable ? 'Go Offline' : 'Go Online')}</button>{error && <p className="error-message small">{error}</p>}</div> );
 }
 
-// Main Layout for Logged-In Barbers
 function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     const [refreshSignal, setRefreshSignal] = useState(0);
-
-    // --- Auto-Offline on Browser/Tab Close ---
     useEffect(() => {
-        const handleBeforeUnload = (e) => { // Removed async, not reliable with beacon
+        const handleBeforeUnload = (e) => {
             if (barberProfile?.id && session?.user) {
-                // Use sendBeacon for reliable sync request on page close
-                navigator.sendBeacon(
-                    `${API_URL}/barber/availability`, 
-                    JSON.stringify({ 
-                        barberId: barberProfile.id, 
-                        isAvailable: false, 
-                        userId: session.user.id 
-                    })
-                );
+                navigator.sendBeacon(`${API_URL}/barber/availability`, JSON.stringify({ barberId: barberProfile.id, isAvailable: false, userId: session.user.id }));
             }
         };
-
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [barberProfile, session]); // Dependency on profile/session ensures data is current
-
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [barberProfile, session]);
     const handleLogout = async () => {
         if (!barberProfile || !session?.user || !supabase?.auth) return;
-
-        try {
-            // 1. Attempt to set status offline
-            await axios.put(`${API_URL}/barber/availability`, {
-                 barberId: barberProfile.id, isAvailable: false, userId: session.user.id
-            });
-        } catch (error) { console.error("Error setting offline on logout:", error); }
-        finally {
-            // 2. CRITICAL: Clear the session in browser storage and redirect
-            await supabase.auth.signOut(); 
-        }
+        try { await axios.put(`${API_URL}/barber/availability`, { barberId: barberProfile.id, isAvailable: false, userId: session.user.id }); } 
+        catch (error) { console.error("Error setting offline on logout:", error); }
+        finally { await supabase.auth.signOut(); }
     };
-
-
-    const handleCutComplete = () => { setRefreshSignal(prev => prev + 1); };
-
-    // Callback for AvailabilityToggle to update parent state
-    const handleAvailabilityChange = (newAvailabilityStatus) => {
-         setBarberProfile(prev => prev ? { ...prev, is_available: newAvailabilityStatus } : null);
-    };
-
+    const handleCutComplete = () => setRefreshSignal(prev => prev + 1);
+    const handleAvailabilityChange = (newStatus) => { setBarberProfile(prev => prev ? { ...prev, is_available: newStatus } : null); };
     const currentBarberId = barberProfile?.id;
     const currentBarberName = barberProfile?.full_name;
-
-    return (
-        <div className="app-layout barber-layout">
-            <header className="app-header">
-                <h1>Barber: {currentBarberName || 'Loading...'}</h1>
-                 <div className='header-controls'>
-                     {/* Pass barberProfile from App state */}
-                     {barberProfile && <AvailabilityToggle barberProfile={barberProfile} session={session} onAvailabilityChange={handleAvailabilityChange}/>}
-                     <button onClick={handleLogout} className='logout-button'>Logout</button>
-                 </div>
-            </header>
-            <div className="container">
-                {currentBarberId ? (
-                   <>
-                     {/* My Queue (BarberDashboard) */}
-                     <BarberDashboard
-                        barberId={currentBarberId}
-                        barberName={currentBarberName}
-                        onCutComplete={handleCutComplete}
-                        session={session}
-                     />
-                     {/* Analytics Dashboard */}
-                     <AnalyticsDashboard
-                        barberId={currentBarberId}
-                        refreshSignal={refreshSignal}
-                      />
-                   </>
-                ) : (
-                    <div className="card"><p>Loading barber details...</p></div> // Handle profile loading state
-                )}
-            </div>
-        </div>
-    );
+    return ( <div className="app-layout barber-layout"><header className="app-header"><h1>Barber: {currentBarberName || '...'}</h1><div className='header-controls'>{barberProfile && <AvailabilityToggle {...{ barberProfile, session, onAvailabilityChange }}/>}<button onClick={handleLogout} className='logout-button'>Logout</button></div></header><div className="container">{currentBarberId ? (<><BarberDashboard {...{ barberId: currentBarberId, barberName: currentBarberName, onCutComplete, session }} /><AnalyticsDashboard {...{ barberId: currentBarberId, refreshSignal }} /></>) : (<div className="card"><p>Loading...</p></div>)}</div></div> );
 }
-
 
 // ##############################################
 // ##       CUSTOMER-SPECIFIC COMPONENTS        ##
 // ##############################################
-
-// Main Layout for Logged-In Customers
 function CustomerAppLayout({ session }) {
     const handleLogout = async () => {
          if (!supabase?.auth) return;
-         
-         try {
-             // --- Tell backend to clear the session flag ---
-             await axios.put(`${API_URL}/logout/flag`, { 
-                 userId: session.user.id 
-             });
-         } catch (error) {
-             console.error("Error clearing customer session flag:", error);
-         }
-         
+         try { await axios.put(`${API_URL}/logout/flag`, { userId: session.user.id }); } 
+         catch (error) { console.error("Error clearing customer session flag:", error); }
          await supabase.auth.signOut();
     };
-
-    return (
-         <div className="app-layout customer-layout">
-            <header className="app-header">
-                <h1>Dash-Q Customer</h1>
-                 <button onClick={handleLogout} className='logout-button'>Logout</button>
-            </header>
-            <div className="container">
-                <CustomerView session={session} />
-            </div>
-        </div>
-    );
+    return ( <div className="app-layout customer-layout"><header className="app-header"><h1>Dash-Q Customer</h1><button onClick={handleLogout} className='logout-button'>Logout</button></header><div className="container"><CustomerView session={session} /></div></div> );
 }
 
 // ##############################################
 // ##      BLINKING TAB HELPER FUNCTIONS       ##
 // ##############################################
-// --- NEW: Moved blinking logic outside the component ---
-// These are defined once and won't be recreated on every render.
 let blinkInterval = null;
 let originalTitle = document.title;
-const alertTitle = "IT'S YOUR TURN!";
-
-/**
- * Starts the blinking browser tab.
- */
-function startBlinking() {
-    if (blinkInterval) return; // Already blinking
-    
-    originalTitle = document.title; // Capture the title *at the time of starting*
-    let isOriginalTitle = true;
-  
-    blinkInterval = setInterval(() => {
-        document.title = isOriginalTitle ? alertTitle : originalTitle;
-        isOriginalTitle = !isOriginalTitle;
-    }, 1000); // Blinks every 1 second
-}
-
-/**
- * Stops the blinking browser tab and resets the title.
- */
-function stopBlinking() {
-    if (!blinkInterval) return; // Not blinking
-    
-    clearInterval(blinkInterval);
-    blinkInterval = null;
-    document.title = originalTitle; // Reset to original
-}
-
+const alertTitle = "!! IT'S YOUR TURN !!";
+function startBlinking() { if (blinkInterval) return; originalTitle = document.title; let isOriginalTitle = true; blinkInterval = setInterval(() => { document.title = isOriginalTitle ? alertTitle : originalTitle; isOriginalTitle = !isOriginalTitle; }, 1000); }
+function stopBlinking() { if (!blinkInterval) return; clearInterval(blinkInterval); blinkInterval = null; document.title = originalTitle; }
 
 // ##############################################
 // ##      CHILD COMPONENTS (Customer/Barber)  ##
 // ##############################################
-
-// --- CustomerView (Handles Joining Queue & Live View for Customers) ---
 function CustomerView({ session }) {
-   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
+   // --- State ---
    const [barbers, setBarbers] = useState([]);
-   const [selectedBarber, setSelectedBarber] = useState('');
-   const [customerName, setCustomerName] = useState(
-       () => session.user?.user_metadata?.full_name || ''
-   );
-   const [customerPhone, setCustomerPhone] = useState(''); // This one stays blank
-   const [customerEmail, setCustomerEmail] = useState(
-       () => session.user?.email || ''
-   );
+   const [selectedBarberId, setSelectedBarberId] = useState(''); // Use ID for selection
+   const [customerName] = useState(() => session.user?.user_metadata?.full_name || '');
+   const [customerPhone, setCustomerPhone] = useState('');
+   const [customerEmail] = useState(() => session.user?.email || '');
    const [message, setMessage] = useState('');
    const [player_id, setPlayerId] = useState(null);
-
-   const [myQueueEntryId, setMyQueueEntryId] = useState(
-       () => localStorage.getItem('myQueueEntryId') || null
-   );
-   const [joinedBarberId, setJoinedBarberId] = useState(
-       () => localStorage.getItem('joinedBarberId') || null
-   );
-
+   const [myQueueEntryId, setMyQueueEntryId] = useState(() => localStorage.getItem('myQueueEntryId') || null);
+   const [joinedBarberId, setJoinedBarberId] = useState(() => localStorage.getItem('joinedBarberId') || null);
    const [liveQueue, setLiveQueue] = useState([]);
    const [queueMessage, setQueueMessage] = useState('');
    const [estimatedWait, setEstimatedWait] = useState(0);
    const [peopleWaiting, setPeopleWaiting] = useState(0);
-   const [file, setFile] = useState(null);
-   const [prompt, setPrompt] = useState('');
-   const [generatedImage, setGeneratedImage] = useState(null);
+   const [prompt, setPrompt] = useState(''); // Only prompt is needed
    const [isGenerating, setIsGenerating] = useState(false);
-   const [isLoading, setIsLoading] = useState(false); // Used for join/leave/AI
-   const [isQueueLoading, setIsQueueLoading] = useState(true); // --- NEW: State for initial queue load ---
+   const [isLoading, setIsLoading] = useState(false);
+   const [isQueueLoading, setIsQueueLoading] = useState(true);
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
-   const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
-   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // State for customer's chat
-   const [displayWait, setDisplayWait] = useState(0); // This will be our countdown timer
-   // --- Moved Calculations inside component body ---
-   // These will re-calculate whenever liveQueue changes
+   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
+   const [displayWait, setDisplayWait] = useState(0);
+   const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
+   const [isOnCooldown, setIsOnCooldown] = useState(false);
+   const locationWatchId = useRef(null);
+   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
+   const socketRef = useRef(null);
+   const liveQueueRef = useRef([]); // For smart EWT
+   
+   // --- AI Text-to-Image State ---
+   const [imageOptions, setImageOptions] = useState([]); // Holds array of URLs
+   const [selectedAiImage, setSelectedAiImage] = useState(null); // The customer's final choice
+   const [shareAiImage, setShareAiImage] = useState(false); // Share with barber checkbox
+
+   // --- Calculated Vars ---
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
-   const currentBarberName = barbers.find(b => b.id === parseInt(joinedBarberId))?.full_name || `Barber #${joinedBarberId}`;
+   const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+   const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
+   const currentChatTargetBarberUserId = targetBarber?.user_id;
 
-   // --- NEW: Moved sendCustomerMessage inside CustomerView ---
-   const socketRef = useRef(null); // Add the socket ref here
-   const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
-   const [isOnCooldown, setIsOnCooldown] = useState(false); // To prevent spamming the modal
-   const locationWatchId = useRef(null); // To store the ID of the location watcher
-   const [imageOptions, setImageOptions] = useState([]); // Holds the array of 4-6 URLs
-    const [selectedAiImage, setSelectedAiImage] = useState(null); // The customer's final choice
-
-   // --- ADD THIS NEW HANDLER ---
+   // --- Handlers ---
    const handleCloseInstructions = () => {
-        // Set a flag in local storage so this modal doesn't show again
-        localStorage.setItem('hasSeenInstructions_v1', 'true');
-        setIsInstructionsModalOpen(false);
+       localStorage.setItem('hasSeenInstructions_v1', 'true');
+       setIsInstructionsModalOpen(false);
    };
-
-   // --- ADD THIS NEW EFFECT ---
-   // Check if it's the user's first time on this page
-   useEffect(() => {
-        const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
-        if (!hasSeen) {
-            // If they've never seen it, show the modal
-            setIsInstructionsModalOpen(true);
-        }
-   }, []);
-
    const sendCustomerMessage = (recipientId, messageText) => {
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
-            const messageData = {
-                senderId: session.user.id, // Customer's user ID
-                recipientId: recipientId,   // Barber's user ID
-                message: messageText
-            };
+            const messageData = { senderId: session.user.id, recipientId, message: messageText };
             socketRef.current.emit('chat message', messageData);
-            // Optimistically update local state for the customer's view
-             setChatMessagesFromBarber(prev => [
-                 ...prev,
-                 { senderId: session.user.id, message: messageText } // Add my sent message
-             ]);
-        } else {
-            console.warn("[Customer] Cannot send message, socket disconnected?");
-            setMessage("Chat disconnected, please refresh."); // User feedback
-        }
+            setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
+        } else { console.warn("[Customer] Cannot send message."); setMessage("Chat disconnected."); }
    };
-
-   // --- Geolocation Watcher Effect ---
-   useEffect(() => {
-     // --- Define Your Shop's Location & Warning Distance ---
-     const BARBERSHOP_LAT = 16.414830431367967; 
-     const BARBERSHOP_LON = 120.59712292628716; 
-     const DISTANCE_THRESHOLD_METERS = 200;
-
-     // Check if geolocation is available
-     if (!('geolocation' in navigator)) {
-       console.warn('Geolocation not available.');
-       return;
-     }
-
-     // Start watching location ONLY if user is in the queue
-     if (myQueueEntryId) {
-       console.log('User is in queue, starting location watch...');
-
-       // Success callback: This runs every time the position updates
-       const onPositionUpdate = (position) => {
-         const { latitude, longitude } = position.coords;
-         const distance = getDistanceInMeters(latitude, longitude, BARBERSHOP_LAT, BARBERSHOP_LON);
-
-         console.log(`Current distance: ${Math.round(distance)}m. Cooldown: ${isOnCooldown}`);
-
-         // Check if they are too far...
-         if (distance > DISTANCE_THRESHOLD_METERS) {
-           // ...AND the modal isn't already open AND they are not on cooldown
-           if (!isTooFarModalOpen && !isOnCooldown) {
-             console.log('Customer is too far! Triggering modal.');
-             setIsTooFarModalOpen(true);
-             setIsOnCooldown(true); // Start cooldown *when modal is shown*
-           }
-         } else {
-           // --- User is back in range ---
-           if (isOnCooldown) {
-             console.log('Customer is back in range. Resetting cooldown.');
-             setIsOnCooldown(false); // Reset the cooldown if they return
-           }
-         }
-       };
-
-       // Error callback
-       const onPositionError = (err) => {
-         console.warn(`Geolocation error (Code ${err.code}): ${err.message}`);
-       };
-
-       // Start the watcher
-       locationWatchId.current = navigator.geolocation.watchPosition(
-         onPositionUpdate,
-         onPositionError,
-         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-       );
-     }
-
-     // Cleanup function: This runs when user leaves queue (myQueueEntryId changes)
-     return () => {
-       if (locationWatchId.current) {
-         navigator.geolocation.clearWatch(locationWatchId.current);
-         console.log('Stopping geolocation watch.');
-       }
-     };
-     // --- Rerun this effect if these states change ---
-   }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown]);
-
-   // --- NEW: WebSocket Connection Effect for Customer ---
-   useEffect(() => {
-        if (!session?.user?.id) return; // Exit if no customer session
-
-        // Connect only if not already connected
-        if (!socketRef.current) {
-            console.log("[Customer] Connecting WebSocket...");
-            socketRef.current = io(SOCKET_URL);
-            const socket = socketRef.current;
-            const customerUserId = session.user.id;
-
-            socket.on('connect', () => { 
-                    console.log(`[Customer] WebSocket connected.`);
-                    socket.emit('register', customerUserId);
-                    
-                    // --- ADD THIS LINE ---
-                    // Tell the server which queue entry this socket represents
-                    socket.emit('registerQueueEntry', myQueueEntryId); 
-                    // --- END ADD ---
-                });
-
-            const messageListener = (incomingMessage) => {
-                console.log(`[Customer] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
-                // Update message list
-                setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-
-                // Mark as unread if chat window is not open
-                setIsChatOpen(currentIsOpen => {
-                    if (!currentIsOpen) {
-                        console.log(`[Customer] Chat not open. Marking as unread.`);
-                        setHasUnreadFromBarber(true);
-                    }
-                    return currentIsOpen; // Return current state unchanged
-                });
-            };
-            socket.on('chat message', messageListener);
-
-            socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-            socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-        }
-   }, [session]); // Effect only depends on session login state
-
-   // Fetch Public Queue Data
-   // --- MODIFIED: Added useCallback and loading state ---
    const fetchPublicQueue = useCallback(async (barberId) => {
-      if (!barberId) {
-          setLiveQueue([]);
-          setIsQueueLoading(false); // Stop loading if no barber
-          return;
-      }
-      setIsQueueLoading(true); // Start loading before fetch
+      if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
+      setIsQueueLoading(true);
       try {
         const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
-        setLiveQueue(response.data || []);
-      } catch (error) {
-          console.error("Failed fetch public queue:", error);
-          setLiveQueue([]);
-          setQueueMessage("Could not load queue data."); // Show error
-      } finally {
-          setIsQueueLoading(false); // Stop loading after fetch/error
-      }
-    }, []); // Empty dependency array for useCallback
-
-   // --- Fetch Service Menu (Runs only once) ---
-   useEffect(() => {
-        const fetchServices = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/services`);
-                setServices(response.data || []);
-            } catch (error) {
-                console.error('Failed to fetch services:', error);
-            }
-        };
-        fetchServices();
-    }, []); // Run only once
-
-   // --- OneSignal Setup ---
-    useEffect(() => {
-    if (window.OneSignal) {
-            window.OneSignal.push(function() {
-                window.OneSignal.showSlidedownPrompt();
-            });
-            window.OneSignal.push(function() {
-                window.OneSignal.getUserId(function(userId) {
-                    console.log("OneSignal Player ID:", userId);
-                    setPlayerId(userId);
-                });
-            });
-        }
-    }, []);
-
-   // Fetch Available Barbers (Runs every 15s)
-   useEffect(() => {
-    const loadBarbers = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/barbers`);
-        setBarbers(response.data || []);
-         setMessage(prev => (prev === 'Loading available barbers...' ? '' : prev));
-      } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
+        const queueData = response.data || [];
+        setLiveQueue(queueData);
+        liveQueueRef.current = queueData; // Update ref
+      } catch (error) { 
+          console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
+      } finally { setIsQueueLoading(false); }
+    }, []); // Removed dependencies, they are set in parent scope
+   const handleGeneratePreview = async () => {
+        if (!prompt) { setMessage('A haircut prompt is required.'); return; }
+        setIsGenerating(true); setIsLoading(true);
+        setImageOptions([]); setSelectedAiImage(null);
+        try {
+            setMessage('Generating 4 haircut options...');
+            const response = await axios.post(`${API_URL}/generate-haircut`, { prompt });
+            if (response.data?.generatedImageUrls) {
+                setImageOptions(response.data.generatedImageUrls);
+                setMessage('Success! Choose your preferred option.');
+            } else { throw new Error('No images received from the AI service.'); }
+        } catch (error) {
+            console.error('AI generation failed:', error);
+            setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
+        } finally { setIsGenerating(false); setIsLoading(false); }
     };
-    loadBarbers();
-    const intervalId = setInterval(loadBarbers, 15000);
-    return () => clearInterval(intervalId);
-   }, []);
-
-    // --- Effect to manage stopBlinking listeners ---
-    useEffect(() => {
-        const handleFocus = () => stopBlinking();
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                stopBlinking();
-            }
-        };
-        window.addEventListener("focus", handleFocus);
-        document.addEventListener("visibilitychange", handleVisibility);
-        return () => {
-            window.removeEventListener("focus", handleFocus);
-            document.removeEventListener("visibilitychange", handleVisibility);
-            stopBlinking(); // Ensure blinking stops if component unmounts while blinking
-        };
-    }, []);
-
-
-    // --- Realtime and Notification Effect (For AFTER joining) ---
-   useEffect(() => {
-        // --- MODIFIED: Trigger initial fetch when joinedBarberId changes ---
-        if (joinedBarberId) {
-            fetchPublicQueue(joinedBarberId);
-        } else {
-            setLiveQueue([]); // Clear queue if not joined
-            setIsQueueLoading(false);
-        }
-
-        // Request notification permission
-        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-             Notification.requestPermission();
-        }
-
-        let queueChannel = null;
-        let refreshInterval = null;
-
-        if (joinedBarberId && myQueueEntryId && supabase?.channel) { // Ensure myQueueEntryId is also set
-            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
-            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
-                    console.log("Realtime Update Received:", payload);
-                    
-                    // --- Check if THIS user's status changed ---
-                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
-                        const newStatus = payload.new.status;
-                        console.log(`My status updated to: ${newStatus}`);
-
-                        if (newStatus === 'Up Next') {
-                            // --- Trigger "Your Turn" alerts (Existing logic) ---
-                            console.log('My status is Up Next! Triggering ALL alerts.');
-                            startBlinking();
-                            setIsYourTurnModalOpen(true);
-                            if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
-                        } 
-                        // --- NEW: Check for Complete or Cancelled ---
-                        else if (newStatus === 'Done') {
-                            console.log('My status is Done! Triggering Complete modal.');
-                            setIsServiceCompleteModalOpen(true);
-                            stopBlinking(); // Ensure blinking stops
-                        } else if (newStatus === 'Cancelled') {
-                            console.log('My status is Cancelled! Triggering Cancelled modal.');
-                            setIsCancelledModalOpen(true);
-                            stopBlinking(); // Ensure blinking stops
-                        }
-                    } 
-                    // --- Always refresh the queue list regardless of who changed ---
-                    fetchPublicQueue(joinedBarberId);
-                })
-                .subscribe((status, err) => {
-                     if (status === 'SUBSCRIBED') {
-                         console.log('Subscribed to Realtime queue!');
-                         setQueueMessage(''); // Clear error message on successful subscribe
-                         fetchPublicQueue(joinedBarberId); // Fetch again on successful subscribe
-                     } else {
-                         console.error('Supabase Realtime subscription error:', status, err);
-                         setQueueMessage('Live updates unavailable.');
-                     }
-                });
-
-        }
-
-        // Cleanup function
-        return () => {
-            console.log("Cleaning up queue subscription and interval for barber:", joinedBarberId);
-            if (queueChannel && supabase?.removeChannel) {
-                 supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err));
-             }
-            if (refreshInterval) { clearInterval(refreshInterval); }
-        };
-    // --- MODIFIED: Added fetchPublicQueue to dependencies ---
-    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
-
-
-    // --- EWT Calculation Effect (Runs BEFORE joining) ---
-    useEffect(() => {
-        if (selectedBarber && !myQueueEntryId) { // Only run if selecting barber *before* joining
-            fetchPublicQueue(selectedBarber);
-        } else if (!selectedBarber && !myQueueEntryId) {
-            setLiveQueue([]); // Clear queue if no barber selected
-        }
-    // --- MODIFIED: Added myQueueEntryId and fetchPublicQueue ---
-    }, [selectedBarber, myQueueEntryId, fetchPublicQueue]);
-
-    // --- EWT Calculation (based on liveQueue) ---
-    useEffect(() => {
-        const calculateWaitTime = () => {
-            const relevantEntries = liveQueue.filter(
-                entry => entry.status === 'Waiting' || entry.status === 'Up Next'
-            );
-            setPeopleWaiting(relevantEntries.length);
-
-            // Calculate wait time based ONLY on people ahead of the current user
-            const myIndex = liveQueue.findIndex(entry => entry.id.toString() === myQueueEntryId);
-            const peopleAhead = myIndex !== -1 ? liveQueue.slice(0, myIndex) : liveQueue; // If not found (or before joining), consider everyone
-
-            const totalWait = peopleAhead.reduce((sum, entry) => {
-                // Include 'In Progress' duration if someone is being served
-                if (entry.status === 'Waiting' || entry.status === 'Up Next' || entry.status === 'In Progress') {
-                    const duration = entry.services?.duration_minutes || 30; // Default 30 mins
-                    return sum + duration;
-                }
-                return sum;
-            }, 0);
-
-            setEstimatedWait(totalWait);
-        };
-
-        calculateWaitTime();
-    }, [liveQueue, myQueueEntryId]); // Recalculate when queue or my position changes
-
-    useEffect(() => {
-       // 2. Runs the 1-minute countdown timer
-       // Don't run a timer if not in queue
-       if (!myQueueEntryId) {
-           return;
-       }
-       const timerId = setInterval(() => {
-           setDisplayWait(prevTime => {
-               if (prevTime > 0) {
-                   return prevTime - 1; // Count down by 1 minute
-               }
-               return 0; // Stay at 0
-           });
-       }, 60000); // 60,000 ms = 1 minute
-
-       // Cleanup function
-       return () => {
-           clearInterval(timerId);
-       };
-   }, [myQueueEntryId]);
-   // --- END OF NEW HOOKS ---
-
-   // AI Preview Handler
-const handleGeneratePreview = async () => {
-    if (!prompt) { /* ... */ return; }
-
-    setIsGenerating(true); setIsLoading(true); 
-    setImageOptions([]); // Clear previous options
-    setSelectedAiImage(null); // Clear previous selection
-
-    try {
-        setMessage('Generating 4 haircut options...');
-
-        // Call backend (Endpoint 7)
-        const response = await axios.post(`${API_URL}/generate-haircut`, { prompt });
-
-        if (response.data?.generatedImageUrls) {
-            setImageOptions(response.data.generatedImageUrls); // Save the array of URLs
-            setMessage('Success! Choose your preferred option.');
-        } else {
-             throw new Error('No images received.');
-        }
-
-    } catch (error) {
-        console.error('AI generation pipeline error:', error);
-        setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
-    } finally {
-        setIsGenerating(false);
-        setIsLoading(false);
-    }
-};
-
-    // Join Queue Handler
    const handleJoinQueue = async (e) => {
         e.preventDefault();
-        if (!customerName || !selectedBarber || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
+        if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
+        if (imageOptions.length > 0 && !selectedAiImage) { setMessage('Please select one of the AI images to continue.'); return; } // Require selection if images were generated
         setIsLoading(true); setMessage('Joining queue...');
         try {
-            const imageUrlToSave = generatedImage;
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                barber_id: selectedBarber,
-                reference_image_url: imageUrlToSave, // Note: imageUrlToSave is defined just above this line
+                barber_id: selectedBarberId,
+                reference_image_url: null, // Not using file upload anymore
                 service_id: selectedServiceId,
-                player_id: player_id, // <-- Make sure player_id state is correctly set
-                user_id: session.user.id, // <-- ADD THIS LINE
-                ai_haircut_image_url: shareAiImage ? selectedAiImage : null, // Send selected URL if sharing is true
+                player_id: player_id,
+                user_id: session.user.id,
+                ai_haircut_image_url: shareAiImage ? selectedAiImage : null,
                 share_ai_image: shareAiImage
             });
             const newEntry = response.data;
-            const newBarberId = parseInt(selectedBarber);
-            setMyQueueEntryId(newEntry.id.toString()); // Store as string
-            setJoinedBarberId(newBarberId.toString()); // Store as string
-            localStorage.setItem('myQueueEntryId', newEntry.id.toString());
-            localStorage.setItem('joinedBarberId', newBarberId.toString());
-            setMessage(`Success! You joined for ${barbers.find(b => b.id === newBarberId)?.full_name || `Barber #${newBarberId}`}.`);
-            // Clear only specific fields
-            setSelectedBarber(''); setFile(null); setPrompt(''); setSelectedServiceId(''); setGeneratedImage(null);
+            if (newEntry && newEntry.id) {
+                setMessage(`Success! You are #${newEntry.id} in the queue.`);
+                localStorage.setItem('myQueueEntryId', newEntry.id.toString());
+                localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
+                setMyQueueEntryId(newEntry.id.toString());
+                setJoinedBarberId(newEntry.barber_id.toString());
+                // Reset form
+                setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
+                setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
+            } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
             const errorMessage = error.response?.data?.error || error.message;
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
-            setMyQueueEntryId(null); setJoinedBarberId(null);
-            localStorage.removeItem('myQueueEntryId');
-            localStorage.removeItem('joinedBarberId');
         } finally { setIsLoading(false); }
     };
-
-    // Leave Queue Handler
-   const handleLeaveQueue = async () => {
-        if (!myQueueEntryId) return;
-        setIsLoading(true); // Indicate loading
-        // Unsubscribe handled by useEffect cleanup when joinedBarberId changes
-        try {
-            await axios.delete(`${API_URL}/queue/${myQueueEntryId}`);
-            setMessage("You left the queue.");
-            localStorage.removeItem('myQueueEntryId');
-            localStorage.removeItem('joinedBarberId');
-            setMyQueueEntryId(null);
-            setJoinedBarberId(null); // This triggers useEffect cleanup
-            setLiveQueue([]); setQueueMessage(''); setSelectedBarber(''); setGeneratedImage(null); setFile(null); setPrompt(''); setSelectedServiceId('');
-        } catch (error) {
-            console.error("Failed to leave queue:", error);
-            setMessage("Error leaving queue.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // --- NEW: Function to reset state and return to Join form ---
-   const handleReturnToJoin = () => {
+   const handleLeaveQueue = () => { handleReturnToJoin(true); }; // Pass true to signal user-initiated leave
+   const handleReturnToJoin = async (userInitiated = false) => {
         console.log("[handleReturnToJoin] Function called.");
-        // Close all modals
-        setIsServiceCompleteModalOpen(false);
-        setIsCancelledModalOpen(false);
-        setIsYourTurnModalOpen(false); // Also close 'Your Turn' if somehow open
-        stopBlinking(); // Ensure blinking stops
-
-        // Clear local storage
-        localStorage.removeItem('myQueueEntryId');
-        localStorage.removeItem('joinedBarberId');
-
-        // Reset state variables
-        setMyQueueEntryId(null);
-        setJoinedBarberId(null); // This triggers useEffect cleanup for subscription
-        setLiveQueue([]);
-        setQueueMessage('');
-        setSelectedBarber('');
-        setGeneratedImage(null);
-        setFile(null);
-        setPrompt('');
-        setSelectedServiceId('');
-        setMessage(''); // Clear any previous status messages
-        setIsChatOpen(false); // Close chat if open
-        setChatTargetBarberUserId(null);
-
-        console.log("[handleReturnToJoin] State reset attempted. myQueueEntryId should be null now.");
-        // No need to explicitly navigate, removing myQueueEntryId handles it
-   };
-
-   // --- Handler for the modal's "Okay" button ---
-   const handleModalClose = () => {
-        setIsYourTurnModalOpen(false);
+        if (userInitiated && myQueueEntryId) {
+            setIsLoading(true); // Show loading only if user clicked "Leave"
+            try { await axios.delete(`${API_URL}/queue/${myQueueEntryId}`); setMessage("You left the queue."); } 
+            catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
+            finally { setIsLoading(false); }
+        }
+        setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false); setIsYourTurnModalOpen(false);
         stopBlinking();
+        localStorage.removeItem('myQueueEntryId'); localStorage.removeItem('joinedBarberId');
+        setMyQueueEntryId(null); setJoinedBarberId(null);
+        setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
+        setPrompt(''); setSelectedServiceId(''); setMessage('');
+        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
+        setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
+        setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
+        console.log("[handleReturnToJoin] State reset complete.");
    };
+   const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
-    // --- ADDED DEBUG LOG ---
-   console.log("RENDERING CustomerView:", {
-       myQueueEntryId,
-       joinedBarberId,
-       liveQueue_length: liveQueue.length, // Log length instead of full array
-       nowServing: nowServing ? nowServing.id : null, // Log only ID
-       upNext: upNext ? upNext.id : null, // Log only ID
-       peopleWaiting,
-       estimatedWait,
-       isQueueLoading, // Log loading state
-       queueMessage // Log message state
-   });
+   // --- Effects ---
+   useEffect(() => { // Geolocation Watcher
+     const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
+     const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
+     const DISTANCE_THRESHOLD_METERS = 200;
+     if (!('geolocation' in navigator)) { console.warn('Geolocation not available.'); return; }
+     if (myQueueEntryId) {
+       console.log('User is in queue, starting location watch...');
+       const onPositionUpdate = (position) => {
+         const { latitude, longitude } = position.coords;
+         const distance = getDistanceInMeters(latitude, longitude, BARBERSHOP_LAT, BARBERSHOP_LON);
+         console.log(`Current distance: ${Math.round(distance)}m. Cooldown: ${isOnCooldown}`);
+         if (distance > DISTANCE_THRESHOLD_METERS) {
+           if (!isTooFarModalOpen && !isOnCooldown) {
+             console.log('Customer is too far! Triggering modal.');
+             setIsTooFarModalOpen(true);
+             setIsOnCooldown(true); 
+           }
+         } else {
+           if (isOnCooldown) { console.log('Customer is back in range. Resetting cooldown.'); setIsOnCooldown(false); }
+         }
+       };
+       const onPositionError = (err) => { console.warn(`Geolocation error (Code ${err.code}): ${err.message}`); };
+       locationWatchId.current = navigator.geolocation.watchPosition( onPositionUpdate, onPositionError, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+     }
+     return () => { if (locationWatchId.current) { navigator.geolocation.clearWatch(locationWatchId.current); console.log('Stopping geolocation watch.'); } };
+   }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown]);
+   
+   useEffect(() => { // First Time Instructions
+        const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
+        if (!hasSeen) { setIsInstructionsModalOpen(true); }
+   }, []);
+   
+   useEffect(() => { // Fetch Services
+        const fetchServices = async () => {
+            try { const response = await axios.get(`${API_URL}/services`); setServices(response.data || []); } 
+            catch (error) { console.error('Failed to fetch services:', error); }
+        };
+        fetchServices();
+    }, []);
+    
+   useEffect(() => { // OneSignal Setup
+        if (window.OneSignal) {
+            window.OneSignal.push(function() { window.OneSignal.showSlidedownPrompt(); });
+            window.OneSignal.push(function() { window.OneSignal.getUserId(function(userId) { console.log("OneSignal Player ID:", userId); setPlayerId(userId); }); });
+        }
+    }, []);
+    
+   useEffect(() => { // Fetch Available Barbers
+        const loadBarbers = async () => {
+          try { const response = await axios.get(`${API_URL}/barbers`); setBarbers(response.data || []); } 
+          catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
+        };
+        loadBarbers();
+        const intervalId = setInterval(loadBarbers, 15000);
+        return () => clearInterval(intervalId);
+   }, []);
+   
+    useEffect(() => { // Blinking Tab Listeners
+        const handleFocus = () => stopBlinking();
+        const handleVisibility = () => { if (document.visibilityState === 'visible') stopBlinking(); };
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
+    }, []);
+    
+   useEffect(() => { // Realtime Subscription & Notifications
+        if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
+        let queueChannel = null; let refreshInterval = null;
+        if (joinedBarberId && myQueueEntryId && supabase?.channel) {
+            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
+            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
+                    console.log("Realtime Update Received:", payload);
+                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
+                        const newStatus = payload.new.status;
+                        console.log(`My status updated to: ${newStatus}`);
+                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
+                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
+                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
+                    } 
+                    fetchPublicQueue(joinedBarberId);
+                })
+                .subscribe((status, err) => {
+                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); setQueueMessage(''); fetchPublicQueue(joinedBarberId); } 
+                     else { console.error('Supabase Realtime error:', status, err); setQueueMessage('Live updates unavailable.'); }
+                });
+            refreshInterval = setInterval(() => { console.log("Periodic refresh..."); fetchPublicQueue(joinedBarberId); }, 15000);
+        }
+        return () => {
+            console.log("Cleaning up queue subscription for barber:", joinedBarberId);
+            if (queueChannel && supabase?.removeChannel) { supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err)); }
+            if (refreshInterval) { clearInterval(refreshInterval); }
+        };
+    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
+    
+   useEffect(() => { // EWT Before Joining
+        if (selectedBarberId && !myQueueEntryId) { fetchPublicQueue(selectedBarberId); } 
+        else if (!selectedBarberId && !myQueueEntryId) { setLiveQueue([]); }
+    }, [selectedBarberId, myQueueEntryId, fetchPublicQueue]);
+    
+   useEffect(() => { // Smart EWT Calculation
+       const calculateWaitTime = () => {
+           const oldQueue = liveQueueRef.current || [];
+           const newQueue = liveQueue;
+           const relevantEntries = newQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
+           setPeopleWaiting(relevantEntries.length);
+           const myIndexNew = newQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+           const peopleAheadNew = myIndexNew !== -1 ? newQueue.slice(0, myIndexNew) : newQueue; 
+           const newTotalWait = peopleAheadNew.reduce((sum, entry) => {
+               if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) { return sum + (entry.services?.duration_minutes || 30); }
+               return sum;
+           }, 0);
+           setEstimatedWait(newTotalWait);
+           setDisplayWait(currentDisplayWait => {
+               const leaver = oldQueue.find(oldEntry => !newQueue.some(newEntry => newEntry.id === oldEntry.id));
+               const myIndexOld = oldQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+               const leaverIndexOld = leaver ? oldQueue.findIndex(e => e.id === leaver.id) : -1;
+               if (leaver && myIndexOld !== -1 && leaverIndexOld !== -1 && leaverIndexOld < myIndexOld) {
+                   const leaverDuration = leaver.services?.duration_minutes || 30;
+                   console.log(`Leaver detected in front: ${leaver.id}, duration: ${leaverDuration}`);
+                   const newCountdown = currentDisplayWait - leaverDuration;
+                   return newCountdown > 0 ? newCountdown : 0;
+               }
+               if (currentDisplayWait === 0 || newTotalWait < currentDisplayWait) {
+                    return newTotalWait;
+               }
+               return currentDisplayWait; 
+           });
+       };
+       calculateWaitTime();
+   }, [liveQueue, myQueueEntryId, estimatedWait]); // Added estimatedWait
+   
+   useEffect(() => { // 1-Minute Countdown Timer
+       if (!myQueueEntryId) return; 
+       const timerId = setInterval(() => { setDisplayWait(prevTime => (prevTime > 0 ? prevTime - 1 : 0)); }, 60000);
+       return () => clearInterval(timerId);
+   }, [myQueueEntryId]);
+   
+   useEffect(() => { // Customer WebSocket
+        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
+            if (!socketRef.current) {
+                console.log("[Customer] Connecting WebSocket...");
+                socketRef.current = io(SOCKET_URL);
+                const socket = socketRef.current;
+                const customerUserId = session.user.id;
+                socket.on('connect', () => { 
+                    console.log(`[Customer] WebSocket connected.`);
+                    socket.emit('register', customerUserId);
+                    socket.emit('registerQueueEntry', myQueueEntryId);
+                });
+                const messageListener = (incomingMessage) => {
+                    console.log("[Customer] Received chat message:", incomingMessage);
+                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
+                        setIsChatOpen(currentIsOpen => {
+                            if (!currentIsOpen) { console.log("[Customer] Chat closed. Marking as unread."); setHasUnreadFromBarber(true); } 
+                            else { console.log("[Customer] Chat open. Not marking as unread."); }
+                            return currentIsOpen;
+                        });
+                    } else { console.log("[Customer] Msg from unexpected sender:", incomingMessage.senderId); }
+                };
+                socket.on('chat message', messageListener);
+                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+            }
+        } else {
+             if (socketRef.current) { console.log("[Customer] Disconnecting WebSocket."); socketRef.current.disconnect(); socketRef.current = null; }
+        }
+        return () => { if (socketRef.current) { console.log("[Customer] Cleaning up WebSocket."); socketRef.current.disconnect(); socketRef.current = null; } };
+    }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]); // Removed isChatOpen
+
+   // --- Debug Log ---
+   console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
    // --- Render Customer View ---
    return (
-      <div className="card"> {/* <<< Starting point */}
-        {/* --- ADD THIS NEW MODAL --- */}
-        {/* --- "Too Far" Modal (with Cooldown Logic) --- */}
-        <div
-            className="modal-overlay"
-            style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}
-        >
-            <div className="modal-content">
-                <h2>A Friendly Reminder!</h2>
-                <p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p>
-                <button 
-                    id="close-too-far-modal-btn" 
-                    onClick={() => {
-                        // 1. Close the modal
-                        setIsTooFarModalOpen(false);
-                        
-                        // 2. Start the 5-minute (300,000 ms) cooldown timer
-                        console.log("Modal closed. Starting 5-minute cooldown.");
-                        setTimeout(() => {
-                            console.log("Cooldown finished. Can warn again.");
-                            setIsOnCooldown(false);
-                        }, 300000); 
-                    }}
-                >
-                    Okay, I'll stay close
-                </button>
-            </div>
-        </div>
-        {/* --- "Your Turn" Modal --- */}
-        <div
-            id="your-turn-modal-overlay"
-            className="modal-overlay"
-            style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}
-        >
-            <div className="modal-content">
-                <h2>You're next in line!</h2>
-                <p>Hey there! After the current chair, it's your turn! Just remember to keep things in check, okay?</p>
-                <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
-            </div>
-        </div>
-
-        {/* --- Service Complete Modal --- */}
-        <div
-            className="modal-overlay"
-            style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}
-        >
-            <div className="modal-content">
-                <h2>Service Complete!</h2>
-                <p>Thank you for visiting!</p>
-                <button id="close-complete-modal-btn" onClick={handleReturnToJoin}>Okay</button>
-            </div>
-        </div>
-
-        {/* --- Cancelled Modal --- */}
-        <div
-            className="modal-overlay"
-            style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}
-        >
-            <div className="modal-content">
-                <h2>Appointment Cancelled</h2>
-                <p>Your queue entry was cancelled.</p>
-                <button id="close-cancel-modal-btn" onClick={handleReturnToJoin}>Okay</button>
-            </div>
-        </div>
-
-        {/* --- NEW: "Too Far" Modal --- */}
-        <div
-            className="modal-overlay"
-            style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}
-        >
-            <div className="modal-content">
-                <h2>A Friendly Reminder!</h2>
-                <p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p>
-                <button 
-                    id="close-too-far-modal-btn" 
-                    onClick={() => setIsTooFarModalOpen(false)}
-                >
-                    Okay, I'll stay close
-                </button>
-            </div>
-        </div>
-        {/* --- END NEW MODAL --- */}
+      <div className="card">
+        {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
+        <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
+        <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>You're Up Next!</h2><p>Hey, let’s make sure everyone gets a chance to speak! If you’re not ready to jump in by the minute, please find a seat.</p><button id="close-modal-btn" onClick={handleModalClose}>Got It!</button></div></div>
+        <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Service Complete!</h2><p>Thank you!</p><button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
+        <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
+        <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
 
         {/* --- Join Form or Live Queue View --- */}
         {!myQueueEntryId ? (
            <> {/* --- JOIN FORM JSX --- */}
                <h2>Join the Queue</h2>
                 <form onSubmit={handleJoinQueue}>
-                    {/* Name (prefilled) */}
-                    <div className="form-group">
-                        <label>Your Name:</label>
-                        <input type="text" value={customerName} required readOnly className="prefilled-input" />
-                    </div>
-                    {/* Phone (optional) */}
-                    <div className="form-group">
-                        <label>Your Phone (Optional):</label>
-                        <input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" />
-                    </div>
-                     {/* Email (prefilled) */}
-                    <div className="form-group">
-                        <label>Your Email:</label> {/* Changed label */}
-                        <input type="email" value={customerEmail} readOnly className="prefilled-input" />
-                    </div>
-                    {/* Service Selection */}
-                    <div className="form-group">
-                        <label>Select Service:</label>
-                        <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required>
-                            <option value="">-- Choose service --</option>
-                            {services.map((service) => (
-                                <option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>
-                            ))}
-                        </select>
-                    </div>
-                    {/* Barber Selection */}
-                    <div className="form-group">
-                        <label>Select Available Barber:</label>
-                        <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required>
-                            <option value="">-- Choose --</option>
-                            {barbers.length > 0
-                                ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>))
-                                : <option disabled>No barbers currently available</option>}
-                        </select>
-                    </div>
-                    {/* EWT Display (before joining) */}
-                    {selectedBarber && (
-                        <div className="ewt-container">
-                            <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
-                            <div className="ewt-item"><span>Estimated wait</span><strong>~ {estimatedWait} min</strong></div>
-                        </div>
-                    )}
-                    {/* --- AI Section --- */}
+                    <div className="form-group"><label>Your Name:</label><input type="text" value={customerName} required readOnly className="prefilled-input" /></div>
+                    <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
+                    <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
+                    <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
+                    <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
+                    {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
+                    
+                    {/* --- AI Section (Text-to-Image) --- */}
                     <div className="ai-generator">
                         <p className="ai-title">AI Haircut Preview (Optional)</p>
-                        {/* File Upload */}
                         <div className="form-group">
-                            <label>1. Upload photo:</label>
-                            <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={(e) => { 
-                                    setFile(e.target.files[0]); // Get the first file selected
-                                    setGeneratedImage(null); // Clear previous preview on new file select
-                                }} 
-                            />
-                        </div>
-                        {/* Prompt Input */}
-                        <div className="form-group">
-                            <label>2. Describe haircut:</label>
+                            <label>1. Describe Your Desired Haircut:</label>
                             <input 
                                 type="text" 
                                 value={prompt} 
-                                placeholder="e.g., 'buzz cut', 'modern mullet'" // Added example
+                                placeholder="e.g., 'short fade, cyberpunk mohawk'" 
                                 onChange={(e) => setPrompt(e.target.value)} 
                             />
                         </div>
-                        {/* Generate Button */}
                         <button 
                             type="button" 
                             onClick={handleGeneratePreview}
                             className="generate-button" 
-                            // --- MODIFIED: Only checks if prompt exists ---
                             disabled={!prompt || isLoading || isGenerating}
                         >
-                            {isGenerating ? 'Generating...' : 'Generate AI Preview'}
+                            {isGenerating ? 'Generating...' : 'Generate AI Options'}
                         </button>
-                        {/* Loading Indicator */}
-                        {isLoading && isGenerating && <p className='loading-text'>Generating preview...</p>} 
-                        {/* Image Preview */}
-                        {generatedImage && (
-                            <div className="image-preview">
-                                <p>AI Preview:</p>
-                                {imageOptions.length > 0 && (
-                        <div className="ai-selection-grid-section">
-                            <h3>4. Choose Your Style:</h3>
-                            <div className="selection-grid">
-                                {imageOptions.map((url, index) => (
-                                    <div 
-                                        key={index} 
-                                        onClick={() => setSelectedAiImage(url)} 
-                                        className={`image-option ${selectedAiImage === url ? 'selected' : ''}`}
-                                    >
-                                        <img src={url} alt={`Option ${index + 1}`} />
-                                    </div>
-                                ))}
-                            </div>
+                        {isLoading && isGenerating && <p className='loading-text'>Generating options...</p>}
 
-                            {/* Share & Join Button Logic */}
-                            {selectedAiImage && (
-                                <div className="join-with-ai-options">
-                                    <div className="form-group checkbox-group">
-                                        <input type="checkbox" id="share-ai" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
-                                        <label htmlFor="share-ai">Share selected style with the barber?</label>
-                                    </div>
-                                    <p className="success-text">Ready to join!</p>
+                        {/* --- Image Selection Grid --- */}
+                        {imageOptions.length > 0 && (
+                            <div className="ai-selection-grid-section">
+                                <h3>2. Choose Your Style:</h3>
+                                <div className="selection-grid">
+                                    {imageOptions.map((url, index) => (
+                                        <div 
+                                            key={index} 
+                                            onClick={() => setSelectedAiImage(url)} 
+                                            className={`image-option ${selectedAiImage === url ? 'selected' : ''}`}
+                                        >
+                                            <img src={url} alt={`Option ${index + 1}`} />
+                                        </div>
+                                    ))}
                                 </div>
-                            )}
-                        </div>
-                    )}
-                                <p className="success-text">Like it? Join the queue!</p>
+
+                                {/* Share Option */}
+                                {selectedAiImage && (
+                                    <div className="join-with-ai-options">
+                                        <div className="form-group checkbox-group">
+                                            <input type="checkbox" id="share-ai-final" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
+                                            <label htmlFor="share-ai-final">Share selected style with the barber?</label>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
-                    {/* Join Button */}
-                    <button type="submit" disabled={isLoading || isGenerating || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : (barbers.length === 0 ? 'No Barbers Available' : 'Join Queue')}</button>
+                    {/* --- END AI Section --- */}
+                    
+                    <button type="submit" disabled={isLoading || isGenerating || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
-                {/* Messages */}
                 {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
            </>
         ) : (
            <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
-               {/* Header: Show barber name only if joinedBarberId exists */}
                <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
-
-               {/* Your Queue Number */}
-               <div className="queue-number-display">
-                   Your Queue Number is: <strong>#{myQueueEntryId}</strong>
-               </div>
-
-               {/* Now Serving / Up Next Display */}
-               <div className="current-serving-display">
-                   <div className="serving-item now-serving">
-                       <span>Now Serving</span>
-                       <strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong>
-                   </div>
-                   <div className="serving-item up-next">
-                       <span>Up Next</span>
-                       <strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong>
-                   </div>
-               </div>
-
-                {/* Status Messages: Display errors or loading indicator */}
+               <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
+               <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
                {queueMessage && <p className="message error">{queueMessage}</p>}
                {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
-
-               {/* EWT Display (after joining) */}
-               <div className="ewt-container">
-                   <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
-                   <div className="ewt-item"><span>Estimated wait</span><strong>~ {estimatedWait} min</strong></div>
-               </div>
-
-                {/* --- Queue List --- */}
-               <ul className="queue-list live">
-                   {/* --- MODIFIED: Show message only if not loading AND queue is empty --- */}
-                   {!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (
-                       <li className="empty-text">Queue is empty.</li>
-                   ) : (
-                       liveQueue.map((entry, index) => (
-                           <li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}>
-                               {/* --- MODIFIED: Use entry.id consistently --- */}
-                               <span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span>
-                               <span className="queue-status">{entry.status}</span>
-                           </li>
-                       ))
-                   )}
-               </ul>
-
-               {/* --- Chat Button --- */}
+               <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
+               <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
+               
+               {/* --- Chat Button (with Badge) --- */}
                {!isChatOpen && myQueueEntryId && (
                    <button onClick={() => {
-                       const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
-                       if (targetBarber && targetBarber.user_id) {
-                           setChatTargetBarberUserId(targetBarber.user_id);
-                           setIsChatOpen(true);
-                           console.log("[Customer] Marking chat with barber as read.");
-                           setHasUnreadFromBarber(false); // Mark as read
-                       } else {
-                           console.error("Could not find barber user ID for chat.", { joinedBarberId, barbers, targetBarber });
-                           setMessage("Could not initiate chat: Barber details missing.");
-                       }
-                   }} className="chat-toggle-button">
+                           if (currentChatTargetBarberUserId) {
+                               setChatTargetBarberUserId(currentChatTargetBarberUserId);
+                               setIsChatOpen(true);
+                               setHasUnreadFromBarber(false); // Mark as read
+                           } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
+                       }}
+                       className="chat-toggle-button"
+                   >
                        Chat with Barber
-                       {hasUnreadFromBarber && <span className="notification-badge">1</span>}
+                       {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
                    </button>
                )}
                {isChatOpen && (<button onClick={() => setIsChatOpen(false)} className="chat-toggle-button close">Close Chat</button>)}
 
                {/* --- Chat Window --- */}
-               {isChatOpen && chatTargetBarberUserId && (
-                   <ChatWindow 
-                        currentUser_id={session.user.id} 
-                        otherUser_id={chatTargetBarberUserId} 
-                        messages={chatMessagesFromBarber} // Pass the correct messages state
-                        onSendMessage={sendCustomerMessage} />
+               {isChatOpen && currentChatTargetBarberUserId && (
+                   <ChatWindow
+                       currentUser_id={session.user.id}
+                       otherUser_id={currentChatTargetBarberUserId}
+                       messages={chatMessagesFromBarber} // Pass message state
+                       onSendMessage={sendCustomerMessage} // Pass send handler
+                       isVisible={isChatOpen} // Pass visibility
+                   />
                )}
-
-               {/* --- Leave Button --- */}
-               <button onClick={handleLeaveQueue} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
+               <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
            </div>
         )}
       </div>
@@ -1316,472 +686,236 @@ const handleGeneratePreview = async () => {
 }
 
 // --- BarberDashboard (Handles Barber's Queue Management) ---
-// Accepts props: barberId, barberName, onCutComplete
 function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
     const [error, setError] = useState('');
-    const [fetchError, setFetchError] = useState(''); // State for specific fetch errors
-    const socketRef = useRef(null); // --- NEW: Ref for WebSocket ---
-    const [chatMessages, setChatMessages] = useState({}); // --- NEW: Store messages {customerId: [msgs]} ---
-    const [barberNewMessage, setBarberNewMessage] = useState(''); // This state is now managed inside the ChatWindow component via its own logic
-    const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
-    const [unreadMessages, setUnreadMessages] = useState({}); // e.g., { "customer-user-id-123": true, "customer-user-id-456": true }
-    
-    // --- NEW: WebSocket Connection Effect for Barber ---
+    const [fetchError, setFetchError] = useState('');
+    const socketRef = useRef(null);
+    const [chatMessages, setChatMessages] = useState({});
+    const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
+    const [barberNewMessage, setBarberNewMessage] = useState(''); // This state is for the input field
+    const [unreadMessages, setUnreadMessages] = useState({});
 
     // Fetch queue details function
-    // Fetch queue details function
-        const fetchQueueDetails = async () => {
-            console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
-            setFetchError(''); // Clear previous fetch error
-            // --- FIX: Check barberId first ---
-            if (!barberId) {
-                console.warn('[BarberDashboard] fetchQueueDetails called without barberId.');
-                return; // Exit if no barberId
-            }
-            // setError(''); // Clear general error maybe, or handle differently
-            try {
-                const response = await axios.get(`${API_URL}/queue/details/${barberId}`);
-                console.log('[BarberDashboard] Successfully fetched queue details:', response.data);
-                setQueueDetails(response.data);
-            } catch (err) {
-                // --- FIX: Removed stray 'c' ---
-                console.error('[BarberDashboard] Failed fetch queue details:', err);
-                const errMsg = err.response?.data?.error || err.message || 'Could not load queue details.';
-                setError(errMsg); // Set general error state
-                setFetchError(errMsg); // Set specific fetch error state
-                setQueueDetails({ waiting: [], inProgress: null, upNext: null }); // Reset on error
-            }
-        };
-
-    // UseEffect for initial load and realtime subscription
-    useEffect(() => {
-    if (!barberId || !supabase?.channel) return;
-
-    let dashboardRefreshInterval = null; // Variable to hold the periodic refresh timer
-
-    fetchQueueDetails(); // Initial fetch
-
-    // 1. Setup Realtime subscription
-    const channel = supabase.channel(`barber_queue_${barberId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${barberId}` }, (payload) => {
-                console.log('Barber dashboard received queue update (via Realtime):', payload);
-                fetchQueueDetails(); // Refetch details when any change occurs
-            })
-            .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Barber dashboard subscribed to queue ${barberId}`);
-                } else {
-                    console.error(`Barber dashboard subscription error: ${status}`, err);
-                }
-            });
-
-    // 2. Set up 15-second periodic refresh (Backup for Realtime)
-    dashboardRefreshInterval = setInterval(() => {
-        console.log('Dashboard periodic refresh: Fetching queue details...');
-        fetchQueueDetails();
-    }, 15000);
-
-    // 3. Cleanup function
-        return () => {
-            if (channel && supabase?.removeChannel) {
-                supabase.removeChannel(channel).then(() => console.log('Barber dashboard unsubscribed.'));
-            }
-        // --- CRITICAL: Clear the interval on unmount/re-run ---
-            if (dashboardRefreshInterval) {
-                clearInterval(dashboardRefreshInterval);
-            }
-        };
-    }, [barberId]); // Depend on barberId
-
-    // Handler for calling the next customer
-    const handleNextCustomer = async () => {
-        const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
-        if (!next) { alert('Queue empty!'); return; }
-        if (queueDetails.inProgress) { alert(`Complete ${queueDetails.inProgress.customer_name} first.`); return; }
-        setError('');
-        try { 
-            // --- MODIFIED: Use the RPC call ---
-            await axios.put(`${API_URL}/queue/next`, { queue_id: next.id, barber_id: barberId }); 
-        }
-        catch (err) { console.error('Failed next customer:', err); setError(err.response?.data?.error || 'Failed call next.'); }
-        // Realtime listener will handle the state update
-    };
-
-    // Handler for completing a cut
-    const handleCompleteCut = async () => {
-        if (!queueDetails.inProgress) return;
-
-        // --- 1. Retrieve Service Name and Price ---
-        const serviceName = queueDetails.inProgress.services?.name || 'Service';
-        const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
-        
-        // --- 2. Prompt for the TIP amount ---
-        const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
-        
-        if (tipAmount === null) return; // Handle user canceling prompt
-        
-        // --- 3. Validate the Tip ---
-        const parsedTip = parseInt(tipAmount);
-        if (isNaN(parsedTip) || parsedTip < 0) {
-          alert('Invalid tip amount. Please enter a non-negative number (or 0).');
-          return;
-        }
-
-        setError(''); // Clear previous errors
-        
-        // --- 4. Send Completion Request to Backend ---
+    const fetchQueueDetails = useCallback(async () => {
+        console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
+        setFetchError('');
+        if (!barberId) { console.warn('[BarberDashboard] fetchQueueDetails called without barberId.'); return; }
         try {
-          await axios.post(`${API_URL}/queue/complete`, {
-            queue_id: queueDetails.inProgress.id,
-            barber_id: barberId,
-            tip_amount: parsedTip // <-- Send 'tip_amount'
-          });
-
-          onCutComplete(); // Signal parent to refresh analytics
-          
-          const totalProfitLogged = servicePrice + parsedTip;
-          alert(`Cut completed! Total logged profit: ₱${totalProfitLogged.toFixed(2)}`);
-
-        } catch (err) {
-          console.error('Failed complete cut:', err);
-          setError(err.response?.data?.error || 'Failed to complete cut. Server error.');
+            const response = await axios.get(`${API_URL}/queue/details/${barberId}`);
+            console.log('[BarberDashboard] Successfully fetched queue details:', response.data);
+            setQueueDetails(response.data);
+         } catch (err) {
+            console.error('[BarberDashboard] Failed fetch queue details:', err);
+            const errMsg = err.response?.data?.error || err.message || 'Could not load queue details.';
+            setError(errMsg);
+            setFetchError(errMsg);
+            setQueueDetails({ waiting: [], inProgress: null, upNext: null });
         }
-    };
+    }, [barberId]); // Correct dependency
 
-    const handleCancel = async (customerToCancel) => {
-        // --- ADD LOG ---
-        console.log("[handleCancel] Clicked for customer:", customerToCancel); 
-        if (!customerToCancel) {
-            console.error("[handleCancel] No customer data provided.");
-            return;
-        }
-
-        const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This cannot be undone and will not log earnings.`);
-        if (!confirmCancel) {
-            console.log("[handleCancel] User aborted cancellation."); // --- ADD LOG ---
-            return;
-        }
-        
-        // --- ADD LOG ---
-        console.log("[handleCancel] Sending PUT request to /api/queue/cancel", { queue_id: customerToCancel.id, barber_id: barberId });
-        setError(''); 
-        try {
-            const response = await axios.put(`${API_URL}/queue/cancel`, {
-                queue_id: customerToCancel.id,
-                barber_id: barberId 
-            });
-            // --- ADD LOG ---
-            console.log("[handleCancel] Success response:", response.data);
-            // Realtime update should refresh the queue
-        } catch (err) {
-            // --- ADD LOG ---
-            console.error('[handleCancel] Failed to cancel customer:', err.response?.data || err.message); 
-            setError(err.response?.data?.error || 'Failed to mark as cancelled.');
-        }
-    };
-
-    // --- NEW: Function to send message from Barber ---
-    const sendBarberMessage = (recipientId, messageText) => {
-        if (messageText.trim() && socketRef.current && session?.user?.id) {
-            const messageData = {
-                senderId: session.user.id, // Barber's user ID
-                recipientId: recipientId,   // Customer's user ID
-                message: messageText
-            };
-            socketRef.current.emit('chat message', messageData);
-            
-            // Optimistically update local state for the barber's view
-             setChatMessages(prev => {
-              const customerId = recipientId;
-              const existingMessages = prev[customerId] || [];
-              return {
-                  ...prev,
-                  [customerId]: [...existingMessages, { senderId: session.user.id, message: messageText }]
-              };
-          });
-        }
-    };
-
-    // Determine which button to show
-    const getActionButton = () => {
-        if (queueDetails.inProgress) {
-             // --- MODIFIED: Show Customer ID in button ---
-            return <button onClick={handleCompleteCut} className="complete-button">Complete: #{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</button>;
-        }
-        const nextPerson = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
-        if (nextPerson) {
-             // --- MODIFIED: Show Customer ID in button ---
-            return <button onClick={handleNextCustomer} className="next-button">Call: #{nextPerson.id} - {nextPerson.customer_name}</button>;
-        }
-        return <button className="next-button disabled" disabled>Queue Empty</button>;
-    };
-
-    const openChat = (customer) => {
-        console.log("[openChat] Clicked. Customer data:", customer);
-
-        // Use optional chaining for safer access
-        const customerUserId = customer?.profiles?.id;
-
-        if (customerUserId) {
-            console.log(`[openChat] Found customerUserId: ${customerUserId}. Setting state...`);
-            setOpenChatCustomerId(customerUserId); // Set the customer's USER ID
-
-            // --- Temporarily Simplified Mark as Read ---
-            // Instead of functional update, just update based on current state
-            // This might have timing issues in rare cases, but helps debug the ReferenceError
-            console.log(`[openChat] Clearing unread flag for ${customerUserId}`);
-            const updatedUnread = { ...unreadMessages }; // Get current unread state
-            delete updatedUnread[customerUserId];      // Remove the flag
-            setUnreadMessages(updatedUnread);          // Set the new state
-            // --- End Simplification ---
-
-        } else {
-            console.error("Cannot open chat: Customer user ID missing or invalid.", customer);
-            setError("Could not get customer details for chat.");
-        }
-    };
-    
-    // --- Helper function to close chat ---
-    const closeChat = () => {
-        setOpenChatCustomerId(null);
-        setBarberNewMessage(''); // Clear input when closing
-    };
-    // --- ADD LOG before return ---
-    console.log("[BarberDashboard] Rendering with state:", {
-        barberId,
-        queueDetails,
-        error,
-        fetchError, // Log the fetch error state too
-        openChatCustomerId
-    });
-
-    // --- Effects ---
-    // REVISED: Barber WebSocket Connection & Message Handling
+    // --- WebSocket Connection Effect for Barber ---
     useEffect(() => {
-        if (!session?.user?.id) return; // Exit if no barber session
-
-        // Connect only if not already connected
+        if (!session?.user?.id) return;
         if (!socketRef.current) {
             console.log("[Barber] Connecting WebSocket...");
             socketRef.current = io(SOCKET_URL);
             const socket = socketRef.current;
             const barberUserId = session.user.id;
-
             socket.emit('register', barberUserId);
-
             socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
 
             const messageListener = (incomingMessage) => {
                 console.log(`[Barber] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
-                const customerId = incomingMessage.senderId; // This IS the customer's user ID
-
-                // Update message list
-                setChatMessages(prev => {
-                    const msgs = prev[customerId] || [];
-                    return { ...prev, [customerId]: [...msgs, incomingMessage] };
-                 });
-
-                // Mark as unread check using latest state via functional update
-                 setOpenChatCustomerId(currentOpenChatId => {
+                const customerId = incomingMessage.senderId;
+                setChatMessages(prev => { const msgs = prev[customerId] || []; return { ...prev, [customerId]: [...msgs, incomingMessage] }; });
+                // Use functional update to get latest state
+                setOpenChatCustomerId(currentOpenChatId => {
                      console.log(`[Barber] Checking if message sender ${customerId} matches open chat ${currentOpenChatId}`);
                      if (customerId !== currentOpenChatId) {
                          console.log(`[Barber] Chat not open for ${customerId}. Marking as unread.`);
                          setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true }));
-                     } else {
-                         console.log(`[Barber] Chat is open for ${customerId}. Not marking as unread.`);
-                     }
-                     return currentOpenChatId; // Return current state unchanged
+                     } else { console.log(`[Barber] Chat is open for ${customerId}. Not marking as unread.`); }
+                     return currentOpenChatId;
                 });
             };
             socket.on('chat message', messageListener);
-
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
             socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
         }
+        return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
+    }, [session]); // Dependency only on session
 
-        // Cleanup function
+    // UseEffect for initial load and realtime subscription
+    useEffect(() => {
+        if (!barberId || !supabase?.channel) return;
+        let dashboardRefreshInterval = null;
+        fetchQueueDetails(); // Initial fetch
+        const channel = supabase.channel(`barber_queue_${barberId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${barberId}` }, (payload) => {
+                console.log('Barber dashboard received queue update (via Realtime):', payload);
+                fetchQueueDetails(); // Refetch details
+            })
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') { console.log(`Barber dashboard subscribed to queue ${barberId}`); } 
+                else { console.error(`Barber dashboard subscription error: ${status}`, err); }
+            });
+        dashboardRefreshInterval = setInterval(() => { console.log('Dashboard periodic refresh...'); fetchQueueDetails(); }, 15000);
         return () => {
-             if (socketRef.current) {
-                console.log("[Barber] Cleaning up WebSocket connection on effect change/unmount.");
-                socketRef.current.disconnect();
-                socketRef.current = null;
-            }
+            if (channel && supabase?.removeChannel) { supabase.removeChannel(channel).then(() => console.log('Barber unsubscribed.')); }
+            if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); }
         };
-      }, [session]); // Effect only depends on session login state
-    // --- END ADD ---
-    // Render the dashboard UI
+    }, [barberId, fetchQueueDetails]); // Added fetchQueueDetails
+
+    // --- Handlers ---
+    const handleNextCustomer = async () => {
+        const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
+        if (!next) { alert('Queue empty!'); return; }
+        if (queueDetails.inProgress) { alert(`Complete ${queueDetails.inProgress.customer_name} first.`); return; }
+        setError('');
+        try { await axios.put(`${API_URL}/queue/next`, { queue_id: next.id, barber_id: barberId }); }
+        catch (err) { console.error('Failed next customer:', err); setError(err.response?.data?.error || 'Failed call next.'); }
+    };
+    const handleCompleteCut = async () => {
+        if (!queueDetails.inProgress) return;
+        const serviceName = queueDetails.inProgress.services?.name || 'Service';
+        const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
+        const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
+        if (tipAmount === null) return;
+        const parsedTip = parseInt(tipAmount);
+        if (isNaN(parsedTip) || parsedTip < 0) { alert('Invalid tip. Please enter 0 or more.'); return; }
+        setError('');
+        try {
+          await axios.post(`${API_URL}/queue/complete`, {
+            queue_id: queueDetails.inProgress.id,
+            barber_id: barberId,
+            tip_amount: parsedTip
+          });
+          onCutComplete();
+          alert(`Cut completed! Total logged profit: ₱${(servicePrice + parsedTip).toFixed(2)}`);
+        } catch (err) { console.error('Failed complete cut:', err); setError(err.response?.data?.error || 'Failed to complete cut.'); }
+    };
+    const handleCancel = async (customerToCancel) => {
+        if (!customerToCancel) return;
+        const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This will not log earnings.`);
+        if (!confirmCancel) return;
+        console.log("[handleCancel] Sending PUT request to /api/queue/cancel", { queue_id: customerToCancel.id, barber_id: barberId });
+        setError(''); 
+        try {
+            await axios.put(`${API_URL}/queue/cancel`, {
+                queue_id: customerToCancel.id,
+                barber_id: barberId 
+            });
+        } catch (err) {
+            console.error('[handleCancel] Failed to cancel customer:', err.response?.data || err.message); 
+            setError(err.response?.data?.error || 'Failed to mark as cancelled.');
+        }
+    };
+    const sendBarberMessage = (recipientId, messageText) => {
+        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
+            const messageData = { senderId: session.user.id, recipientId, message: messageText };
+            socketRef.current.emit('chat message', messageData);
+            setChatMessages(prev => {
+              const customerId = recipientId;
+              const existingMessages = prev[customerId] || [];
+              return { ...prev, [customerId]: [...existingMessages, { senderId: session.user.id, message: messageText }] };
+            });
+        } else { console.warn("Cannot send barber msg, socket disconnected?"); }
+    };
+    const openChat = (customer) => {
+        const customerUserId = customer?.profiles?.id;
+        if (customerUserId) {
+            console.log(`[openChat] Opening chat for ${customerUserId}`);
+            setOpenChatCustomerId(customerUserId);
+            setUnreadMessages(prev => {
+                const updated = { ...prev };
+                delete updated[customerUserId]; // Mark as read
+                return updated;
+            });
+        } else { console.error("Cannot open chat: Customer user ID missing.", customer); setError("Could not get customer details."); }
+    };
+    const closeChat = () => { setOpenChatCustomerId(null); };
+
+    // --- Debug Log ---
+    console.log("[BarberDashboard] Rendering with state:", { barberId, queueDetails: { waiting: queueDetails.waiting.length, inProgress: !!queueDetails.inProgress, upNext: !!queueDetails.upNext }, error, fetchError, openChatCustomerId, unreadMessages });
+
+    // --- Render Barber Dashboard ---
     return (
         <div className="card">
             <h2>My Queue ({barberName || '...'})</h2>
-
-            {/* --- NEW: "Now Serving / Up Next" Display --- */}
-            {/* This uses the same CSS as the customer page */}
-            <div className="current-serving-display">
-                <div className="serving-item now-serving">
-                    <span>Now Serving</span>
-                    <strong>
-                        {/* Display Customer ID if someone is 'In Progress', otherwise show '---' */}
-                        {queueDetails.inProgress ? `Customer #${queueDetails.inProgress.id}` : '---'}
-                    </strong>
-                </div>
-                <div className="serving-item up-next">
-                    <span>Up Next</span>
-                    <strong>
-                        {/* Display Customer ID if someone is 'Up Next', otherwise show '---' */}
-                        {queueDetails.upNext ? `Customer #${queueDetails.upNext.id}` : '---'}
-                    </strong>
-                </div>
-            </div>
-            {/* --- END NEW DISPLAY --- */}
-
-            {error && <p className="error-message">{error}</p>}
-            <div className="action-buttons-container">
+            {fetchError && <p className="error-message large">Error loading queue: {fetchError}</p>}
+            {!fetchError && (
+                <>
+                    <div className="current-serving-display">
+                        <div className="serving-item now-serving"><span>Now Serving</span><strong>{queueDetails.inProgress ? `Customer #${queueDetails.inProgress.id}` : '---'}</strong></div>
+                        <div className="serving-item up-next"><span>Up Next</span><strong>{queueDetails.upNext ? `Customer #${queueDetails.upNext.id}` : '---'}</strong></div>
+                    </div>
+                    {error && !fetchError && <p className="error-message">{error}</p>}
+                    <div className="action-buttons-container">
                         {queueDetails.inProgress ? (
                             <>
-                                <button onClick={handleCompleteCut} className="complete-button">
-                                    Complete: #{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}
-                                </button>
-                                {/* --- NEW Cancel Button for In Progress --- */}
-                                <button onClick={() => handleCancel(queueDetails.inProgress)} className="cancel-button">
-                                    Cancel / No-Show
-                                </button>
+                                <button onClick={handleCompleteCut} className="complete-button">Complete: #{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</button>
+                                <button onClick={() => handleCancel(queueDetails.inProgress)} className="cancel-button">Cancel / No-Show</button>
                             </>
                         ) : queueDetails.upNext ? (
-                             <button onClick={handleNextCustomer} className="next-button">
-                                Call: #{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}
-                            </button>
-                            // Optionally add cancel for Up Next too:
-                            // <button onClick={() => handleCancel(queueDetails.upNext)} className="cancel-button small">Cancel Up Next</button>
+                             <button onClick={handleNextCustomer} className="next-button">Call: #{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</button>
                         ) : queueDetails.waiting.length > 0 ? (
-                            <button onClick={handleNextCustomer} className="next-button">
-                                Call: #{queueDetails.waiting[0].id} - {queueDetails.waiting[0].customer_name}
-                            </button>
-                        ) : (
-                            <button className="next-button disabled" disabled>Queue Empty</button>
-                        )}
-            </div>
-            <h3 className="queue-subtitle">In Chair</h3>
-            {queueDetails.inProgress ? (
-                <ul className="queue-list"><li className="in-progress">
-                    <strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>
-                    {/* --- MODIFIED --- */}
-                    <button
-                        onClick={() => openChat(queueDetails.inProgress)}
-                        className="chat-icon-button"
-                        title={queueDetails.inProgress.profiles?.id ? "Chat" : "Cannot chat with guest"}
-                        disabled={!queueDetails.inProgress.profiles?.id} // Disable if no profile ID
-                    >
-                        💬
-                        {/* --- NEW: Conditional Badge --- */}
-                        {queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (
-                            <span className="notification-badge">1</span> // Show '1' or a count
-                        )}
-                    </button>
-                    {/* ... ref photo link ... */}
-                </li></ul>
-            ) : (<p className="empty-text">Chair empty</p>)}
-
-            <h3 className="queue-subtitle">Up Next</h3>
-            {queueDetails.upNext ? (
-                <ul className="queue-list"><li className="up-next">
-                    <strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong>
-                    {/* --- MODIFIED --- */}
-                     <button
-                        onClick={() => openChat(queueDetails.upNext)}
-                        className="chat-icon-button"
-                        title={queueDetails.upNext.profiles?.id ? "Chat" : "Cannot chat with guest"}
-                        disabled={!queueDetails.upNext.profiles?.id} // Disable if no profile ID
-                    >
-                        💬
-                        {/* --- NEW: Conditional Badge --- */}
-                        {queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (
-                            <span className="notification-badge">1</span> // Show '1- or a count
-                        )}
-                    </button>
-                    {/* ... ref photo link ... */}
-                </li></ul>
-            ) : (<p className="empty-text">Nobody Up Next</p>)}
-
-            <h3 className="queue-subtitle">Waiting</h3>
-            <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>)
-            : (
-                queueDetails.waiting.map(c => (
-                    <li key={c.id}>
-                        #{c.id} - {c.customer_name}
-                        {/* --- MODIFIED --- */}
-                        <button
-                            onClick={() => openChat(c)}
-                            className="chat-icon-button"
-                            title={c.profiles?.id ? "Chat" : "Cannot chat with guest"}
-                            disabled={!c.profiles?.id} // Disable if no profile ID
-                        >
-                            💬
-                            {/* --- NEW: Conditional Badge --- */}
-                            {c.profiles?.id && unreadMessages[c.profiles.id] && (
-                                <span className="notification-badge">1</span> // Show '1' or a count
-                            )}
-                        </button>
-                         {/* ... ref photo link ... */}
-                    </li>
-                ))
-            )}</ul>
-
-             {/* --- NEW: Conditionally Render Chat Window --- */}
-            {openChatCustomerId && (
-                <div className="barber-chat-container"> {/* Added a container */}
-                    <h4>Chat with Customer</h4> 
-                    <ChatWindow currentUser_id={session.user.id} otherUser_id={openChatCustomerId} messages={chatMessages[openChatCustomerId] || []} onSendMessage={sendBarberMessage} />
-                    <button onClick={closeChat} className="chat-toggle-button close small">Close Chat</button>
-                </div>
+                            <button onClick={handleNextCustomer} className="next-button">Call: #{queueDetails.waiting[0].id} - {queueDetails.waiting[0].customer_name}</button>
+                        ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
+                    </div>
+                    <h3 className="queue-subtitle">In Chair</h3>
+                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>{queueDetails.inProgress.share_ai_image && queueDetails.inProgress.ai_haircut_image_url && (<a href={queueDetails.inProgress.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
+                    <h3 className="queue-subtitle">Up Next</h3>
+                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong>{queueDetails.upNext.share_ai_image && queueDetails.upNext.ai_haircut_image_url && (<a href={queueDetails.upNext.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
+                    <h3 className="queue-subtitle">Waiting</h3>
+                    <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (<li key={c.id}><div>#{c.id} - {c.customer_name}{c.share_ai_image && c.ai_haircut_image_url && (<a href={c.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button></li>)))}</ul>
+                    
+                    {openChatCustomerId && (
+                        <div className="barber-chat-container">
+                            <h4>Chat with Customer</h4>
+                             <ChatWindow
+                                currentUser_id={session.user.id}
+                                otherUser_id={openChatCustomerId}
+                                messages={chatMessages[openChatCustomerId] || []}
+                                onSendMessage={sendBarberMessage}
+                                isVisible={!!openChatCustomerId} // Pass visibility
+                             />
+                            <button onClick={closeChat} className="chat-toggle-button close small">Close Chat</button>
+                        </div>
+                    )}
+                    <button onClick={fetchQueueDetails} className="refresh-button small">Refresh Queue</button>
+                </>
             )}
-            {/* --- END NEW --- */}
-
-            <button onClick={fetchQueueDetails} className="refresh-button small">Refresh Queue</button>
         </div>
     );
 }
 
 // --- AnalyticsDashboard (Displays Barber Stats) ---
-// Accepts props: barberId, refreshSignal
 function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0,totalCutsAllTime: 0 });
    const [error, setError] = useState('');
-   const [showEarnings, setShowEarnings] = useState(true); // State to toggle earnings visibility
+   const [showEarnings, setShowEarnings] = useState(true);
 
-   // Fetch analytics data function
-   const fetchAnalytics = async () => {
+   const fetchAnalytics = useCallback(async () => {
       if (!barberId) return; setError('');
-      try { const response = await axios.get(`${API_URL}/analytics/${barberId}`); setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data }); } // Set state with defaults
-      catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); } // Reset on error
-    };
+      try { 
+          const response = await axios.get(`${API_URL}/analytics/${barberId}`); 
+          setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
+          setShowEarnings(response.data?.showEarningsAnalytics ?? true);
+      } 
+      catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
+    }, [barberId]); // Correct dependency
 
-    // UseEffect to fetch data on load and when signal/barberId changes
-    useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId]);
+    useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]); // Added fetchAnalytics
 
-    // --- NEW: Carbon Footprint Calculation ---
-   // Calculate derived values (averages)
     const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
     const avgPriceWeek = (analytics.totalCutsWeek ?? 0) > 0 ? ((analytics.totalEarningsWeek ?? 0) / analytics.totalCutsWeek).toFixed(2) : '0.00';
-
-    // Chart configuration for the earnings bar chart
     const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Earnings per Day (Last 7 Days)' } }, scales: { y: { beginAtZero: true } } };
-    
-    // --- MOVED dailyDataSafe definition up here ---
-    const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : []; // Ensure it's an array
-
-    // --- NEW: Fixed Carbon Footprint Calculation ---
-    // "Today" is always 5g, as requested.
+    const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : [];
+    const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] };
     const carbonSavedToday = 5; 
-    
-    // "Last 7 Days" is 5g * (number of active days in the 7-day report)
-    // This matches your "5g today, 10g tomorrow" cumulative logic.
     const carbonSavedWeekly = (dailyDataSafe.length) * 5; 
-    // --- END NEW ---
-    // Prepare chart data
-    const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] }; // <-- ₱ Symbol
 
-    // Render the analytics dashboard UI
     return ( <div className="card analytics-card">
         <div className="dashboard-header">
             <h2>Dashboard</h2>
@@ -1807,166 +941,112 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         <div className="carbon-footprint-section">
             <h3 className="analytics-subtitle">Carbon Footprint Reduced</h3>
             <div className="analytics-grid carbon-grid">
-                <div className="analytics-item">
-                    <span className="analytics-label">Today</span>
-                    <span className="analytics-value carbon">
-                        {/* This will now show the fixed 5g */}
-                        {carbonSavedToday}g <span className="carbon-unit">(gCO2e)</span>
-                    </span>
-                </div>
-                <div className="analytics-item">
-                    {/* --- CHANGED LABEL --- */}
-                    <span className="analytics-label">Last 7 Days</span>
-                    <span className="analytics-value carbon">
-                        {/* --- CHANGED VARIABLE --- */}
-                        {carbonSavedWeekly}g <span className="carbon-unit">(gCO2e)</span>
-                    </span>
-                </div>
+                <div className="analytics-item"><span className="analytics-label">Today</span><span className="analytics-value carbon">{carbonSavedToday}g <span className="carbon-unit">(gCO2e)</span></span></div>
+                <div className="analytics-item"><span className="analytics-label">Last 7 Days</span><span className="analytics-value carbon">{carbonSavedWeekly}g <span className="carbon-unit">(gCO2e)</span></span></div>
             </div>
         </div>
         {showEarnings && (
             <div className="chart-container">
                 {dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}
             </div>
-        )}<button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button></div> );
+        )}
+        <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
+    </div> );
 }
-
 
 // ##############################################
 // ##           MAIN APP COMPONENT             ##
 // ##############################################
 function App() {
   const [session, setSession] = useState(null);
-  const [userRole, setUserRole] = useState(null); // null = loading, 'customer', 'barber'
-  const [barberProfile, setBarberProfile] = useState(null); // Holds { id, user_id, full_name, is_available } for logged in barber
-  const [loadingRole, setLoadingRole] = useState(true); // Tracks initial session/role check
+  const [userRole, setUserRole] = useState(null);
+  const [barberProfile, setBarberProfile] = useState(null);
+  const [loadingRole, setLoadingRole] = useState(true);
 
-  // --- NEW: OneSignal Setup ---
+  // --- OneSignal Setup ---
   useEffect(() => {
-    if (!window.OneSignal) { // Prevent re-running
+    if (!window.OneSignal) {
       window.OneSignal = window.OneSignal || [];
       window.OneSignal.push(function() {
         window.OneSignal.init({
           appId: process.env.REACT_APP_ONESIGNAL_APP_ID,
-          allowLocalhostAsSecureOrigin: true, // Good for testing
-          autoResubscribe: true, // Resubscribe if they clear cache
-          notifyButton: {
-            enable: false, // We will use our own button/prompt
-          },
+          allowLocalhostAsSecureOrigin: true,
+          autoResubscribe: true,
+          notifyButton: { enable: false },
         });
       });
     }
+    return () => { /* Cleanup if needed */ };
+  }, []);
 
-    return () => {
-      // Cleanup if needed, but OneSignal usually persists
-    };
-  }, []); // Empty dependency array ensures it runs only once on mount
-
-
-  // --- Check Session and Role on Load & Auth Changes ---
-  useEffect(() => {
-    if (!supabase?.auth) { console.error("Supabase auth not initialized."); setLoadingRole(false); return; }
-
-    // 1. Initial Session Check
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      checkUserRole(currentSession?.user); // Chain role check after getting session
-    }).catch(err => { console.error("Error getting initial session:", err); setLoadingRole(false); }); // Stop loading on error
-
-    // 2. Listen for Auth State Changes (SIGN_IN, SIGNED_OUT, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-       console.log("Auth State Change Detected:", _event, currentSession);
-       setSession(currentSession); // Update session state immediately
-       // Reset role/profile before re-checking if user exists
-       setUserRole(null); setBarberProfile(null); setLoadingRole(true);
-       if (currentSession?.user) {
-            checkUserRole(currentSession.user); // Check role if user exists
-       } else {
-            // User logged out or session expired
-            setLoadingRole(false); // No role to check, stop loading
-       }
-    });
-
-    // 3. Cleanup listener on component unmount
-    return () => subscription?.unsubscribe();
-  }, []); // Run only once on mount
-
-
-  // --- Helper to Check Role via Backend ---
-  const checkUserRole = async (user) => {
-     if (!user) { // No user logged in
-         setUserRole('customer'); // Default to customer view (though App logic will show AuthForm)
-         setBarberProfile(null);
-         setLoadingRole(false);
-         return;
-     }
-     setLoadingRole(true); // Indicate we are checking the role
-     try {
-         // Call backend endpoint to get profile based on user_id
-         const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
-         // If backend returns a profile (status 200), user is a barber
-         setUserRole('barber');
-         setBarberProfile(response.data); // Store the fetched profile data
-         console.log("User role determined: Barber", response.data);
-         // Auto-set available ONLY if profile exists AND they are currently offline
-         // This ensures barbers appear online when they log in / refresh
-         if (response.data && !response.data.is_available) {
-              updateAvailability(response.data.id, user.id, true); // Mark available
-         }
-     } catch(error) {
-         if (error.response && error.response.status === 404) {
-             // Backend confirmed: No barber profile found for this user ID
-             setUserRole('customer');
-             console.log("User role determined: Customer (profile not found for ID:", user.id, ")");
-         } else {
-             // Other errors (network, server error fetching profile, etc.)
-             console.error("Error checking/fetching barber profile via backend:", error);
-             setUserRole('customer'); // Default to customer on other errors
-         }
-         setBarberProfile(null); // Ensure profile is null if not barber or on error
-     } finally {
-         setLoadingRole(false); // Role check finished
-     }
-  };
-
-   // --- Helper to Update Availability (called by toggle or login) ---
-   const updateAvailability = async (barberId, userId, isAvailable) => {
+  // --- Helper to Update Availability (wrapped in useCallback) ---
+  const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
        if (!barberId || !userId) return;
        try {
-           // Call backend to update DB
            const response = await axios.put(`${API_URL}/barber/availability`, { barberId, userId, isAvailable });
-           // Update local profile state immediately based on successful response
-           // This keeps the UI (like the toggle) consistent
             setBarberProfile(prev => prev ? { ...prev, is_available: response.data.is_available } : null);
        } catch (error) {
             console.error("Failed to update availability state:", error);
-            // Optionally show an error message to the barber
        }
-   };
+   }, []); // Empty dependency array, it doesn't depend on props/state
 
+  // --- Helper to Check Role (wrapped in useCallback) ---
+  const checkUserRole = useCallback(async (user) => {
+     if (!user) {
+         setUserRole('customer'); setBarberProfile(null); setLoadingRole(false); return;
+     }
+     setLoadingRole(true);
+     try {
+         const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
+         setUserRole('barber');
+         setBarberProfile(response.data);
+         console.log("User role determined: Barber", response.data);
+         if (response.data && !response.data.is_available) {
+              updateAvailability(response.data.id, user.id, true);
+         }
+     } catch(error) {
+         if (error.response && error.response.status === 404) {
+             setUserRole('customer');
+             console.log("User role determined: Customer (profile not found for ID:", user.id, ")");
+         } else {
+             console.error("Error checking/fetching barber profile:", error);
+             setUserRole('customer');
+         }
+         setBarberProfile(null);
+     } finally {
+         setLoadingRole(false);
+     }
+  }, [updateAvailability]); // Depends on updateAvailability
 
-  // --- Render Logic based on Authentication and Role ---
-  if (loadingRole) { // Show loading until the initial session AND role check are complete
-      return <div className="loading-fullscreen">Loading Application...</div>;
-  }
+  // --- Auth State Change Listener ---
+  useEffect(() => {
+    if (!supabase?.auth) { console.error("Supabase auth not initialized."); setLoadingRole(false); return; }
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      checkUserRole(currentSession?.user);
+    }).catch(err => { console.error("Error getting initial session:", err); setLoadingRole(false); });
 
-  if (!session) {
-    // If no user session, show the Login/Signup form
-    return <AuthForm />;
-  }
-  // If session exists, but role is still loading (should be brief after initial load)
-  else if (userRole === null) {
-     return <div className="loading-fullscreen">Verifying User Role...</div>;
-  }
-  // If role is barber AND profile is successfully loaded
-  else if (userRole === 'barber' && barberProfile) {
-    // Pass setBarberProfile down so layout can clear it on logout
-    return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />;
-  }
-  // Otherwise (role is customer, or maybe barber profile failed to load but they are logged in)
-  else {
-    return <CustomerAppLayout session={session} />;
-  }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+       console.log("Auth State Change Detected:", _event, currentSession);
+       setSession(currentSession);
+       setUserRole(null); setBarberProfile(null); setLoadingRole(true);
+       if (currentSession?.user) {
+            checkUserRole(currentSession.user);
+       } else {
+            setLoadingRole(false);
+       }
+    });
+
+    return () => subscription?.unsubscribe();
+  }, [checkUserRole]); // Added checkUserRole to dependencies
+
+  // --- Render Logic ---
+  if (loadingRole) { return <div className="loading-fullscreen">Loading Application...</div>; }
+  if (!session) { return <AuthForm />; }
+  else if (userRole === null) { return <div className="loading-fullscreen">Verifying User Role...</div>; }
+  else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
+  else { return <CustomerAppLayout session={session} />; }
 }
 
 export default App;
+
