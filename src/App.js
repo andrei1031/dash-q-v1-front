@@ -50,6 +50,41 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ##############################################
+// ##      BLINKING TAB HELPER FUNCTIONS       ##
+// ##############################################
+// --- ADDED THESE FUNCTIONS BACK ---
+let blinkInterval = null;
+let originalTitle = document.title;
+const alertTitle = "!! IT'S YOUR TURN !!";
+
+/**
+ * Starts the blinking browser tab.
+ */
+function startBlinking() {
+    if (blinkInterval) return; // Already blinking
+    
+    originalTitle = document.title; // Capture the title *at the time of starting*
+    let isOriginalTitle = true;
+  
+    blinkInterval = setInterval(() => {
+        document.title = isOriginalTitle ? alertTitle : originalTitle;
+        isOriginalTitle = !isOriginalTitle;
+    }, 1000); // Blinks every 1 second
+}
+
+/**
+ * Stops the blinking browser tab and resets the title.
+ */
+function stopBlinking() {
+    if (!blinkInterval) return; // Not blinking
+    
+    clearInterval(blinkInterval);
+    blinkInterval = null;
+    document.title = originalTitle; // Reset to original
+}
+// --- END OF ADDED FUNCTIONS ---
+
+// ##############################################
 // ##              CHAT COMPONENT              ##
 // ##############################################
 // Props: currentUser_id, otherUser_id, messages = [], onSendMessage
