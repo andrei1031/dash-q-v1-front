@@ -186,7 +186,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
             const response = await axios.put(`${API_URL}/barber/availability`, {
                 barberId: barberProfile.id, isAvailable: newAvailability, userId: session.user.id
             });
-            onAvailabilityChange(response.data.is_available);
+            onAvailabilityChange(response.data.is_available); // This prop is passed from BarberAppLayout
         } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
         finally { setLoading(false); }
     };
@@ -195,6 +195,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
 
 function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     const [refreshSignal, setRefreshSignal] = useState(0);
+    
     useEffect(() => {
         const handleBeforeUnload = (e) => {
             if (barberProfile?.id && session?.user) {
@@ -204,17 +205,23 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [barberProfile, session]);
+    
     const handleLogout = async () => {
         if (!barberProfile || !session?.user || !supabase?.auth) return;
         try { await axios.put(`${API_URL}/barber/availability`, { barberId: barberProfile.id, isAvailable: false, userId: session.user.id }); } 
         catch (error) { console.error("Error setting offline on logout:", error); }
         finally { await supabase.auth.signOut(); }
     };
+    
     const handleCutComplete = () => setRefreshSignal(prev => prev + 1);
+    
+    // This handler is passed to AvailabilityToggle
     const handleAvailabilityChange = (newStatus) => { setBarberProfile(prev => prev ? { ...prev, is_available: newStatus } : null); };
+    
     const currentBarberId = barberProfile?.id;
     const currentBarberName = barberProfile?.full_name;
-    return ( <div className="app-layout barber-layout"><header className="app-header"><h1>Barber: {currentBarberName || '...'}</h1><div className='header-controls'>{barberProfile && <AvailabilityToggle {...{ barberProfile, session, onAvailabilityChange }}/>}<button onClick={handleLogout} className='logout-button'>Logout</button></div></header><div className="container">{currentBarberId ? (<><BarberDashboard {...{ barberId: currentBarberId, barberName: currentBarberName, onCutComplete, session }} /><AnalyticsDashboard {...{ barberId: currentBarberId, refreshSignal }} /></>) : (<div className="card"><p>Loading...</p></div>)}</div></div> );
+    
+    return ( <div className="app-layout barber-layout"><header className="app-header"><h1>Barber: {currentBarberName || '...'}</h1><div className='header-controls'>{barberProfile && <AvailabilityToggle {...{ barberProfile, session, onAvailabilityChange: handleAvailabilityChange }}/>}<button onClick={handleLogout} className='logout-button'>Logout</button></div></header><div className="container">{currentBarberId ? (<><BarberDashboard {...{ barberId: currentBarberId, barberName: currentBarberName, onCutComplete: handleCutComplete, session }} /><AnalyticsDashboard {...{ barberId: currentBarberId, refreshSignal }} /></>) : (<div className="card"><p>Loading...</p></div>)}</div></div> );
 }
 
 // ##############################################
@@ -288,12 +295,16 @@ function CustomerView({ session }) {
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
    const currentChatTargetBarberUserId = targetBarber?.user_id;
+   
+   // --- FIX: Define chatTargetBarberUserId state setter ---
+   const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
 
    // --- Handlers ---
    const handleCloseInstructions = () => {
        localStorage.setItem('hasSeenInstructions_v1', 'true');
        setIsInstructionsModalOpen(false);
    };
+   
    const sendCustomerMessage = (recipientId, messageText) => {
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
             const messageData = { senderId: session.user.id, recipientId, message: messageText };
@@ -301,6 +312,7 @@ function CustomerView({ session }) {
             setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
         } else { console.warn("[Customer] Cannot send message."); setMessage("Chat disconnected."); }
    };
+   
    const fetchPublicQueue = useCallback(async (barberId) => {
       if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
       setIsQueueLoading(true);
@@ -312,7 +324,8 @@ function CustomerView({ session }) {
       } catch (error) { 
           console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
       } finally { setIsQueueLoading(false); }
-    }, []); // Removed dependencies, they are set in parent scope
+    }, []);
+    
    const handleGeneratePreview = async () => {
         if (!prompt) { setMessage('A haircut prompt is required.'); return; }
         setIsGenerating(true); setIsLoading(true);
@@ -329,19 +342,21 @@ function CustomerView({ session }) {
             setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
         } finally { setIsGenerating(false); setIsLoading(false); }
     };
+    
    const handleJoinQueue = async (e) => {
         e.preventDefault();
+        // --- FIX: Use selectedBarberId ---
         if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
-        if (imageOptions.length > 0 && !selectedAiImage) { setMessage('Please select one of the AI images to continue.'); return; } // Require selection if images were generated
+        if (imageOptions.length > 0 && !selectedAiImage) { setMessage('Please select one of the AI images to continue.'); return; }
         setIsLoading(true); setMessage('Joining queue...');
         try {
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                barber_id: selectedBarberId,
-                reference_image_url: null, // Not using file upload anymore
+                barber_id: selectedBarberId, // <<< FIX
+                reference_image_url: null,
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
@@ -355,7 +370,6 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
-                // Reset form
                 setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
                 setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
             } else { throw new Error("Invalid response from server."); }
@@ -365,11 +379,13 @@ function CustomerView({ session }) {
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
         } finally { setIsLoading(false); }
     };
-   const handleLeaveQueue = () => { handleReturnToJoin(true); }; // Pass true to signal user-initiated leave
+    
+   const handleLeaveQueue = () => { handleReturnToJoin(true); };
+   
    const handleReturnToJoin = async (userInitiated = false) => {
         console.log("[handleReturnToJoin] Function called.");
         if (userInitiated && myQueueEntryId) {
-            setIsLoading(true); // Show loading only if user clicked "Leave"
+            setIsLoading(true);
             try { await axios.delete(`${API_URL}/queue/${myQueueEntryId}`); setMessage("You left the queue."); } 
             catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
             finally { setIsLoading(false); }
@@ -385,6 +401,7 @@ function CustomerView({ session }) {
         setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
         console.log("[handleReturnToJoin] State reset complete.");
    };
+   
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
    // --- Effects ---
@@ -528,6 +545,7 @@ function CustomerView({ session }) {
    }, [myQueueEntryId]);
    
    useEffect(() => { // Customer WebSocket
+        // --- FIX: Use currentChatTargetBarberUserId ---
         if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
             if (!socketRef.current) {
                 console.log("[Customer] Connecting WebSocket...");
@@ -541,6 +559,7 @@ function CustomerView({ session }) {
                 });
                 const messageListener = (incomingMessage) => {
                     console.log("[Customer] Received chat message:", incomingMessage);
+                    // --- FIX: Use currentChatTargetBarberUserId ---
                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
                         setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
                         setIsChatOpen(currentIsOpen => {
@@ -558,6 +577,7 @@ function CustomerView({ session }) {
              if (socketRef.current) { console.log("[Customer] Disconnecting WebSocket."); socketRef.current.disconnect(); socketRef.current = null; }
         }
         return () => { if (socketRef.current) { console.log("[Customer] Cleaning up WebSocket."); socketRef.current.disconnect(); socketRef.current = null; } };
+    // --- FIX: Use correct dependencies ---
     }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]); // Removed isChatOpen
 
    // --- Debug Log ---
@@ -582,6 +602,7 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
                     <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
+                    {/* --- FIX: Use selectedBarberId --- */}
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
@@ -627,6 +648,7 @@ function CustomerView({ session }) {
                                 {selectedAiImage && (
                                     <div className="join-with-ai-options">
                                         <div className="form-group checkbox-group">
+                                            {/* --- FIX: Use shareAiImage state --- */}
                                             <input type="checkbox" id="share-ai-final" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
                                             <label htmlFor="share-ai-final">Share selected style with the barber?</label>
                                         </div>
@@ -655,7 +677,7 @@ function CustomerView({ session }) {
                {!isChatOpen && myQueueEntryId && (
                    <button onClick={() => {
                            if (currentChatTargetBarberUserId) {
-                               setChatTargetBarberUserId(currentChatTargetBarberUserId);
+                               setChatTargetBarberUserId(currentChatTargetBarberUserId); // <<< FIX
                                setIsChatOpen(true);
                                setHasUnreadFromBarber(false); // Mark as read
                            } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
@@ -672,7 +694,7 @@ function CustomerView({ session }) {
                {isChatOpen && currentChatTargetBarberUserId && (
                    <ChatWindow
                        currentUser_id={session.user.id}
-                       otherUser_id={currentChatTargetBarberUserId}
+                       otherUser_id={currentChatTargetBarberUserId} // <<< FIX
                        messages={chatMessagesFromBarber} // Pass message state
                        onSendMessage={sendCustomerMessage} // Pass send handler
                        isVisible={isChatOpen} // Pass visibility
@@ -693,10 +715,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const socketRef = useRef(null);
     const [chatMessages, setChatMessages] = useState({});
     const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
-    const [barberNewMessage, setBarberNewMessage] = useState(''); // This state is for the input field
     const [unreadMessages, setUnreadMessages] = useState({});
 
-    // Fetch queue details function
+    // --- FIX: Wrap fetchQueueDetails in useCallback ---
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -765,7 +786,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             if (channel && supabase?.removeChannel) { supabase.removeChannel(channel).then(() => console.log('Barber unsubscribed.')); }
             if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); }
         };
-    }, [barberId, fetchQueueDetails]); // Added fetchQueueDetails
+    }, [barberId, fetchQueueDetails]); // <<< FIX: Added fetchQueueDetails
 
     // --- Handlers ---
     const handleNextCustomer = async () => {
@@ -896,6 +917,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
 
+   // --- FIX: Wrap in useCallback ---
    const fetchAnalytics = useCallback(async () => {
       if (!barberId) return; setError('');
       try { 
@@ -906,7 +928,8 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
       catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
     }, [barberId]); // Correct dependency
 
-    useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]); // Added fetchAnalytics
+    // --- FIX: Add fetchAnalytics to dependency array ---
+    useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]);
 
     const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
     const avgPriceWeek = (analytics.totalCutsWeek ?? 0) > 0 ? ((analytics.totalEarningsWeek ?? 0) / analytics.totalCutsWeek).toFixed(2) : '0.00';
@@ -1038,7 +1061,7 @@ function App() {
     });
 
     return () => subscription?.unsubscribe();
-  }, [checkUserRole]); // Added checkUserRole to dependencies
+  }, [checkUserRole]); // <<< FIX: Added checkUserRole to dependencies
 
   // --- Render Logic ---
   if (loadingRole) { return <div className="loading-fullscreen">Loading Application...</div>; }
