@@ -562,7 +562,7 @@ function CustomerView({ session }) {
      // --- Define Your Shop's Location & Warning Distance ---
      const BARBERSHOP_LAT = 16.414830431367967; 
      const BARBERSHOP_LON = 120.59712292628716; 
-     const DISTANCE_THRESHOLD_METERS = 900;
+     const DISTANCE_THRESHOLD_METERS = 200;
 
      // Check if geolocation is available
      if (!('geolocation' in navigator)) {
