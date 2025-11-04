@@ -461,6 +461,17 @@ function stopBlinking() {
     blinkInterval = null;
     document.title = originalTitle; // Reset to original
 }
+function dataURLtoBlob(dataurl) {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], {type:mime});
+}
 
 
 // ##############################################
@@ -469,511 +480,209 @@ function stopBlinking() {
 
 // --- CustomerView (Handles Joining Queue & Live View for Customers) ---
 function CustomerView({ session }) {
-   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
-   const [barbers, setBarbers] = useState([]);
-   const [selectedBarber, setSelectedBarber] = useState('');
-   const [customerName, setCustomerName] = useState(
-       () => session.user?.user_metadata?.full_name || ''
-   );
-   const [customerPhone, setCustomerPhone] = useState(''); // This one stays blank
-   const [customerEmail, setCustomerEmail] = useState(
-       () => session.user?.email || ''
-   );
-   const [message, setMessage] = useState('');
-   const [player_id, setPlayerId] = useState(null);
+    const [selectedBarberId, setSelectedBarberId] = useState('');
+    const [selectedServiceId, setSelectedServiceId] = useState('');
+    const [customerName] = useState(() => session.user?.user_metadata?.full_name || ''); // ReadOnly
+    const [customerPhone, setCustomerPhone] = useState('');
+    const [customerEmail] = useState(() => session.user?.email || ''); // ReadOnly
+    const [message, setMessage] = useState('');
+    const [player_id, setPlayerId] = useState(null);
+    const [myQueueEntryId, setMyQueueEntryId] = useState(() => localStorage.getItem('myQueueEntryId') || null);
+    const [joinedBarberId, setJoinedBarberId] = useState(() => localStorage.getItem('joinedBarberId') || null);
+    const [liveQueue, setLiveQueue] = useState([]);
+    const [queueMessage, setQueueMessage] = useState('');
+    const [estimatedWait, setEstimatedWait] = useState(0);
+    const [peopleWaiting, setPeopleWaiting] = useState(0);
 
-   const [myQueueEntryId, setMyQueueEntryId] = useState(
-       () => localStorage.getItem('myQueueEntryId') || null
-   );
-   const [joinedBarberId, setJoinedBarberId] = useState(
-       () => localStorage.getItem('joinedBarberId') || null
-   );
+    // --- AI/Canvas States and Refs ---
+    const [file, setFile] = useState(null); // The original uploaded file
+    const [prompt, setPrompt] = useState('');
+    const [generatedImage, setGeneratedImage] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false); // Used for join/leave/AI
+    const [isLoading, setIsLoading] = useState(false); // Used for join/leave/AI
+    const [shareAiImage, setShareAiImage] = useState(false); // Customer's share choice
+    const [konvaImage, setKonvaImage] = useState(null); // Image loaded for Konva
+    const [maskLines, setMaskLines] = useState([]); // Tracks drawing lines
+    
+    const isDrawing = useRef(false);
+    const stageRef = useRef(null);
+    const maskLayerRef = useRef(null); // Ref to the drawing layer
+    const imageLayerRef = useRef(null); // Ref to the image layer (for exporting)
+    const socketRef = useRef(null); // Ref for Customer WebSocket
 
-   const [liveQueue, setLiveQueue] = useState([]);
-   const [queueMessage, setQueueMessage] = useState('');
-   const [estimatedWait, setEstimatedWait] = useState(0);
-   const [peopleWaiting, setPeopleWaiting] = useState(0);
-   const [file, setFile] = useState(null);
-   const [prompt, setPrompt] = useState('');
-   const [generatedImage, setGeneratedImage] = useState(null);
-   const [isGenerating, setIsGenerating] = useState(false);
-   const [isLoading, setIsLoading] = useState(false); // Used for join/leave/AI
-   const [isQueueLoading, setIsQueueLoading] = useState(true); // --- NEW: State for initial queue load ---
-   const [services, setServices] = useState([]);
-   const [selectedServiceId, setSelectedServiceId] = useState('');
-   const [isChatOpen, setIsChatOpen] = useState(false);
-   const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
-   const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
-   const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
-   const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
-   const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
-   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // State for customer's chat
-   const [displayWait, setDisplayWait] = useState(0); // This will be our countdown timer
-   // --- Moved Calculations inside component body ---
-   // These will re-calculate whenever liveQueue changes
-   const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
-   const upNext = liveQueue.find(entry => entry.status === 'Up Next');
-   const currentBarberName = barbers.find(b => b.id === parseInt(joinedBarberId))?.full_name || `Barber #${joinedBarberId}`;
+    // --- Modal and Geofencing States ---
+    const [isQueueLoading, setIsQueueLoading] = useState(true);
+    const [services, setServices] = useState([]);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
+    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
+    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
+    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
+    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
+    const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
+    const [displayWait, setDisplayWait] = useState(0);
+    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
+    const [isOnCooldown, setIsOnCooldown] = useState(false);
+    const locationWatchId = useRef(null);
+    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
 
-   // --- NEW: Moved sendCustomerMessage inside CustomerView ---
-   const socketRef = useRef(null); // Add the socket ref here
-   const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
-   const [isOnCooldown, setIsOnCooldown] = useState(false); // To prevent spamming the modal
-   const locationWatchId = useRef(null); // To store the ID of the location watcher
 
-   // --- ADD THIS NEW HANDLER ---
-   const handleCloseInstructions = () => {
-        // Set a flag in local storage so this modal doesn't show again
-        localStorage.setItem('hasSeenInstructions_v1', 'true');
-        setIsInstructionsModalOpen(false);
-   };
+    // --- Calculated Vars ---
+    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
+    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
+    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
+    const currentChatTargetBarberUserId = targetBarber?.user_id;
 
-   // --- ADD THIS NEW EFFECT ---
-   // Check if it's the user's first time on this page
-   useEffect(() => {
-        const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
-        if (!hasSeen) {
-            // If they've never seen it, show the modal
-            setIsInstructionsModalOpen(true);
-        }
-   }, []);
-
-   const sendCustomerMessage = (recipientId, messageText) => {
-        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
-            const messageData = {
-                senderId: session.user.id, // Customer's user ID
-                recipientId: recipientId,   // Barber's user ID
-                message: messageText
-            };
-            socketRef.current.emit('chat message', messageData);
-            // Optimistically update local state for the customer's view
-             setChatMessagesFromBarber(prev => [
-                 ...prev,
-                 { senderId: session.user.id, message: messageText } // Add my sent message
-             ]);
+    // --- AI/Canvas Handlers ---
+    const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        
+        if (selectedFile) {
+            setFile(selectedFile); // Set the global file state for upload
+            setGeneratedImage(null); // Clear any old generated preview
+            setShareAiImage(false); // Reset the sharing checkbox
         } else {
-            console.warn("[Customer] Cannot send message, socket disconnected?");
-            setMessage("Chat disconnected, please refresh."); // User feedback
+            setFile(null);
+            setKonvaImage(null);
+            setMaskLines([]);
         }
-   };
-
-   // --- Geolocation Watcher Effect ---
-   useEffect(() => {
-     // --- Define Your Shop's Location & Warning Distance ---
-     const BARBERSHOP_LAT = 16.414830431367967; 
-     const BARBERSHOP_LON = 120.59712292628716; 
-     const DISTANCE_THRESHOLD_METERS = 200;
-
-     // Check if geolocation is available
-     if (!('geolocation' in navigator)) {
-       console.warn('Geolocation not available.');
-       return;
-     }
-
-     // Start watching location ONLY if user is in the queue
-     if (myQueueEntryId) {
-       console.log('User is in queue, starting location watch...');
-
-       // Success callback: This runs every time the position updates
-       const onPositionUpdate = (position) => {
-         const { latitude, longitude } = position.coords;
-         const distance = getDistanceInMeters(latitude, longitude, BARBERSHOP_LAT, BARBERSHOP_LON);
-
-         console.log(`Current distance: ${Math.round(distance)}m. Cooldown: ${isOnCooldown}`);
-
-         // Check if they are too far...
-         if (distance > DISTANCE_THRESHOLD_METERS) {
-           // ...AND the modal isn't already open AND they are not on cooldown
-           if (!isTooFarModalOpen && !isOnCooldown) {
-             console.log('Customer is too far! Triggering modal.');
-             setIsTooFarModalOpen(true);
-             setIsOnCooldown(true); // Start cooldown *when modal is shown*
-           }
-         } else {
-           // --- User is back in range ---
-           if (isOnCooldown) {
-             console.log('Customer is back in range. Resetting cooldown.');
-             setIsOnCooldown(false); // Reset the cooldown if they return
-           }
-         }
-       };
-
-       // Error callback
-       const onPositionError = (err) => {
-         console.warn(`Geolocation error (Code ${err.code}): ${err.message}`);
-       };
-
-       // Start the watcher
-       locationWatchId.current = navigator.geolocation.watchPosition(
-         onPositionUpdate,
-         onPositionError,
-         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-       );
-     }
-
-     // Cleanup function: This runs when user leaves queue (myQueueEntryId changes)
-     return () => {
-       if (locationWatchId.current) {
-         navigator.geolocation.clearWatch(locationWatchId.current);
-         console.log('Stopping geolocation watch.');
-       }
-     };
-     // --- Rerun this effect if these states change ---
-   }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown]);
-
-   // --- NEW: WebSocket Connection Effect for Customer ---
-   useEffect(() => {
-        if (!session?.user?.id) return; // Exit if no customer session
-
-        // Connect only if not already connected
-        if (!socketRef.current) {
-            console.log("[Customer] Connecting WebSocket...");
-            socketRef.current = io(SOCKET_URL);
-            const socket = socketRef.current;
-            const customerUserId = session.user.id;
-
-            socket.on('connect', () => { 
-                    console.log(`[Customer] WebSocket connected.`);
-                    socket.emit('register', customerUserId);
-                    
-                    // --- ADD THIS LINE ---
-                    // Tell the server which queue entry this socket represents
-                    socket.emit('registerQueueEntry', myQueueEntryId); 
-                    // --- END ADD ---
-                });
-
-            const messageListener = (incomingMessage) => {
-                console.log(`[Customer] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
-                // Update message list
-                setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-
-                // Mark as unread if chat window is not open
-                setIsChatOpen(currentIsOpen => {
-                    if (!currentIsOpen) {
-                        console.log(`[Customer] Chat not open. Marking as unread.`);
-                        setHasUnreadFromBarber(true);
-                    }
-                    return currentIsOpen; // Return current state unchanged
-                });
-            };
-            socket.on('chat message', messageListener);
-
-            socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-            socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-        }
-   }, [session]); // Effect only depends on session login state
-
-   // Fetch Public Queue Data
-   // --- MODIFIED: Added useCallback and loading state ---
-   const fetchPublicQueue = useCallback(async (barberId) => {
-      if (!barberId) {
-          setLiveQueue([]);
-          setIsQueueLoading(false); // Stop loading if no barber
-          return;
-      }
-      setIsQueueLoading(true); // Start loading before fetch
-      try {
-        const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
-        setLiveQueue(response.data || []);
-      } catch (error) {
-          console.error("Failed fetch public queue:", error);
-          setLiveQueue([]);
-          setQueueMessage("Could not load queue data."); // Show error
-      } finally {
-          setIsQueueLoading(false); // Stop loading after fetch/error
-      }
-    }, []); // Empty dependency array for useCallback
-
-   // --- Fetch Service Menu (Runs only once) ---
-   useEffect(() => {
-        const fetchServices = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/services`);
-                setServices(response.data || []);
-            } catch (error) {
-                console.error('Failed to fetch services:', error);
-            }
-        };
-        fetchServices();
-    }, []); // Run only once
-
-   // --- OneSignal Setup ---
-    useEffect(() => {
-    if (window.OneSignal) {
-            window.OneSignal.push(function() {
-                window.OneSignal.showSlidedownPrompt();
-            });
-            window.OneSignal.push(function() {
-                window.OneSignal.getUserId(function(userId) {
-                    console.log("OneSignal Player ID:", userId);
-                    setPlayerId(userId);
-                });
-            });
-        }
-    }, []);
-
-   // Fetch Available Barbers (Runs every 15s)
-   useEffect(() => {
-    const loadBarbers = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/barbers`);
-        setBarbers(response.data || []);
-         setMessage(prev => (prev === 'Loading available barbers...' ? '' : prev));
-      } catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
     };
-    loadBarbers();
-    const intervalId = setInterval(loadBarbers, 15000);
-    return () => clearInterval(intervalId);
-   }, []);
-
-    // --- Effect to manage stopBlinking listeners ---
-    useEffect(() => {
-        const handleFocus = () => stopBlinking();
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                stopBlinking();
-            }
-        };
-        window.addEventListener("focus", handleFocus);
-        document.addEventListener("visibilitychange", handleVisibility);
-        return () => {
-            window.removeEventListener("focus", handleFocus);
-            document.removeEventListener("visibilitychange", handleVisibility);
-            stopBlinking(); // Ensure blinking stops if component unmounts while blinking
-        };
-    }, []);
+    const handleMaskMouseDown = (e) => {
+        isDrawing.current = true;
+        const pos = e.target.getStage().getPointerPosition();
+        setMaskLines([...maskLines, { tool: 'brush', points: [pos.x, pos.y] }]);
+    };
+    const handleMaskMouseMove = (e) => {
+        if (!isDrawing.current) { return; }
+        const stage = e.target.getStage();
+        const point = stage.getPointerPosition();
+        let lastLine = maskLines[maskLines.length - 1];
+        lastLine.points = lastLine.points.concat([point.x, point.y]);
+        maskLines.splice(maskLines.length - 1, 1, lastLine);
+        setMaskLines(maskLines.concat());
+    };
+    const handleMaskMouseUp = () => { isDrawing.current = false; };
+    const clearMask = () => { setMaskLines([]); };
+    const startDrawing = handleMaskMouseDown;
+    const draw = handleMaskMouseMove;
+    const endDrawing = handleMaskMouseUp;
 
 
-    // --- Realtime and Notification Effect (For AFTER joining) ---
-   useEffect(() => {
-        // --- MODIFIED: Trigger initial fetch when joinedBarberId changes ---
-        if (joinedBarberId) {
-            fetchPublicQueue(joinedBarberId);
-        } else {
-            setLiveQueue([]); // Clear queue if not joined
-            setIsQueueLoading(false);
+    // --- AI Generation Logic (Frontend Upload/Call) ---
+    const handleGeneratePreview = async () => {
+        console.log("RUNNING AI PREVIEW HANDLER - Exporting 512x512 images..."); 
+        if (!file || !prompt || maskLines.length === 0) {
+            setMessage('Please upload photo, describe haircut, AND draw a mask.');
+            return;
         }
 
-        // Request notification permission
-        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-             Notification.requestPermission();
-        }
+        setIsGenerating(true); setIsLoading(true); setGeneratedImage(null);
+        setMessage('Step 1/4: Processing & uploading image...');
 
-        let queueChannel = null;
-        let refreshInterval = null;
-
-        if (joinedBarberId && myQueueEntryId && supabase?.channel) { // Ensure myQueueEntryId is also set
-            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
-            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
-                    console.log("Realtime Update Received:", payload);
-                    
-                    // --- Check if THIS user's status changed ---
-                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
-                        const newStatus = payload.new.status;
-                        console.log(`My status updated to: ${newStatus}`);
-
-                        if (newStatus === 'Up Next') {
-                            // --- Trigger "Your Turn" alerts (Existing logic) ---
-                            console.log('My status is Up Next! Triggering ALL alerts.');
-                            startBlinking();
-                            setIsYourTurnModalOpen(true);
-                            if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
-                        } 
-                        // --- NEW: Check for Complete or Cancelled ---
-                        else if (newStatus === 'Done') {
-                            console.log('My status is Done! Triggering Complete modal.');
-                            setIsServiceCompleteModalOpen(true);
-                            stopBlinking(); // Ensure blinking stops
-                        } else if (newStatus === 'Cancelled') {
-                            console.log('My status is Cancelled! Triggering Cancelled modal.');
-                            setIsCancelledModalOpen(true);
-                            stopBlinking(); // Ensure blinking stops
-                        }
-                    } 
-                    // --- Always refresh the queue list regardless of who changed ---
-                    fetchPublicQueue(joinedBarberId);
-                })
-                .subscribe((status, err) => {
-                     if (status === 'SUBSCRIBED') {
-                         console.log('Subscribed to Realtime queue!');
-                         setQueueMessage(''); // Clear error message on successful subscribe
-                         fetchPublicQueue(joinedBarberId); // Fetch again on successful subscribe
-                     } else {
-                         console.error('Supabase Realtime subscription error:', status, err);
-                         setQueueMessage('Live updates unavailable.');
-                     }
-                });
-
-        }
-
-        // Cleanup function
-        return () => {
-            console.log("Cleaning up queue subscription and interval for barber:", joinedBarberId);
-            if (queueChannel && supabase?.removeChannel) {
-                 supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err));
-             }
-            if (refreshInterval) { clearInterval(refreshInterval); }
-        };
-    // --- MODIFIED: Added fetchPublicQueue to dependencies ---
-    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
-
-
-    // --- EWT Calculation Effect (Runs BEFORE joining) ---
-    useEffect(() => {
-        if (selectedBarber && !myQueueEntryId) { // Only run if selecting barber *before* joining
-            fetchPublicQueue(selectedBarber);
-        } else if (!selectedBarber && !myQueueEntryId) {
-            setLiveQueue([]); // Clear queue if no barber selected
-        }
-    // --- MODIFIED: Added myQueueEntryId and fetchPublicQueue ---
-    }, [selectedBarber, myQueueEntryId, fetchPublicQueue]);
-
-    // --- EWT Calculation (based on liveQueue) ---
-    useEffect(() => {
-        const calculateWaitTime = () => {
-            const relevantEntries = liveQueue.filter(
-                entry => entry.status === 'Waiting' || entry.status === 'Up Next'
-            );
-            setPeopleWaiting(relevantEntries.length);
-
-            // Calculate wait time based ONLY on people ahead of the current user
-            const myIndex = liveQueue.findIndex(entry => entry.id.toString() === myQueueEntryId);
-            const peopleAhead = myIndex !== -1 ? liveQueue.slice(0, myIndex) : liveQueue; // If not found (or before joining), consider everyone
-
-            const totalWait = peopleAhead.reduce((sum, entry) => {
-                // Include 'In Progress' duration if someone is being served
-                if (entry.status === 'Waiting' || entry.status === 'Up Next' || entry.status === 'In Progress') {
-                    const duration = entry.services?.duration_minutes || 30; // Default 30 mins
-                    return sum + duration;
-                }
-                return sum;
-            }, 0);
-
-            setEstimatedWait(totalWait);
-        };
-
-        calculateWaitTime();
-    }, [liveQueue, myQueueEntryId]); // Recalculate when queue or my position changes
-
-    useEffect(() => {
-       // 2. Runs the 1-minute countdown timer
-       // Don't run a timer if not in queue
-       if (!myQueueEntryId) {
-           return;
-       }
-       const timerId = setInterval(() => {
-           setDisplayWait(prevTime => {
-               if (prevTime > 0) {
-                   return prevTime - 1; // Count down by 1 minute
-               }
-               return 0; // Stay at 0
-           });
-       }, 60000); // 60,000 ms = 1 minute
-
-       // Cleanup function
-       return () => {
-           clearInterval(timerId);
-       };
-   }, [myQueueEntryId]);
-   // --- END OF NEW HOOKS ---
-
-   // AI Preview Handler
-const handleGeneratePreview = async () => {
-    // Check if file and prompt exist
-    if (!file || !prompt) { 
-        setMessage('Please upload a photo and enter a prompt.'); 
-        return; 
-    }
-    
-    // Set loading/generating states
-    setIsGenerating(true); 
-    setIsLoading(true); // Also set general loading state
-    setGeneratedImage(null); // Clear previous image
-    setMessage('Step 1/3: Uploading...'); 
-    
-    // Create a unique file path
-    const filePath = `${Date.now()}.${file.name.split('.').pop()}`;
-    
-    try {
-        // Check if Supabase storage is configured
-        if (!supabase?.storage) throw new Error("Supabase storage not available.");
-        
-        // Upload the file to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-            .from('haircut_references') // Your bucket name
-            .upload(filePath, file);
+        try {
+            // --- 1. Export RESIZED 512x512 image from canvas ---
+            const imageDataURL = imageLayerRef.current.toDataURL(); 
+            const imageBlob = dataURLtoBlob(imageDataURL); // Use the helper
+            const originalFilePath = `original/${Date.now()}-resized.png`;
             
-        if (uploadError) throw uploadError; // Throw error if upload fails
-        
-        // Get the public URL of the uploaded file
-        const { data: urlData } = supabase.storage
-            .from('haircut_references')
-            .getPublicUrl(filePath);
-            
-        if (!urlData?.publicUrl) throw new Error("Could not get public URL for uploaded file.");
-        
-        const imageUrl = urlData.publicUrl; // Store the URL
-        
-        // Update status message
-        setMessage('Step 2/3: Generating AI haircut... (takes ~15-30s)');
-        
-        // Call your backend endpoint to trigger AI generation
-        const response = await axios.post(`${API_URL}/generate-haircut`, { 
-            imageUrl, // Send the image URL
-            prompt    // Send the user's prompt
-        });
-        
-        // Set the generated image URL received from the backend
-        setGeneratedImage(response.data.generatedImageUrl); 
-        setMessage('Step 3/3: Success! Check preview.'); // Update status message
-        
-    } catch (error) { 
-        // Handle errors during the process
-        console.error('AI generation pipeline error:', error); 
-        setMessage(`AI failed: ${error.response?.data?.error || error.message}`); // Show error message
-    } finally { 
-        // Reset loading states regardless of success or failure
-        setIsGenerating(false); 
-        setIsLoading(false); 
-    }
-};
+            const { error: uploadError } = await supabase.storage
+                .from('haircut_references')
+                .upload(originalFilePath, imageBlob, { contentType: 'image/png' }); 
 
-    // Join Queue Handler
+            if (uploadError) throw uploadError;
+
+            const { data: originalUrlData } = supabase.storage
+                .from('haircut_references')
+                .getPublicUrl(originalFilePath);
+            if (!originalUrlData.publicUrl) throw new Error('Could not get public URL for original image.');
+            const imageUrl = originalUrlData.publicUrl;
+            
+            setMessage('Step 2/4: Uploading hair mask...');
+
+            // --- 2. Export 512x512 MASK image from canvas ---
+            const maskDataURL = maskLayerRef.current.toDataURL();
+            const maskBlob = dataURLtoBlob(maskDataURL);
+            const maskFilePath = `mask/${Date.now()}-mask.png`;
+
+            const { error: maskUploadError } = await supabase.storage
+                .from('haircut_references')
+                .upload(maskFilePath, maskBlob, { contentType: 'image/png' });
+            
+            if (maskUploadError) throw maskUploadError;
+
+            const { data: maskUrlData } = supabase.storage
+                .from('haircut_references')
+                .getPublicUrl(maskFilePath);
+            if (!maskUrlData.publicUrl) throw new Error('Could not get public URL for mask image.');
+            const maskUrl = maskUrlData.publicUrl;
+
+            setMessage('Step 3/4: Generating AI haircut... (this takes ~30s)');
+            
+            // --- 3. Call Backend with BOTH 512x512 URLs ---
+            const response = await axios.post(`${API_URL}/generate-haircut`, {
+                imageUrl, // The 512x512 photo URL
+                maskUrl,  // The 512x512 mask URL
+                prompt
+            });
+
+            setGeneratedImage(response.data.generatedImageUrl);
+            setMessage('Step 4/4: Success! Check preview.');
+
+        } catch (error) {
+            console.error('AI generation pipeline error:', error);
+            setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setIsGenerating(false);
+            setIsLoading(false);
+        }
+    };
+
+    // --- Queue Handlers ---
    const handleJoinQueue = async (e) => {
         e.preventDefault();
-        if (!customerName || !selectedBarber || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
+        // Check core fields using the correct state names
+        if (!customerName || !selectedBarberId || !selectedServiceId) { 
+            setMessage('Name, Barber, AND Service required.'); 
+            return; 
+        }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
+
         setIsLoading(true); setMessage('Joining queue...');
         try {
-            const imageUrlToSave = generatedImage;
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                barber_id: selectedBarber,
-                reference_image_url: imageUrlToSave, // Note: imageUrlToSave is defined just above this line
+                barber_id: selectedBarberId, 
+                reference_image_url: null, 
                 service_id: selectedServiceId,
-                player_id: player_id, // <-- Make sure player_id state is correctly set
-                user_id: session.user.id // <-- ADD THIS LINE
+                player_id: player_id,
+                user_id: session.user.id,
+                // --- AI Fields being passed to RPC ---
+                ai_haircut_image_url: shareAiImage ? generatedImage : null,
+                share_ai_image: shareAiImage
             });
-            const newEntry = response.data;
-            const newBarberId = parseInt(selectedBarber);
-            setMyQueueEntryId(newEntry.id.toString()); // Store as string
-            setJoinedBarberId(newBarberId.toString()); // Store as string
-            localStorage.setItem('myQueueEntryId', newEntry.id.toString());
-            localStorage.setItem('joinedBarberId', newBarberId.toString());
-            setMessage(`Success! You joined for ${barbers.find(b => b.id === newBarberId)?.full_name || `Barber #${newBarberId}`}.`);
-            // Clear only specific fields
-            setSelectedBarber(''); setFile(null); setPrompt(''); setSelectedServiceId(''); setGeneratedImage(null);
-        } catch (error) {
+            
+            // Success Logic
+            const newQueueEntry = response.data;
+            if (newQueueEntry && newQueueEntry.id) {
+                setMessage(`Success! You are #${newQueueEntry.id} in the queue.`);
+                localStorage.setItem('myQueueEntryId', newQueueEntry.id);
+                localStorage.setItem('joinedBarberId', newQueueEntry.barber_id);
+                setMyQueueEntryId(newQueueEntry.id);
+                setJoinedBarberId(newQueueEntry.barber_id);
+            } else {
+                throw new Error("Invalid response from server after joining queue.");
+            }
+        } catch (error) { 
             console.error('Failed to join queue:', error);
-            const errorMessage = error.response?.data?.error || error.message;
-            setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
-            setMyQueueEntryId(null); setJoinedBarberId(null);
-            localStorage.removeItem('myQueueEntryId');
-            localStorage.removeItem('joinedBarberId');
-        } finally { setIsLoading(false); }
+            const errorMessage = error.response?.data?.error || error.message || 'Could not join the queue.';
+            setMessage(errorMessage);
+        } finally { 
+            setIsLoading(false); 
+            setShareAiImage(false); // Reset share state
+        }
     };
 
     // Leave Queue Handler
