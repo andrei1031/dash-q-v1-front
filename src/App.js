@@ -898,7 +898,19 @@ function CustomerView({ session }) {
       <div className="card">
         {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
-        <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>You're Up Next!</h2><p>Hey, let’s make sure everyone gets a chance to speak! If you’re not ready to jump in by the minute, please find a seat.</p><button id="close-modal-btn" onClick={handleModalClose}>Got It!</button></div></div>
+        {/* --- "Your Turn" Modal --- */}
+        <div
+            id="your-turn-modal-overlay"
+            className="modal-overlay"
+            style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}
+        >
+            <div className="modal-content">
+                <h2>Great, you’re up next!</h2>
+                <p>Please take a seat and stay put.</p>
+                <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
+            </div>
+        </div>
+        {/* --- "Service Complete" Modal --- */}
         <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Service Complete!</h2><p>Thank you!</p><button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
