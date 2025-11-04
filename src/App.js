@@ -463,6 +463,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     );
 }
 
+// ##############################################
+// ##       CUSTOMER-SPECIFIC COMPONENTS        ##
+// ##############################################
+
 // --- CustomerAppLayout defined here, so App can find it ---
 function CustomerAppLayout({ session }) {
     const handleLogout = async () => {
@@ -505,6 +509,478 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
     const currentBarberName = barberProfile?.full_name;
     
     return ( <div className="app-layout barber-layout"><header className="app-header"><h1>Barber: {currentBarberName || '...'}</h1><div className='header-controls'>{barberProfile && <AvailabilityToggle {...{ barberProfile, session, onAvailabilityChange: handleAvailabilityChange }}/>}<button onClick={handleLogout} className='logout-button'>Logout</button></div></header><div className="container">{currentBarberId ? (<><BarberDashboard {...{ barberId: currentBarberId, barberName: currentBarberName, onCutComplete: handleCutComplete, session }} /><AnalyticsDashboard {...{ barberId: currentBarberId, refreshSignal }} /></>) : (<div className="card"><p>Loading...</p></div>)}</div></div> );
+}
+
+// --- CustomerView (Handles Joining Queue & Live View for Customers) ---
+function CustomerView({ session }) {
+   // --- State ---
+   const [barbers, setBarbers] = useState([]);
+   const [selectedBarberId, setSelectedBarberId] = useState(''); // Use ID for selection
+   const [customerName] = useState(() => session.user?.user_metadata?.full_name || '');
+   const [customerPhone, setCustomerPhone] = useState('');
+   const [customerEmail] = useState(() => session.user?.email || '');
+   const [message, setMessage] = useState('');
+   const [player_id, setPlayerId] = useState(null);
+   const [myQueueEntryId, setMyQueueEntryId] = useState(() => localStorage.getItem('myQueueEntryId') || null);
+   const [joinedBarberId, setJoinedBarberId] = useState(() => localStorage.getItem('joinedBarberId') || null);
+   const [liveQueue, setLiveQueue] = useState([]);
+   const [queueMessage, setQueueMessage] = useState('');
+   const [estimatedWait, setEstimatedWait] = useState(0);
+   const [peopleWaiting, setPeopleWaiting] = useState(0);
+   const [prompt, setPrompt] = useState(''); // Only prompt is needed
+   const [isGenerating, setIsGenerating] = useState(false);
+   const [isLoading, setIsLoading] = useState(false);
+   const [isQueueLoading, setIsQueueLoading] = useState(true);
+   const [services, setServices] = useState([]);
+   const [selectedServiceId, setSelectedServiceId] = useState('');
+   const [isChatOpen, setIsChatOpen] = useState(false);
+   const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
+   const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
+   const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
+   const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
+   const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
+   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
+   const [displayWait, setDisplayWait] = useState(0);
+   const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
+   const [isOnCooldown, setIsOnCooldown] = useState(false);
+   const locationWatchId = useRef(null);
+   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
+   const socketRef = useRef(null);
+   const liveQueueRef = useRef([]); // For smart EWT
+   
+   // --- AI Text-to-Image State ---
+   const [imageOptions, setImageOptions] = useState([]); // Holds array of URLs
+   const [selectedAiImage, setSelectedAiImage] = useState(null); // The customer's final choice
+   const [shareAiImage, setShareAiImage] = useState(false); // Share with barber checkbox
+
+   // --- Calculated Vars ---
+   const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
+   const upNext = liveQueue.find(entry => entry.status === 'Up Next');
+   const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+   const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
+   const currentChatTargetBarberUserId = targetBarber?.user_id;
+
+   // --- Handlers ---
+   const handleCloseInstructions = () => {
+       localStorage.setItem('hasSeenInstructions_v1', 'true');
+       setIsInstructionsModalOpen(false);
+   };
+   const sendCustomerMessage = (recipientId, messageText) => {
+        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
+            const messageData = { senderId: session.user.id, recipientId, message: messageText };
+            socketRef.current.emit('chat message', messageData);
+            setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
+        } else { console.warn("[Customer] Cannot send message."); setMessage("Chat disconnected."); }
+   };
+   const fetchPublicQueue = useCallback(async (barberId) => {
+      if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
+      setIsQueueLoading(true);
+      try {
+        const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
+        const queueData = response.data || [];
+        setLiveQueue(queueData);
+        liveQueueRef.current = queueData; // Update ref
+      } catch (error) { 
+          console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
+      } finally { setIsQueueLoading(false); }
+    }, []); // Removed dependencies, they are set in parent scope
+    
+   const handleGeneratePreview = async () => {
+        if (!prompt) { 
+            setMessage('A haircut prompt is required.'); 
+            return; 
+        }
+
+        setIsGenerating(true); 
+        setIsLoading(true);
+        setImageOptions([]); // Clear previous options
+        setSelectedAiImage(null); // Clear previous selection
+
+        try {
+            setMessage('Generating 4 haircut options...');
+            
+            // Call backend (Endpoint 7) - NOW PURE TEXT
+            const response = await axios.post(`${API_URL}/generate-haircut`, { prompt });
+
+            if (response.data?.generatedImageUrls) {
+                setImageOptions(response.data.generatedImageUrls); // Save the array of URLs
+                setMessage('Success! Choose your preferred option.');
+            } else {
+                 throw new Error('No images received from the AI service.');
+            }
+
+        } catch (error) {
+            console.error('AI generation failed:', error);
+            setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setIsGenerating(false);
+            setIsLoading(false);
+        }
+    };
+    
+   const handleJoinQueue = async (e) => {
+        e.preventDefault();
+        // --- FIX: Use selectedBarberId ---
+        if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
+        if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
+        if (imageOptions.length > 0 && !selectedAiImage) { setMessage('Please select one of the AI images to continue.'); return; }
+        setIsLoading(true); setMessage('Joining queue...');
+        try {
+            const response = await axios.post(`${API_URL}/queue`, {
+                customer_name: customerName,
+                customer_phone: customerPhone,
+                customer_email: customerEmail,
+                barber_id: selectedBarberId, // <<< FIX
+                reference_image_url: null,
+                service_id: selectedServiceId,
+                player_id: player_id,
+                user_id: session.user.id,
+                ai_haircut_image_url: shareAiImage ? selectedAiImage : null,
+                share_ai_image: shareAiImage
+            });
+            const newEntry = response.data;
+            if (newEntry && newEntry.id) {
+                setMessage(`Success! You are #${newEntry.id} in the queue.`);
+                localStorage.setItem('myQueueEntryId', newEntry.id.toString());
+                localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
+                setMyQueueEntryId(newEntry.id.toString());
+                setJoinedBarberId(newEntry.barber_id.toString());
+                setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
+                setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
+            } else { throw new Error("Invalid response from server."); }
+        } catch (error) {
+            console.error('Failed to join queue:', error);
+            const errorMessage = error.response?.data?.error || error.message;
+            setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
+        } finally { setIsLoading(false); }
+    };
+    
+   const handleLeaveQueue = () => { handleReturnToJoin(true); };
+   
+   const handleReturnToJoin = async (userInitiated = false) => {
+        console.log("[handleReturnToJoin] Function called.");
+        if (userInitiated && myQueueEntryId) {
+            setIsLoading(true);
+            try { await axios.delete(`${API_URL}/queue/${myQueueEntryId}`); setMessage("You left the queue."); } 
+            catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
+            finally { setIsLoading(false); }
+        }
+        setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false); setIsYourTurnModalOpen(false);
+        stopBlinking();
+        localStorage.removeItem('myQueueEntryId'); localStorage.removeItem('joinedBarberId');
+        setMyQueueEntryId(null); setJoinedBarberId(null);
+        setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
+        setPrompt(''); setSelectedServiceId(''); setMessage('');
+        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
+        setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
+        setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
+        console.log("[handleReturnToJoin] State reset complete.");
+   };
+   
+   const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
+
+   // --- Effects ---
+   useEffect(() => { // Geolocation Watcher
+     const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
+     const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
+     const DISTANCE_THRESHOLD_METERS = 200;
+     if (!('geolocation' in navigator)) { console.warn('Geolocation not available.'); return; }
+     if (myQueueEntryId) {
+       console.log('User is in queue, starting location watch...');
+       const onPositionUpdate = (position) => {
+         const { latitude, longitude } = position.coords;
+         const distance = getDistanceInMeters(latitude, longitude, BARBERSHOP_LAT, BARBERSHOP_LON);
+         console.log(`Current distance: ${Math.round(distance)}m. Cooldown: ${isOnCooldown}`);
+         if (distance > DISTANCE_THRESHOLD_METERS) {
+           if (!isTooFarModalOpen && !isOnCooldown) {
+             console.log('Customer is too far! Triggering modal.');
+             setIsTooFarModalOpen(true);
+             setIsOnCooldown(true); 
+           }
+         } else {
+           if (isOnCooldown) { console.log('Customer is back in range. Resetting cooldown.'); setIsOnCooldown(false); }
+         }
+       };
+       const onPositionError = (err) => { console.warn(`Geolocation error (Code ${err.code}): ${err.message}`); };
+       locationWatchId.current = navigator.geolocation.watchPosition( onPositionUpdate, onPositionError, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+     }
+     return () => { if (locationWatchId.current) { navigator.geolocation.clearWatch(locationWatchId.current); console.log('Stopping geolocation watch.'); } };
+   }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown]);
+   
+   useEffect(() => { // First Time Instructions
+        const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
+        if (!hasSeen) { setIsInstructionsModalOpen(true); }
+   }, []);
+   
+   useEffect(() => { // Fetch Services
+        const fetchServices = async () => {
+            try { const response = await axios.get(`${API_URL}/services`); setServices(response.data || []); } 
+            catch (error) { console.error('Failed to fetch services:', error); }
+        };
+        fetchServices();
+    }, []);
+    
+   useEffect(() => { // OneSignal Setup
+        if (window.OneSignal) {
+            window.OneSignal.push(function() { window.OneSignal.showSlidedownPrompt(); });
+            window.OneSignal.push(function() { window.OneSignal.getUserId(function(userId) { console.log("OneSignal Player ID:", userId); setPlayerId(userId); }); });
+        }
+    }, []);
+    
+   useEffect(() => { // Fetch Available Barbers
+        const loadBarbers = async () => {
+          try { const response = await axios.get(`${API_URL}/barbers`); setBarbers(response.data || []); } 
+          catch (error) { console.error('Failed fetch available barbers:', error); setMessage('Could not load barbers.'); setBarbers([]); }
+        };
+        loadBarbers();
+        const intervalId = setInterval(loadBarbers, 15000);
+        return () => clearInterval(intervalId);
+   }, []);
+   
+    useEffect(() => { // Blinking Tab Listeners
+        const handleFocus = () => stopBlinking();
+        const handleVisibility = () => { if (document.visibilityState === 'visible') stopBlinking(); };
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
+    }, []);
+    
+   useEffect(() => { // Realtime Subscription & Notifications
+        if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
+        let queueChannel = null; let refreshInterval = null;
+        if (joinedBarberId && myQueueEntryId && supabase?.channel) {
+            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
+            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
+                    console.log("Realtime Update Received:", payload);
+                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
+                        const newStatus = payload.new.status;
+                        console.log(`My status updated to: ${newStatus}`);
+                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
+                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
+                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
+                    } 
+                    fetchPublicQueue(joinedBarberId);
+                })
+                .subscribe((status, err) => {
+                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); setQueueMessage(''); fetchPublicQueue(joinedBarberId); } 
+                     else { console.error('Supabase Realtime error:', status, err); setQueueMessage('Live updates unavailable.'); }
+                });
+            refreshInterval = setInterval(() => { console.log("Periodic refresh..."); fetchPublicQueue(joinedBarberId); }, 15000);
+        }
+        return () => {
+            console.log("Cleaning up queue subscription for barber:", joinedBarberId);
+            if (queueChannel && supabase?.removeChannel) { supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err)); }
+            if (refreshInterval) { clearInterval(refreshInterval); }
+        };
+    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
+    
+   useEffect(() => { // EWT Before Joining
+        if (selectedBarberId && !myQueueEntryId) { fetchPublicQueue(selectedBarberId); } 
+        else if (!selectedBarberId && !myQueueEntryId) { setLiveQueue([]); }
+    }, [selectedBarberId, myQueueEntryId, fetchPublicQueue]);
+    
+   useEffect(() => { // Smart EWT Calculation
+       const calculateWaitTime = () => {
+           const oldQueue = liveQueueRef.current || [];
+           const newQueue = liveQueue;
+           const relevantEntries = newQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
+           setPeopleWaiting(relevantEntries.length);
+           const myIndexNew = newQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+           const peopleAheadNew = myIndexNew !== -1 ? newQueue.slice(0, myIndexNew) : newQueue; 
+           const newTotalWait = peopleAheadNew.reduce((sum, entry) => {
+               if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) { return sum + (entry.services?.duration_minutes || 30); }
+               return sum;
+           }, 0);
+           setEstimatedWait(newTotalWait);
+           setDisplayWait(currentDisplayWait => {
+               const leaver = oldQueue.find(oldEntry => !newQueue.some(newEntry => newEntry.id === oldEntry.id));
+               const myIndexOld = oldQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+               const leaverIndexOld = leaver ? oldQueue.findIndex(e => e.id === leaver.id) : -1;
+               if (leaver && myIndexOld !== -1 && leaverIndexOld !== -1 && leaverIndexOld < myIndexOld) {
+                   const leaverDuration = leaver.services?.duration_minutes || 30;
+                   console.log(`Leaver detected in front: ${leaver.id}, duration: ${leaverDuration}`);
+                   const newCountdown = currentDisplayWait - leaverDuration;
+                   return newCountdown > 0 ? newCountdown : 0;
+               }
+               if (currentDisplayWait === 0 || newTotalWait < currentDisplayWait) {
+                    return newTotalWait;
+               }
+               return currentDisplayWait; 
+           });
+       };
+       calculateWaitTime();
+   }, [liveQueue, myQueueEntryId, estimatedWait]); // Added estimatedWait
+   
+   useEffect(() => { // 1-Minute Countdown Timer
+       if (!myQueueEntryId) return; 
+       const timerId = setInterval(() => { setDisplayWait(prevTime => (prevTime > 0 ? prevTime - 1 : 0)); }, 60000);
+       return () => clearInterval(timerId);
+   }, [myQueueEntryId]);
+   
+   useEffect(() => { // Customer WebSocket
+        // --- FIX: Use currentChatTargetBarberUserId ---
+        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
+            if (!socketRef.current) {
+                console.log("[Customer] Connecting WebSocket...");
+                socketRef.current = io(SOCKET_URL);
+                const socket = socketRef.current;
+                const customerUserId = session.user.id;
+                socket.on('connect', () => { 
+                    console.log(`[Customer] WebSocket connected.`);
+                    socket.emit('register', customerUserId);
+                    socket.emit('registerQueueEntry', myQueueEntryId);
+                });
+                const messageListener = (incomingMessage) => {
+                    console.log("[Customer] Received chat message:", incomingMessage);
+                    // --- FIX: Use currentChatTargetBarberUserId ---
+                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
+                        setIsChatOpen(currentIsOpen => {
+                            if (!currentIsOpen) { console.log("[Customer] Chat closed. Marking as unread."); setHasUnreadFromBarber(true); } 
+                            else { console.log("[Customer] Chat open. Not marking as unread."); }
+                            return currentIsOpen;
+                        });
+                    } else { console.log("[Customer] Msg from unexpected sender:", incomingMessage.senderId); }
+                };
+                socket.on('chat message', messageListener);
+                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+            }
+        } else {
+             if (socketRef.current) { console.log("[Customer] Disconnecting WebSocket."); socketRef.current.disconnect(); socketRef.current = null; }
+        }
+        return () => { if (socketRef.current) { console.log("[Customer] Cleaning up WebSocket."); socketRef.current.disconnect(); socketRef.current = null; } };
+    // --- FIX: Use correct dependencies ---
+    }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]); // Removed isChatOpen
+
+   // --- Debug Log ---
+   console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
+
+   // --- Render Customer View ---
+   return (
+      <div className="card">
+        {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
+        <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
+        <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>You're Up Next!</h2><p>Hey, let’s make sure everyone gets a chance to speak! If you’re not ready to jump in by the minute, please find a seat.</p><button id="close-modal-btn" onClick={handleModalClose}>Got It!</button></div></div>
+        <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Service Complete!</h2><p>Thank you!</p><button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
+        <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
+        <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
+
+        {/* --- Join Form or Live Queue View --- */}
+        {!myQueueEntryId ? (
+           <> {/* --- JOIN FORM JSX --- */}
+               <h2>Join the Queue</h2>
+                <form onSubmit={handleJoinQueue}>
+                    <div className="form-group"><label>Your Name:</label><input type="text" value={customerName} required readOnly className="prefilled-input" /></div>
+                    <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
+                    <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
+                    <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
+                    {/* --- FIX: Use selectedBarberId --- */}
+                    <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
+                    {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
+                    
+                    {/* --- AI Section (Text-to-Image) --- */}
+                    <div className="ai-generator">
+                        <p className="ai-title">AI Haircut Preview (Optional)</p>
+                        <div className="form-group">
+                            <label>1. Describe Your Desired Haircut:</label>
+                            <input 
+                                type="text" 
+                                value={prompt} 
+                                placeholder="e.g., 'short fade, cyberpunk mohawk'" 
+                                onChange={(e) => setPrompt(e.target.value)} 
+                            />
+                        </div>
+                        <button 
+                            type="button" 
+                            onClick={handleGeneratePreview}
+                            className="generate-button" 
+                            disabled={!prompt || isLoading || isGenerating}
+                        >
+                            {isGenerating ? 'Generating...' : 'Generate AI Options'}
+                        </button>
+                        {isLoading && isGenerating && <p className='loading-text'>Generating options...</p>}
+
+                        {/* --- Image Selection Grid --- */}
+                        {imageOptions.length > 0 && (
+                            <div className="ai-selection-grid-section">
+                                <h3>2. Choose Your Style:</h3>
+                                <div className="selection-grid">
+                                    {imageOptions.map((url, index) => (
+                                        <div 
+                                            key={index} 
+                                            onClick={() => setSelectedAiImage(url)} 
+                                            className={`image-option ${selectedAiImage === url ? 'selected' : ''}`}
+                                        >
+                                            <img src={url} alt={`Option ${index + 1}`} />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Share Option */}
+                                {selectedAiImage && (
+                                    <div className="join-with-ai-options">
+                                        <div className="form-group checkbox-group">
+                                            {/* --- FIX: Use shareAiImage state --- */}
+                                            <input type="checkbox" id="share-ai-final" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
+                                            <label htmlFor="share-ai-final">Share selected style with the barber?</label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {/* --- END AI Section --- */}
+                    
+                    {/* --- FIX: Disable button if selectedBarberId is missing --- */}
+                    <button type="submit" disabled={isLoading || isGenerating || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
+                </form>
+                {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
+           </>
+        ) : (
+           <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
+               <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
+               <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
+               <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
+               {queueMessage && <p className="message error">{queueMessage}</p>}
+               {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
+               <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
+               <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
+               
+               {/* --- Chat Button (with Badge) --- */}
+               {!isChatOpen && myQueueEntryId && (
+                   <button onClick={() => {
+                           if (currentChatTargetBarberUserId) {
+                               setChatTargetBarberUserId(currentChatTargetBarberUserId); // <<< FIX
+                               setIsChatOpen(true);
+                               setHasUnreadFromBarber(false); // Mark as read
+                           } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
+                       }}
+                       className="chat-toggle-button"
+                   >
+                       Chat with Barber
+                       {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
+                   </button>
+               )}
+               {isChatOpen && (<button onClick={() => setIsChatOpen(false)} className="chat-toggle-button close">Close Chat</button>)}
+
+               {/* --- Chat Window --- */}
+               {isChatOpen && currentChatTargetBarberUserId && (
+                   <ChatWindow
+                       currentUser_id={session.user.id}
+                       otherUser_id={currentChatTargetBarberUserId} // <<< FIX
+                       messages={chatMessagesFromBarber} // Pass message state
+                       onSendMessage={sendCustomerMessage} // Pass send handler
+                       isVisible={isChatOpen} // Pass visibility
+                   />
+               )}
+               <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
+           </div>
+        )}
+      </div>
+    );
 }
 
 // ##############################################
