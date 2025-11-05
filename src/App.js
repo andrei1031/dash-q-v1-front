@@ -824,9 +824,9 @@ function CustomerView({ session }) {
    
    // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
     useEffect(() => { 
-        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
-            
-            // Fetch history immediately when IDs are set
+    if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
+        
+        // This must run immediately to pull missed messages from the database.
             fetchChatHistory(myQueueEntryId); 
             
             if (!socketRef.current) {
@@ -843,8 +843,7 @@ function CustomerView({ session }) {
 
                 // The message listener must append the new message to the existing history state
                 const messageListener = (incomingMessage) => {
-                     console.log("[Customer] Received live chat message:", incomingMessage);
-                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
                         // Append the new message to the existing history state
                         setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
                         setIsChatOpen(currentIsOpen => {
@@ -853,9 +852,9 @@ function CustomerView({ session }) {
                         });
                     }
                 };
-                socket.on('chat message', messageListener);
-                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+                    socket.on('chat message', messageListener);
+                    socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+                    socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
             }
         } else {
              if (socketRef.current) { 
@@ -871,8 +870,7 @@ function CustomerView({ session }) {
                 socketRef.current = null; 
             } 
         };
-    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]); 
-   
+    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
    useEffect(() => { // Smart EWT Calculation
        const calculateWaitTime = () => {
            const oldQueue = liveQueueRef.current || [];
