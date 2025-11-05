@@ -584,8 +584,8 @@ function CustomerView({ session }) {
    const liveQueueRef = useRef([]); // For smart EWT
    
    // --- AI Text-to-Image State ---
-   const [imageOptions, setImageOptions] = useState([]); // Holds array of URLs
-   const [selectedAiImage, setSelectedAiImage] = useState(null); // The customer's final choice
+   const [recommendations, setRecommendations] = useState([]); // Holds {name, url}
+   const [selectedRecommendation, setSelectedRecommendation] = useState(null); // Holds the selected {name, url}
    const [shareAiImage, setShareAiImage] = useState(false); // Share with barber checkbox
 
    // --- Calculated Vars ---
@@ -628,24 +628,24 @@ function CustomerView({ session }) {
 
         setIsGenerating(true); 
         setIsLoading(true);
-        setImageOptions([]); // Clear previous options
-        setSelectedAiImage(null); // Clear previous selection
+        setRecommendations([]); // Clear previous recommendations
+        setSelectedRecommendation(null); // Clear previous selection
 
         try {
-            setMessage('Generating 4 haircut options...');
+            setMessage('Getting AI recommendations...');
             
-            // Call backend (Endpoint 7) - NOW PURE TEXT
-            const response = await axios.post(`${API_URL}/generate-haircut`, { prompt });
+            // Call the NEW backend endpoint
+            const response = await axios.post(`${API_URL}/api/recommend-haircuts`, { prompt }); // Use new endpoint
 
-            if (response.data?.generatedImageUrls) {
-                setImageOptions(response.data.generatedImageUrls); // Save the array of URLs
-                setMessage('Success! Choose your preferred option.');
+            if (response.data?.recommendations) {
+                setRecommendations(response.data.recommendations); // Save the array of {name, url}
+                setMessage('Success! Check the recommendations below.');
             } else {
-                 throw new Error('No images received from the AI service.');
+                 throw new Error('No recommendations received from the AI service.');
             }
 
         } catch (error) {
-            console.error('AI generation failed:', error);
+            console.error('AI recommendation failed:', error);
             setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
         } finally {
             setIsGenerating(false);
@@ -655,22 +655,24 @@ function CustomerView({ session }) {
     
    const handleJoinQueue = async (e) => {
         e.preventDefault();
-        // --- FIX: Use selectedBarberId ---
         if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
-        if (imageOptions.length > 0 && !selectedAiImage) { setMessage('Please select one of the AI images to continue.'); return; }
+        // Note: We no longer block if an AI image isn't selected, as it's optional
+        
         setIsLoading(true); setMessage('Joining queue...');
         try {
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                barber_id: selectedBarberId, // <<< FIX
-                reference_image_url: null,
+                barber_id: selectedBarberId,
+                reference_image_url: null, // We are using the new field
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
-                ai_haircut_image_url: shareAiImage ? selectedAiImage : null,
+                
+                // --- FIX: Send the selected recommendation URL ---
+                ai_haircut_image_url: shareAiImage ? selectedRecommendation?.imageUrl : null,
                 share_ai_image: shareAiImage
             });
             const newEntry = response.data;
@@ -680,8 +682,9 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
+                // Reset form
                 setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
-                setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
+                setRecommendations([]); setSelectedRecommendation(null); setShareAiImage(false); // Clear AI state
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -930,49 +933,65 @@ function CustomerView({ session }) {
                     
                     {/* --- AI Section (Text-to-Image) --- */}
                     <div className="ai-generator">
-                        <p className="ai-title">AI Haircut Preview (Optional)</p>
+                        <p className="ai-title">AI Haircut Recommender (Optional)</p>
+                        
+                        {/* Prompt Input */}
                         <div className="form-group">
-                            <label>1. Describe Your Desired Haircut:</label>
+                            <label>1. Describe your hair or desired style:</label>
                             <input 
                                 type="text" 
                                 value={prompt} 
-                                placeholder="e.g., 'short fade, cyberpunk mohawk'" 
+                                placeholder="e.g., 'short and professional' or 'long wavy hair'" 
                                 onChange={(e) => setPrompt(e.target.value)} 
                             />
                         </div>
+
+                        {/* Generate Button */}
                         <button 
                             type="button" 
                             onClick={handleGeneratePreview}
                             className="generate-button" 
                             disabled={!prompt || isLoading || isGenerating}
                         >
-                            {isGenerating ? 'Generating...' : 'Generate AI Options'}
+                            {isGenerating ? 'Getting Recommendations...' : 'Get AI Recommendations'}
                         </button>
-                        {isLoading && isGenerating && <p className='loading-text'>Generating options...</p>}
+                        
+                        {isLoading && isGenerating && <p className='loading-text'>Getting recommendations...</p>}
 
-                        {/* --- Image Selection Grid --- */}
-                        {imageOptions.length > 0 && (
-                            <div className="ai-selection-grid-section">
-                                <h3>2. Choose Your Style:</h3>
-                                <div className="selection-grid">
-                                    {imageOptions.map((url, index) => (
+                        {/* --- Recommendation List --- */}
+                        {recommendations.length > 0 && (
+                            <div className="ai-recommendation-section">
+                                <h3>2. Choose a Style:</h3>
+                                <div className="recommendation-list">
+                                    {recommendations.map((rec, index) => (
                                         <div 
                                             key={index} 
-                                            onClick={() => setSelectedAiImage(url)} 
-                                            className={`image-option ${selectedAiImage === url ? 'selected' : ''}`}
+                                            className={`recommendation-item ${selectedRecommendation?.name === rec.name ? 'selected' : ''}`}
                                         >
-                                            <img src={url} alt={`Option ${index + 1}`} />
+                                            <div className="rec-text">
+                                                <strong>{rec.name}</strong>
+                                                <a href={rec.imageUrl} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">
+                                                    View Examples
+                                                </a>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setSelectedRecommendation(rec)}
+                                                className="select-button small"
+                                            >
+                                                Select
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
 
                                 {/* Share Option */}
-                                {selectedAiImage && (
+                                {selectedRecommendation && (
                                     <div className="join-with-ai-options">
+                                        <p className="success-text">Selected: <strong>{selectedRecommendation.name}</strong></p>
                                         <div className="form-group checkbox-group">
-                                            {/* --- FIX: Use shareAiImage state --- */}
                                             <input type="checkbox" id="share-ai-final" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
-                                            <label htmlFor="share-ai-final">Share selected style with the barber?</label>
+                                            <label htmlFor="share-ai-final">Share this recommendation with the barber?</label>
                                         </div>
                                     </div>
                                 )}

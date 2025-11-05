@@ -891,3 +891,44 @@ button:disabled {
   margin-bottom: 10px; /* Space out the list items */
   line-height: 1.4;
 }
+.ai-recommendation-section {
+  margin-top: 20px;
+}
+.recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.recommendation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.recommendation-item.selected {
+  border-color: #007bff;
+  box-shadow: 0 2px 8px rgba(0,123,255,0.2);
+}
+.rec-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+.rec-text .ai-link {
+  font-size: 0.8em;
+  padding: 2px 6px;
+  margin-left: 0; /* Remove margin from photo link */
+}
+.select-button.small {
+  padding: 5px 10px;
+  font-size: 0.9em;
+  min-width: 70px;
+}
+.join-with-ai-options {
+  margin-top: 15px;
+}
