@@ -809,16 +809,24 @@ function CustomerView({ session }) {
 
             // The message listener must only update the state with NEW messages
             const messageListener = (incomingMessage) => {
-                 console.log("[Customer] Received live chat message:", incomingMessage);
-                 if (incomingMessage.senderId === currentChatTargetBarberUserId) {
-                    // Append the new message to the existing history state
-                    setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
-                    setIsChatOpen(currentIsOpen => {
-                        if (!currentIsOpen) { setHasUnreadFromBarber(true); } 
-                        return currentIsOpen;
-                    });
-                }
+                const customerId = incomingMessage.senderId;
+                
+                // 1. ALWAYS append the message to the state object for persistence
+                setChatMessages(prev => { 
+                    const msgs = prev[customerId] || []; 
+                    return { ...prev, [customerId]: [...msgs, incomingMessage] }; 
+                });
+
+                // 2. Handle unread status (Only if the chat is NOT open)
+                setOpenChatCustomerId(currentOpenChatId => {
+                     if (customerId !== currentOpenChatId) {
+                         // Message came from a different customer, or chat is closed.
+                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true }));
+                     }
+                     return currentOpenChatId;
+                });
             };
+            socket.on('chat message', messageListener);
             socket.on('chat message', messageListener);
             socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
             socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
