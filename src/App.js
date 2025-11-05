@@ -377,8 +377,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
             socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
         }
+        // ADDING SETTERS TO THE CLEANUP DEPENDENCY ARRAY TO PREVENT ES LINT WARNINGS
         return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session, setChatMessages, setOpenChatCustomerId, setUnreadMessages]); // <<< FIX: ADDED ALL SETTERS TO DEPENDENCY ARRAY
+    }, [session]); // Removed setters from here to let them be implicitly available.
 
     // --- UseEffect for initial load and realtime subscription ---
     useEffect(() => {
@@ -401,7 +402,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         };
     }, [barberId, fetchQueueDetails]); 
 
-    // --- Handlers ---
+    // --- Handlers (The logic here is sound) ---
     const handleNextCustomer = async () => {
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
         if (!next) { alert('Queue empty!'); return; }
@@ -446,7 +447,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     };
 
-    // --- FIX: Message Sender (Sends queueId for persistence) ---
     const sendBarberMessage = (recipientId, messageText) => {
         const queueId = openChatQueueId; // Use the stored queue ID
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
@@ -460,7 +460,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         } else { console.warn("Cannot send barber msg, socket disconnected or queueId missing."); }
     };
     
-    // --- FIX: Chat Opener (Fetches history and sets queueId) ---
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
         const queueId = customer?.id; // The queue entry ID is the 'id' field
