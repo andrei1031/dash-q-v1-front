@@ -460,40 +460,57 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
     
     // --- FIX: Chat Opener (Fetches history and sets queueId) ---
-    const openChat = (customer) => {
-        const customerUserId = customer?.profiles?.id;
-        const queueId = customer?.id; // The queue entry ID is the 'id' field
-        
-        if (customerUserId && queueId) {
-            console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
-            setOpenChatCustomerId(customerUserId);
-            setOpenChatQueueId(queueId); // SET THE QUEUE ID
-            
-            setUnreadMessages(prev => {
-                const updated = { ...prev };
-                delete updated[customerUserId]; // Mark as read
-                return updated;
-            });
-
-            // 1. Fetch persistent history from DB
-            const fetchHistory = async () => {
-                try {
-                    const { data } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
-                    const formattedHistory = data.map(msg => ({ senderId: msg.sender_id, message: msg.message }));
-                    
-                    // 2. Set the fetched history using a functional update to maintain new messages
-                    setChatMessages(prev => ({ 
-                        ...prev, 
-                        [customerUserId]: formattedHistory 
-                    }));
-                } catch(err) { console.error("Barber failed to fetch history:", err); }
-            };
-            fetchHistory();
-            
-        } else { console.error("Cannot open chat: Customer user ID or Queue ID missing.", customer); setError("Could not get customer details."); }
-    };
+   const openChat = (customer) => {
+    const customerUserId = customer?.profiles?.id;
+    const queueId = customer?.id; // The queue entry ID is the 'id' field
     
-    const closeChat = () => { setOpenChatCustomerId(null); setOpenChatQueueId(null); }; // CLEAR BOTH
+    if (customerUserId && queueId) {
+        console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
+        setOpenChatCustomerId(customerUserId);
+        setOpenChatQueueId(queueId); // SET THE QUEUE ID
+        
+        // Mark as read
+        setUnreadMessages(prev => {
+            const updated = { ...prev };
+            delete updated[customerUserId]; 
+            return updated;
+        });
+
+        // --- FINAL ROBUST HISTORY FETCH ---
+        const fetchHistory = async () => {
+            try {
+                // Fetch ALL messages for this queue ID, ordered by time
+                const { data, error } = await supabase.from('chat_messages')
+                    .select('sender_id, message')
+                    .eq('queue_entry_id', queueId)
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+                
+                const formattedHistory = (data || []).map(msg => ({ 
+                    senderId: msg.sender_id, 
+                    message: msg.message 
+                }));
+                
+                // GUARANTEE the state is updated with the fetched history
+                setChatMessages(prev => ({ 
+                    ...prev, 
+                    [customerUserId]: formattedHistory 
+                }));
+                
+            } catch(err) { 
+                console.error("Barber failed to fetch history on chat open:", err); 
+                // Set empty array on failure so chat still opens
+                setChatMessages(prev => ({ 
+                    ...prev, 
+                    [customerUserId]: [] 
+                }));
+            }
+        };
+        fetchHistory();
+        
+    } else { console.error("Cannot open chat: Customer user ID or Queue ID missing.", customer); setError("Could not get customer details."); }
+};
 
     // --- Render Barber Dashboard ---
     return (
