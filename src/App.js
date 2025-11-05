@@ -208,7 +208,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
             const response = await axios.put(`${API_URL}/barber/availability`, {
                 barberId: barberProfile.id, isAvailable: newAvailability, userId: session.user.id
             });
-            onAvailabilityChange(response.data.is_available); // This prop is passed from BarberAppLayout
+            onAvailabilityChange(response.data.is_available);
         } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
         finally { setLoading(false); }
     };
@@ -221,7 +221,6 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
 
-   // --- FIX: Wrap in useCallback ---
    const fetchAnalytics = useCallback(async () => {
       if (!barberId) return; setError('');
       try { 
@@ -230,9 +229,8 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
           setShowEarnings(response.data?.showEarningsAnalytics ?? true);
       } 
       catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
-    }, [barberId]); // Correct dependency
+    }, [barberId]);
 
-    // --- FIX: Add fetchAnalytics to dependency array ---
     useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]);
 
     const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
@@ -288,10 +286,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [fetchError, setFetchError] = useState('');
     const socketRef = useRef(null);
     const [chatMessages, setChatMessages] = useState({});
-    const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
+    const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
     const [unreadMessages, setUnreadMessages] = useState({});
 
-    // --- FIX: Wrap fetchQueueDetails in useCallback ---
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -307,9 +304,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             setFetchError(errMsg);
             setQueueDetails({ waiting: [], inProgress: null, upNext: null });
         }
-    }, [barberId]); // Correct dependency
+    }, [barberId]);
 
-    // --- WebSocket Connection Effect for Barber ---
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -324,7 +320,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 console.log(`[Barber] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
                 const customerId = incomingMessage.senderId;
                 setChatMessages(prev => { const msgs = prev[customerId] || []; return { ...prev, [customerId]: [...msgs, incomingMessage] }; });
-                // Use functional update to get latest state
                 setOpenChatCustomerId(currentOpenChatId => {
                      console.log(`[Barber] Checking if message sender ${customerId} matches open chat ${currentOpenChatId}`);
                      if (customerId !== currentOpenChatId) {
@@ -339,17 +334,16 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
         }
         return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session]); // Dependency only on session
+    }, [session]);
 
-    // UseEffect for initial load and realtime subscription
     useEffect(() => {
         if (!barberId || !supabase?.channel) return;
         let dashboardRefreshInterval = null;
-        fetchQueueDetails(); // Initial fetch
+        fetchQueueDetails();
         const channel = supabase.channel(`barber_queue_${barberId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${barberId}` }, (payload) => {
                 console.log('Barber dashboard received queue update (via Realtime):', payload);
-                fetchQueueDetails(); // Refetch details
+                fetchQueueDetails();
             })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') { console.log(`Barber dashboard subscribed to queue ${barberId}`); } 
@@ -360,9 +354,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             if (channel && supabase?.removeChannel) { supabase.removeChannel(channel).then(() => console.log('Barber unsubscribed.')); }
             if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); }
         };
-    }, [barberId, fetchQueueDetails]); // <<< FIX: Added fetchQueueDetails
+    }, [barberId, fetchQueueDetails]);
 
-    // --- Handlers ---
     const handleNextCustomer = async () => {
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
         if (!next) { alert('Queue empty!'); return; }
@@ -431,10 +424,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
     const closeChat = () => { setOpenChatCustomerId(null); };
 
-    // --- Debug Log ---
     console.log("[BarberDashboard] Rendering with state:", { barberId, queueDetails: { waiting: queueDetails.waiting.length, inProgress: !!queueDetails.inProgress, upNext: !!queueDetails.upNext }, error, fetchError, openChatCustomerId, unreadMessages });
 
-    // --- Render Barber Dashboard ---
     return (
         <div className="card">
             <h2>My Queue ({barberName || '...'})</h2>
@@ -839,7 +830,10 @@ function CustomerView({ session }) {
       <div className="card">
         {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
+        
+        {/* --- THIS IS YOUR NEW MODAL TEXT --- */}
         <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
+        
         <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Service Complete!</h2><p>Thank you!</p><button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
