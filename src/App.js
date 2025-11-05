@@ -438,6 +438,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     };
     const sendBarberMessage = (recipientId, messageText) => {
+        const queueId = openChatQueueId; // Use the stored queue ID
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
             const messageData = { senderId: session.user.id, recipientId, message: messageText };
             socketRef.current.emit('chat message', messageData);
@@ -450,14 +451,25 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
+        const queueId = customer?.id;
+
         if (customerUserId) {
             console.log(`[openChat] Opening chat for ${customerUserId}`);
             setOpenChatCustomerId(customerUserId);
+            setOpenChatQueueId(queueId);
             setUnreadMessages(prev => {
                 const updated = { ...prev };
                 delete updated[customerUserId]; // Mark as read
                 return updated;
             });
+            const fetchHistory = async () => {
+            try {
+                const { data } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
+                const formattedHistory = data.map(msg => ({ senderId: msg.sender_id, message: msg.message }));
+                setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory }));
+            } catch(err) { console.error("Barber failed to fetch history:", err); }
+        };
+        fetchHistory();
         } else { console.error("Cannot open chat: Customer user ID missing.", customer); setError("Could not get customer details."); }
     };
     const closeChat = () => { setOpenChatCustomerId(null); };
@@ -658,6 +670,21 @@ function CustomerView({ session }) {
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
+   // Add this new function inside CustomerView:
+const fetchChatHistory = useCallback(async (queueId) => {
+    if (!queueId) return;
+    try {
+        const { data, error } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
+        if (error) throw error;
+        // Map the data to the format ChatWindow expects (senderId, message)
+        const formattedHistory = data.map(msg => ({ 
+            senderId: msg.sender_id, 
+            message: msg.message 
+        }));
+        setChatMessagesFromBarber(formattedHistory);
+    } catch(err) { console.error("Error fetching chat history:", err); }
+}, []);
+
    // --- Effects ---
    useEffect(() => { // Geolocation Watcher
      const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
@@ -724,37 +751,66 @@ function CustomerView({ session }) {
         return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
     }, []);
    
-   useEffect(() => { // Realtime Subscription & Notifications
-        if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
-        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
-        let queueChannel = null; let refreshInterval = null;
-        if (joinedBarberId && myQueueEntryId && supabase?.channel) {
-            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
-            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
-                    console.log("Realtime Update Received:", payload);
-                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
-                        const newStatus = payload.new.status;
-                        console.log(`My status updated to: ${newStatus}`);
-                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
-                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
-                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
-                    } 
-                    fetchPublicQueue(joinedBarberId);
-                })
-                .subscribe((status, err) => {
-                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); setQueueMessage(''); fetchPublicQueue(joinedBarberId); } 
-                     else { console.error('Supabase Realtime error:', status, err); setQueueMessage('Live updates unavailable.'); }
+   // --- UseEffect for WebSocket Connection and History Fetch ---
+    useEffect(() => { 
+        // Ensure we have a logged-in user, a barber selected, and the user to chat with
+        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
+            
+            // 1. WebSocket Setup
+            if (!socketRef.current) {
+                console.log("[Customer] Connecting WebSocket...");
+                socketRef.current = io(SOCKET_URL);
+                const socket = socketRef.current;
+                const customerUserId = session.user.id;
+
+                socket.on('connect', () => { 
+                    console.log(`[Customer] WebSocket connected.`);
+                    socket.emit('register', customerUserId);
+                    
+                    // 1b. Fetch History and Register Queue on connection
+                    if (myQueueEntryId) {
+                        fetchChatHistory(myQueueEntryId); // <<< FIX: Fetch history on connect
+                        socket.emit('registerQueueEntry', myQueueEntryId); // Ensure queueId is sent
+                    }
                 });
-            refreshInterval = setInterval(() => { console.log("Periodic refresh..."); fetchPublicQueue(joinedBarberId); }, 15000);
+
+                // 1c. Setup message listener (existing logic)
+                const messageListener = (incomingMessage) => {
+                    console.log("[Customer] Received chat message:", incomingMessage);
+                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                        // Update chat history with new message
+                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
+                        // Handle unread status
+                        setIsChatOpen(currentIsOpen => {
+                            if (!currentIsOpen) { console.log("[Customer] Chat closed. Marking as unread."); setHasUnreadFromBarber(true); } 
+                            return currentIsOpen;
+                        });
+                    }
+                };
+                socket.on('chat message', messageListener);
+                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+            }
+        } else {
+            // Cleanup function: disconnect socket if the user leaves the queue or logs out
+            if (socketRef.current) { 
+                console.log("[Customer] Disconnecting WebSocket due to state change."); 
+                socketRef.current.disconnect(); 
+                socketRef.current = null; 
+            }
         }
-        return () => {
-            console.log("Cleaning up queue subscription for barber:", joinedBarberId);
-            if (queueChannel && supabase?.removeChannel) { supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err)); }
-            if (refreshInterval) { clearInterval(refreshInterval); }
+        
+        // Cleanup on component unmount or dependency change
+        return () => { 
+            if (socketRef.current) { 
+                console.log("[Customer] Cleaning up WebSocket on unmount."); 
+                socketRef.current.disconnect(); 
+                socketRef.current = null; 
+            } 
         };
-    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
-   
+    // <<< FIX: Correct dependency array for stability >>>
+    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
+
    useEffect(() => { // EWT Before Joining
         if (selectedBarberId && !myQueueEntryId) { fetchPublicQueue(selectedBarberId); } 
         else if (!selectedBarberId && !myQueueEntryId) { setLiveQueue([]); }
