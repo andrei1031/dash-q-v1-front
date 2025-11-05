@@ -511,6 +511,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         
     } else { console.error("Cannot open chat: Customer user ID or Queue ID missing.", customer); setError("Could not get customer details."); }
 };
+    
+    const closeChat = () => { setOpenChatCustomerId(null); setOpenChatQueueId(null); }; // CLEAR BOTH
 
     // --- Render Barber Dashboard ---
     return (
