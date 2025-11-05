@@ -327,7 +327,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [openChatQueueId, setOpenChatQueueId] = useState(null); // The Queue ID of the current open chat
     const [unreadMessages, setUnreadMessages] = useState({}); // This holds the badge state
 
-    // --- Utility Functions (Correctly defined here) ---
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -345,7 +344,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     }, [barberId]); 
 
-    // --- WebSocket Connection Effect for Barber (FIXED scope) ---
+    // --- WebSocket Connection Effect for Barber (FIXED) ---
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -379,7 +378,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
         }
         return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session]); 
+    }, [session, setChatMessages, setOpenChatCustomerId, setUnreadMessages]); // <<< FIX: ADDED ALL SETTERS TO DEPENDENCY ARRAY
 
     // --- UseEffect for initial load and realtime subscription ---
     useEffect(() => {
