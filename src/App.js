@@ -577,7 +577,7 @@ function CustomerView({ session }) {
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
-   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
+   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // This is the persistent chat history
    const [displayWait, setDisplayWait] = useState(0);
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
@@ -586,10 +586,10 @@ function CustomerView({ session }) {
    const socketRef = useRef(null);
    const liveQueueRef = useRef([]); 
    
-   // --- AI Feedback State ---
+   // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-   const [barberFeedback, setBarberFeedback] = useState([]); // <<< FOR CUSTOMER VIEW
+   const [barberFeedback, setBarberFeedback] = useState([]); 
 
    // --- Calculated Vars ---
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
@@ -598,17 +598,38 @@ function CustomerView({ session }) {
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
    const currentChatTargetBarberUserId = targetBarber?.user_id;
 
+   // --- Utilities ---
+   const fetchChatHistory = useCallback(async (queueId) => {
+      if (!queueId) return;
+      try {
+          const { data, error } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
+          if (error) throw error;
+          const formattedHistory = data.map(msg => ({ 
+              senderId: msg.sender_id, 
+              message: msg.message 
+          }));
+          setChatMessagesFromBarber(formattedHistory);
+      } catch(err) { console.error("Error fetching customer chat history:", err); }
+  }, []);
+
    // --- Handlers ---
    const handleCloseInstructions = () => {
        localStorage.setItem('hasSeenInstructions_v1', 'true');
        setIsInstructionsModalOpen(false);
    };
    const sendCustomerMessage = (recipientId, messageText) => {
-        if (messageText.trim() && socketRef.current?.connected && session?.user?.id) {
-            const messageData = { senderId: session.user.id, recipientId, message: messageText };
+        // Find the Queue ID to send to the server for logging
+        const queueId = myQueueEntryId; 
+
+        if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
+            const messageData = { senderId: session.user.id, recipientId, message: messageText, queueId }; 
+            
+            // 1. Send live message to server (server logs and pushes notification)
             socketRef.current.emit('chat message', messageData);
+            
+            // 2. Immediately update local state to show message
             setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
-        } else { console.warn("[Customer] Cannot send message."); setMessage("Chat disconnected."); }
+        } else { console.warn("[Customer] Cannot send message (socket disconnected or missing IDs)."); setMessage("Chat disconnected."); }
    };
    const fetchPublicQueue = useCallback(async (barberId) => {
        if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
@@ -622,11 +643,12 @@ function CustomerView({ session }) {
            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
        } finally { setIsQueueLoading(false); }
    }, []);
-      
+   
    const handleJoinQueue = async (e) => {
         e.preventDefault();
         if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
+
         setIsLoading(true); setMessage('Joining queue...');
         try {
             const response = await axios.post(`${API_URL}/queue`, {
@@ -674,7 +696,7 @@ function CustomerView({ session }) {
         setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
-        // <<< ADDED Feedback state resets >>>
+        // --- Feedback state resets ---
         setFeedbackText('');
         setFeedbackSubmitted(false);
         setBarberFeedback([]);
@@ -683,21 +705,6 @@ function CustomerView({ session }) {
    };
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
-
-   // Add this new function inside CustomerView:
-    const fetchChatHistory = useCallback(async (queueId) => {
-        if (!queueId) return;
-        try {
-            const { data, error } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
-            if (error) throw error;
-            const formattedHistory = data.map(msg => ({ 
-                senderId: msg.sender_id, 
-                message: msg.message 
-            }));
-            // Use functional update to ensure no race conditions
-            setChatMessagesFromBarber(formattedHistory);
-        } catch(err) { console.error("Error fetching customer chat history:", err); }
-    }, []);
 
    // --- Effects ---
    useEffect(() => { // Geolocation Watcher
@@ -755,7 +762,7 @@ function CustomerView({ session }) {
         loadBarbers();
         const intervalId = setInterval(loadBarbers, 15000);
         return () => clearInterval(intervalId);
-   }, []);
+    }, []);
    
     useEffect(() => { // Blinking Tab Listeners
         const handleFocus = () => stopBlinking();
@@ -765,71 +772,38 @@ function CustomerView({ session }) {
         return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
     }, []);
    
-   // --- UseEffect for WebSocket Connection and History Fetch ---
-    useEffect(() => { 
-    if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
-        
-        // Fetch history immediately when IDs are set
-        fetchChatHistory(myQueueEntryId); 
-        
-        if (!socketRef.current) {
-            console.log("[Customer] Connecting WebSocket...");
-            socketRef.current = io(SOCKET_URL);
-            const socket = socketRef.current;
-            const customerUserId = session.user.id;
-
-            socket.on('connect', () => { 
-                console.log(`[Customer] WebSocket connected.`);
-                socket.emit('register', customerUserId);
-                socket.emit('registerQueueEntry', myQueueEntryId);
-            });
-
-            // The message listener must only update the state with NEW messages
-            const messageListener = (incomingMessage) => {
-                const customerId = incomingMessage.senderId;
-                
-                // 1. ALWAYS append the message to the state object for persistence
-                setChatMessages(prev => { 
-                    const msgs = prev[customerId] || []; 
-                    return { ...prev, [customerId]: [...msgs, incomingMessage] }; 
+   useEffect(() => { // Realtime Subscription & Notifications
+        if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") { Notification.requestPermission(); }
+        let queueChannel = null; let refreshInterval = null;
+        if (joinedBarberId && myQueueEntryId && supabase?.channel) {
+            console.log(`Subscribing queue changes: barber ${joinedBarberId}`);
+            queueChannel = supabase.channel(`public_queue_${joinedBarberId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${joinedBarberId}` }, (payload) => {
+                    console.log("Realtime Update Received:", payload);
+                    if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
+                        const newStatus = payload.new.status;
+                        console.log(`My status updated to: ${newStatus}`);
+                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
+                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
+                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
+                    } 
+                    fetchPublicQueue(joinedBarberId);
+                })
+                .subscribe((status, err) => {
+                     if (status === 'SUBSCRIBED') { console.log('Subscribed to Realtime queue!'); setQueueMessage(''); fetchPublicQueue(joinedBarberId); } 
+                     else { console.error('Supabase Realtime error:', status, err); setQueueMessage('Live updates unavailable.'); }
                 });
-
-                // 2. Handle unread status (Only if the chat is NOT open)
-                setOpenChatCustomerId(currentOpenChatId => {
-                     if (customerId !== currentOpenChatId) {
-                         // Message came from a different customer, or chat is closed.
-                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true }));
-                     }
-                     return currentOpenChatId;
-                });
-            };
-            socket.on('chat message', messageListener);
-            socket.on('chat message', messageListener);
-            socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-            socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+            refreshInterval = setInterval(() => { console.log("Periodic refresh..."); fetchPublicQueue(joinedBarberId); }, 15000);
         }
-    } else {
-         if (socketRef.current) { 
-            console.log("[Customer] Disconnecting WebSocket due to state change."); 
-            socketRef.current.disconnect(); 
-            socketRef.current = null; 
-         }
-    }
-    
-    return () => { 
-        if (socketRef.current) { 
-            socketRef.current.disconnect(); 
-            socketRef.current = null; 
-        } 
-    };
-}, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
-
-   useEffect(() => { // EWT Before Joining
-        if (selectedBarberId && !myQueueEntryId) { fetchPublicQueue(selectedBarberId); } 
-        else if (!selectedBarberId && !myQueueEntryId) { setLiveQueue([]); }
-    }, [selectedBarberId, myQueueEntryId, fetchPublicQueue]);
+        return () => {
+            console.log("Cleaning up queue subscription for barber:", joinedBarberId);
+            if (queueChannel && supabase?.removeChannel) { supabase.removeChannel(queueChannel).catch(err => console.error("Error removing channel:", err)); }
+            if (refreshInterval) { clearInterval(refreshInterval); }
+        };
+    }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
    
-   // --- NEW useEffect: Fetch feedback when barber is selected ---
+    // --- NEW useEffect: Fetch feedback when barber is selected ---
     useEffect(() => {
         if (selectedBarberId) {
             console.log(`Fetching feedback for barber ${selectedBarberId}`);
@@ -846,7 +820,58 @@ function CustomerView({ session }) {
         } else {
             setBarberFeedback([]); // Clear if no barber is selected
         }
-    }, [selectedBarberId]); // This runs every time 'selectedBarberId' changes
+    }, [selectedBarberId]); 
+   
+   // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
+    useEffect(() => { 
+        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
+            
+            // Fetch history immediately when IDs are set
+            fetchChatHistory(myQueueEntryId); 
+            
+            if (!socketRef.current) {
+                console.log("[Customer] Connecting WebSocket...");
+                socketRef.current = io(SOCKET_URL);
+                const socket = socketRef.current;
+                const customerUserId = session.user.id;
+
+                socket.on('connect', () => { 
+                    console.log(`[Customer] WebSocket connected.`);
+                    socket.emit('register', customerUserId);
+                    socket.emit('registerQueueEntry', myQueueEntryId);
+                });
+
+                // The message listener must append the new message to the existing history state
+                const messageListener = (incomingMessage) => {
+                     console.log("[Customer] Received live chat message:", incomingMessage);
+                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                        // Append the new message to the existing history state
+                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
+                        setIsChatOpen(currentIsOpen => {
+                            if (!currentIsOpen) { setHasUnreadFromBarber(true); } 
+                            return currentIsOpen;
+                        });
+                    }
+                };
+                socket.on('chat message', messageListener);
+                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+            }
+        } else {
+             if (socketRef.current) { 
+                console.log("[Customer] Disconnecting WebSocket due to state change."); 
+                socketRef.current.disconnect(); 
+                socketRef.current = null; 
+             }
+        }
+        
+        return () => { 
+            if (socketRef.current) { 
+                socketRef.current.disconnect(); 
+                socketRef.current = null; 
+            } 
+        };
+    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]); 
    
    useEffect(() => { // Smart EWT Calculation
        const calculateWaitTime = () => {
@@ -886,39 +911,7 @@ function CustomerView({ session }) {
        return () => clearInterval(timerId);
    }, [myQueueEntryId]);
    
-   useEffect(() => { // Customer WebSocket
-        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
-            if (!socketRef.current) {
-                console.log("[Customer] Connecting WebSocket...");
-                socketRef.current = io(SOCKET_URL);
-                const socket = socketRef.current;
-                const customerUserId = session.user.id;
-                socket.on('connect', () => { 
-                    console.log(`[Customer] WebSocket connected.`);
-                    socket.emit('register', customerUserId);
-                    socket.emit('registerQueueEntry', myQueueEntryId);
-                });
-                const messageListener = (incomingMessage) => {
-                    console.log("[Customer] Received chat message:", incomingMessage);
-                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
-                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-                        setIsChatOpen(currentIsOpen => {
-                            if (!currentIsOpen) { console.log("[Customer] Chat closed. Marking as unread."); setHasUnreadFromBarber(true); } 
-                            else { console.log("[Customer] Chat open. Not marking as unread."); }
-                            return currentIsOpen;
-                        });
-                    } else { console.log("[Customer] Msg from unexpected sender:", incomingMessage.senderId); }
-                };
-                socket.on('chat message', messageListener);
-                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-            }
-        } else {
-             if (socketRef.current) { console.log("[Customer] Disconnecting WebSocket."); socketRef.current.disconnect(); socketRef.current = null; }
-        }
-        return () => { if (socketRef.current) { console.log("[Customer] Cleaning up WebSocket."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]);
-
+   
    // --- Debug Log ---
    console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
@@ -1001,9 +994,9 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
                     
-                    <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
+                    <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>))}</select></div>
 
-                    {/* =============== THIS IS THE NEW FEEDBACK SECTION =============== */}
+                    {/* =============== THIS IS THE NEW FEEDBACK SECTION (Customer View) =============== */}
                     {selectedBarberId && (
                         <div className="feedback-list-container customer-feedback">
                             <h3 className="feedback-subtitle">Recent Feedback</h3>
@@ -1031,8 +1024,6 @@ function CustomerView({ session }) {
                     {/* =============== END OF NEW SECTION =============== */}
                     
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
-                    
-                    {/* --- AI Section (REMOVED) --- */}
                     
                     <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
