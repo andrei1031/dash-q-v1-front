@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
-// Note: Konva imports are removed as they are no longer needed
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
@@ -216,12 +215,11 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
 }
 
 // --- AnalyticsDashboard (Displays Barber Stats) ---
-// --- AnalyticsDashboard (Displays Barber Stats) ---
 function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0,totalCutsAllTime: 0 });
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
-   const [feedback, setFeedback] = useState([]); // <<< ADDED THIS
+   const [feedback, setFeedback] = useState([]); // <<< FOR FEEDBACK
 
    const fetchAnalytics = useCallback(async () => {
        if (!barberId) return; 
@@ -231,7 +229,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
            setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
            setShowEarnings(response.data?.showEarningsAnalytics ?? true);
            
-           // <<< ADDED THIS CALL TO FETCH FEEDBACK >>>
+           // <<< FETCH FEEDBACK >>>
            const feedbackResponse = await axios.get(`${API_URL}/feedback/${barberId}`);
            setFeedback(feedbackResponse.data || []);
 
@@ -290,7 +288,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         )}
         <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
 
-        {/* =============== THIS IS THE NEW FEEDBACK SECTION =============== */}
+        {/* =============== THIS IS THE FEEDBACK SECTION =============== */}
         <div className="feedback-list-container">
             <h3 className="analytics-subtitle">Recent Feedback</h3>
             <ul className="feedback-list">
@@ -329,7 +327,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
     const [unreadMessages, setUnreadMessages] = useState({});
 
-    // --- FIX: Wrap fetchQueueDetails in useCallback ---
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -345,7 +342,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             setFetchError(errMsg);
             setQueueDetails({ waiting: [], inProgress: null, upNext: null });
         }
-    }, [barberId]); // Correct dependency
+    }, [barberId]); 
 
     // --- WebSocket Connection Effect for Barber ---
     useEffect(() => {
@@ -362,7 +359,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 console.log(`[Barber] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
                 const customerId = incomingMessage.senderId;
                 setChatMessages(prev => { const msgs = prev[customerId] || []; return { ...prev, [customerId]: [...msgs, incomingMessage] }; });
-                // Use functional update to get latest state
                 setOpenChatCustomerId(currentOpenChatId => {
                      console.log(`[Barber] Checking if message sender ${customerId} matches open chat ${currentOpenChatId}`);
                      if (customerId !== currentOpenChatId) {
@@ -398,7 +394,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             if (channel && supabase?.removeChannel) { supabase.removeChannel(channel).then(() => console.log('Barber unsubscribed.')); }
             if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); }
         };
-    }, [barberId, fetchQueueDetails]); // <<< FIX: Added fetchQueueDetails
+    }, [barberId, fetchQueueDetails]); 
 
     // --- Handlers ---
     const handleNextCustomer = async () => {
@@ -469,9 +465,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
     const closeChat = () => { setOpenChatCustomerId(null); };
 
-    // --- Debug Log ---
-    console.log("[BarberDashboard] Rendering with state:", { barberId, queueDetails: { waiting: queueDetails.waiting.length, inProgress: !!queueDetails.inProgress, upNext: !!queueDetails.upNext }, error, fetchError, openChatCustomerId, unreadMessages });
-
     // --- Render Barber Dashboard ---
     return (
         <div className="card">
@@ -497,11 +490,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                         ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
                     </div>
                     <h3 className="queue-subtitle">In Chair</h3>
-                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>{queueDetails.inProgress.share_ai_image && queueDetails.inProgress.ai_haircut_image_url && (<a href={queueDetails.inProgress.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
+                    {/* <<< REMOVED AI PREVIEW LINK >>> */}
+                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
                     <h3 className="queue-subtitle">Up Next</h3>
-                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong>{queueDetails.upNext.share_ai_image && queueDetails.upNext.ai_haircut_image_url && (<a href={queueDetails.upNext.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
+                    {/* <<< REMOVED AI PREVIEW LINK >>> */}
+                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
                     <h3 className="queue-subtitle">Waiting</h3>
-                    <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (<li key={c.id}><div>#{c.id} - {c.customer_name}{c.share_ai_image && c.ai_haircut_image_url && (<a href={c.ai_haircut_image_url} target="_blank" rel="noopener noreferrer" className="photo-link ai-link">View AI Preview</a>)}</div><button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button></li>)))}</ul>
+                    <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (
+                        <li key={c.id}>
+                            <div>#{c.id} - {c.customer_name}</div>
+                            {/* <<< REMOVED AI PREVIEW LINK >>> */}
+                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                        </li>
+                    )))}</ul>
                     
                     {openChatCustomerId && (
                         <div className="barber-chat-container">
@@ -528,11 +529,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
 // ##############################################
 
 // --- CustomerView (Handles Joining Queue & Live View for Customers) ---
-// --- DEFINED *BEFORE* CustomerAppLayout ---
 function CustomerView({ session }) {
    // --- State ---
    const [barbers, setBarbers] = useState([]);
-   const [selectedBarberId, setSelectedBarberId] = useState(''); // Use ID for selection
+   const [selectedBarberId, setSelectedBarberId] = useState(''); 
    const [customerName] = useState(() => session.user?.user_metadata?.full_name || '');
    const [customerPhone, setCustomerPhone] = useState('');
    const [customerEmail] = useState(() => session.user?.email || '');
@@ -544,8 +544,8 @@ function CustomerView({ session }) {
    const [queueMessage, setQueueMessage] = useState('');
    const [estimatedWait, setEstimatedWait] = useState(0);
    const [peopleWaiting, setPeopleWaiting] = useState(0);
-   const [prompt, setPrompt] = useState(''); // Only prompt is needed
-   const [isGenerating, setIsGenerating] = useState(false);
+   // const [prompt, setPrompt] = useState(''); // <<< REMOVED
+   // const [isGenerating, setIsGenerating] = useState(false); // <<< REMOVED
    const [isLoading, setIsLoading] = useState(false);
    const [isQueueLoading, setIsQueueLoading] = useState(true);
    const [services, setServices] = useState([]);
@@ -563,16 +563,12 @@ function CustomerView({ session }) {
    const locationWatchId = useRef(null);
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
-   const liveQueueRef = useRef([]); // For smart EWT
+   const liveQueueRef = useRef([]); 
+   
+   // --- AI Feedback State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-   const [barberFeedback, setBarberFeedback] = useState([]);
-   
-   // --- AI Text-to-Image State (FIXED) ---
-    // <<< FIX: Renamed state to be more accurate for text/links
-   const [recommendations, setRecommendations] = useState([]); // Holds array of { name, imageLink }
-   const [selectedAiLink, setSelectedAiLink] = useState(null); // The customer's final choice URL
-   const [shareAiImage, setShareAiImage] = useState(false); // Share with barber checkbox
+   const [barberFeedback, setBarberFeedback] = useState([]); // <<< FOR CUSTOMER VIEW
 
    // --- Calculated Vars ---
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
@@ -580,7 +576,6 @@ function CustomerView({ session }) {
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
    const currentChatTargetBarberUserId = targetBarber?.user_id;
-   
 
    // --- Handlers ---
    const handleCloseInstructions = () => {
@@ -607,61 +602,25 @@ function CustomerView({ session }) {
        } finally { setIsQueueLoading(false); }
    }, []);
    
-   const handleGeneratePreview = async () => {
-        if (!prompt) { 
-            setMessage('A haircut prompt is required.'); 
-            return; 
-        }
-
-        setIsGenerating(true); 
-        setIsLoading(true);
-        setRecommendations([]); // <<< FIX: Clear previous recommendations
-        setSelectedAiLink(null); // <<< FIX: Clear previous selection
-
-        try {
-            setMessage('Getting AI hairstyle suggestions...');
-            
-            // <<< FIX: Call the correct endpoint from server.js
-            const response = await axios.post(`${API_URL}/recommend-haircuts`, { prompt });
-
-            // <<< FIX: Handle the response from '/api/recommend-haircuts'
-            if (response.data?.recommendations && response.data.recommendations.length > 0) {
-                setRecommendations(response.data.recommendations); // Save the array of { name, imageLink }
-                setMessage('Success! Choose your preferred style suggestion.');
-            } else {
-                 throw new Error('No recommendations received from the AI service.');
-            }
-
-        } catch (error) {
-            console.error('AI generation failed:', error);
-            setMessage(`AI failed: ${error.response?.data?.error || error.message}`);
-        } finally {
-            setIsGenerating(false);
-            setIsLoading(false);
-        }
-   };
+   // <<< REMOVED handleGeneratePreview function >>>
    
    const handleJoinQueue = async (e) => {
         e.preventDefault();
-        // --- FIX: Use selectedBarberId ---
         if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
-        // <<< FIX: Check new state variables
-        if (recommendations.length > 0 && !selectedAiLink) { setMessage('Please select one of the AI suggestions to continue.'); return; }
+        // <<< REMOVED AI check >>>
         setIsLoading(true); setMessage('Joining queue...');
         try {
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                barber_id: selectedBarberId, // <<< FIX
+                barber_id: selectedBarberId, 
                 reference_image_url: null,
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
-                // <<< FIX: Send the selected Google Image link
-                ai_haircut_image_url: shareAiImage ? selectedAiLink : null, 
-                share_ai_image: shareAiImage
+                // <<< REMOVED ai_haircut_image_url and share_ai_image >>>
             });
             const newEntry = response.data;
             if (newEntry && newEntry.id) {
@@ -670,9 +629,8 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
-                setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
-                // <<< FIX: Clear AI state on success
-                setRecommendations([]); setSelectedAiLink(null); setShareAiImage(false);
+                setSelectedBarberId(''); setSelectedServiceId(''); 
+                // <<< REMOVED AI state resets >>>
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -696,59 +654,22 @@ function CustomerView({ session }) {
         localStorage.removeItem('myQueueEntryId'); localStorage.removeItem('joinedBarberId');
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
-        setPrompt(''); setSelectedServiceId(''); setMessage('');
+        setSelectedServiceId(''); setMessage('');
         setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
-        // <<< FIX: Clear AI state on leave
-        setRecommendations([]); setSelectedAiLink(null); setShareAiImage(false);
-        console.log("[handleReturnToJoin] State reset complete.");
-
+        // <<< REMOVED AI state resets >>>
+        
+        // <<< ADDED Feedback state resets >>>
         setFeedbackText('');
         setFeedbackSubmitted(false);
+        setBarberFeedback([]);
+
+        console.log("[handleReturnToJoin] State reset complete.");
    };
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
    // --- Effects ---
-
-   // --- NEW useEffect: Fetch feedback when barber is selected ---
-  useEffect(() => {
-      if (selectedBarberId) {
-          console.log(`Fetching feedback for barber ${selectedBarberId}`);
-          setBarberFeedback([]); // Clear old feedback
-          const fetchFeedback = async () => {
-              try {
-                  const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
-                  setBarberFeedback(response.data || []);
-              } catch (err) {
-                  console.error("Failed to fetch barber feedback:", err);
-              }
-          };
-          fetchFeedback();
-      } else {
-          setBarberFeedback([]); // Clear if no barber is selected
-      }
-  }, [selectedBarberId]); // This runs every time 'selectedBarberId' changes
-
-    // --- NEW useEffect: Fetch feedback when barber is selected ---
-    useEffect(() => {
-        if (selectedBarberId) {
-            console.log(`Fetching feedback for barber ${selectedBarberId}`);
-            setBarberFeedback([]); // Clear old feedback
-            const fetchFeedback = async () => {
-                try {
-                    const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
-                    setBarberFeedback(response.data || []);
-                } catch (err) {
-                    console.error("Failed to fetch barber feedback:", err);
-                }
-            };
-            fetchFeedback();
-        } else {
-            setBarberFeedback([]); // Clear if no barber is selected
-        }
-    }, [selectedBarberId]); // This runs every time 'selectedBarberId' changes
-
    useEffect(() => { // Geolocation Watcher
      const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
      const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
@@ -850,6 +771,25 @@ function CustomerView({ session }) {
         else if (!selectedBarberId && !myQueueEntryId) { setLiveQueue([]); }
     }, [selectedBarberId, myQueueEntryId, fetchPublicQueue]);
    
+   // --- NEW useEffect: Fetch feedback when barber is selected ---
+    useEffect(() => {
+        if (selectedBarberId) {
+            console.log(`Fetching feedback for barber ${selectedBarberId}`);
+            setBarberFeedback([]); // Clear old feedback
+            const fetchFeedback = async () => {
+                try {
+                    const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
+                    setBarberFeedback(response.data || []);
+                } catch (err) {
+                    console.error("Failed to fetch barber feedback:", err);
+                }
+            };
+            fetchFeedback();
+        } else {
+            setBarberFeedback([]); // Clear if no barber is selected
+        }
+    }, [selectedBarberId]); // This runs every time 'selectedBarberId' changes
+   
    useEffect(() => { // Smart EWT Calculation
        const calculateWaitTime = () => {
            const oldQueue = liveQueueRef.current || [];
@@ -928,68 +868,68 @@ function CustomerView({ session }) {
    return (
        <div className="card">
          {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
-         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
+         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
          
-         {/* --- THIS IS YOUR NEW MODAL TEXT --- */}
          <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
          
-         <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
-            <div className="modal-content">
-
-                {!feedbackSubmitted ? (
-                    <>
-                        <h2>Service Complete!</h2>
-                        <p>Thank you! How was your experience with {currentBarberName}?</p>
-
-                        <form className="feedback-form" onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!feedbackText.trim()) {
-                                setFeedbackSubmitted(true); // Allow skipping
-                                return;
-                            }
-                            try {
-                                await axios.post(`${API_URL}/feedback`, {
-                                    barber_id: joinedBarberId,
-                                    customer_name: customerName,
-                                    comments: feedbackText
-                                });
-                            } catch (err) {
-                                console.error("Failed to submit feedback", err);
-                            }
-                            setFeedbackSubmitted(true); // Mark as submitted
-                        }}>
-                            <textarea
-                                value={feedbackText}
-                                onChange={(e) => setFeedbackText(e.target.value)}
-                                placeholder="Leave optional feedback..."
-                            />
-                            <button type="submit">Submit Feedback</button>
-                        </form>
-                        <button 
-                            className="skip-button" 
-                            onClick={() => setFeedbackSubmitted(true)}
-                        >
-                            Skip
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <h2>Feedback Sent!</h2>
-                        <p>Thank you for visiting!</p>
-                        <button 
-                            id="close-complete-modal-btn" 
-                            onClick={() => {
-                                handleReturnToJoin(false);
-                                setFeedbackText(''); // Reset for next time
-                                setFeedbackSubmitted(false); // Reset for next time
-                            }}
-                        >
-                            Okay
-                        </button>
-                    </>
-                )}
-            </div>
-        </div>
+         {/* --- Service Complete Modal (with NEW AI Feedback Form) --- */}
+          <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
+              <div className="modal-content">
+                  
+                  {!feedbackSubmitted ? (
+                      <>
+                          <h2>Service Complete!</h2>
+                          <p>Thank you! How was your experience with {currentBarberName}?</p>
+                          
+                          <form className="feedback-form" onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!feedbackText.trim()) {
+                                  setFeedbackSubmitted(true); // Allow skipping
+                                  return;
+                              }
+                              try {
+                                  await axios.post(`${API_URL}/feedback`, {
+                                      barber_id: joinedBarberId,
+                                      customer_name: customerName,
+                                      comments: feedbackText
+                                  });
+                              } catch (err) {
+                                  console.error("Failed to submit feedback", err);
+                              }
+                              setFeedbackSubmitted(true); // Mark as submitted
+                          }}>
+                              <textarea
+                                  value={feedbackText}
+                                  onChange={(e) => setFeedbackText(e.target.value)}
+                                  placeholder="Leave optional feedback..."
+                              />
+                              <button type="submit">Submit Feedback</button>
+                          </form>
+                          <button 
+                              className="skip-button" 
+                              onClick={() => setFeedbackSubmitted(true)}
+                          >
+                              Skip
+                          </button>
+                      </>
+                  ) : (
+                      <>
+                          <h2>Feedback Sent!</h2>
+                          <p>Thank you for visiting!</p>
+                          <button 
+                              id="close-complete-modal-btn" 
+                              onClick={() => {
+                                  handleReturnToJoin(false);
+                                  // States are reset inside handleReturnToJoin
+                              }}
+                          >
+                              Okay
+                          </button>
+                      </>
+                  )}
+              </div>
+          </div>
+         
          <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
          <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
 
@@ -1002,101 +942,41 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
                     <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
-                    {/* --- FIX: Use selectedBarberId --- */}
+                    
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
+
+                    {/* =============== THIS IS THE NEW FEEDBACK SECTION =============== */}
                     {selectedBarberId && (
-                      <div className="feedback-list-container customer-feedback">
-                          <h3 className="feedback-subtitle">Recent Feedback</h3>
-                          <ul className="feedback-list">
-                              {barberFeedback.length > 0 ? (
-                                  barberFeedback.map((item, index) => (
-                                      <li key={index} className="feedback-item">
-                                          <div className="feedback-header">
-                                              <span className="feedback-score">
-                                                  {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
-                                              </span>
-                                              <span className="feedback-customer">
-                                                  {item.customer_name || 'Customer'}
-                                              </span>
-                                          </div>
-                                          <p className="feedback-comment">"{item.comments}"</p>
-                                      </li>
-                                  ))
-                              ) : (
-                                  <p className="empty-text">No feedback yet for this barber.</p>
-                              )}
-                          </ul>
-                      </div>
+                        <div className="feedback-list-container customer-feedback">
+                            <h3 className="feedback-subtitle">Recent Feedback</h3>
+                            <ul className="feedback-list">
+                                {barberFeedback.length > 0 ? (
+                                    barberFeedback.map((item, index) => (
+                                        <li key={index} className="feedback-item">
+                                            <div className="feedback-header">
+                                                <span className="feedback-score">
+                                                    {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
+                                                </span>
+                                                <span className="feedback-customer">
+                                                    {item.customer_name || 'Customer'}
+                                                </span>
+                                            </div>
+                                            <p className="feedback-comment">"{item.comments}"</p>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <p className="empty-text">No feedback yet for this barber.</p>
+                                )}
+                            </ul>
+                        </div>
                     )}
+                    {/* =============== END OF NEW SECTION =============== */}
+                    
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
-                    {/* --- AI Section (Text-to-Image) --- */}
-                    <div className="ai-generator">
-                        <p className="ai-title">AI Haircut Suggestions (Optional)</p>
-                        <div className="form-group">
-                            <label>1. Describe Your Desired Haircut:</label>
-                            <input 
-                                type="text" 
-                                value={prompt} 
-                                placeholder="e.g., 'short on sides, long on top'" 
-                                onChange={(e) => setPrompt(e.target.value)} 
-                            />
-                        </div>
-                        <button 
-                            type="button" 
-                            onClick={handleGeneratePreview}
-                            className="generate-button" 
-                            disabled={!prompt || isLoading || isGenerating}
-                        >
-                            {isGenerating ? 'Getting suggestions...' : 'Get AI Suggestions'}
-                        </button>
-                        {isLoading && isGenerating && <p className='loading-text'>Asking Gemini...</p>}
-
-                        {/* --- <<< FIX: This is the new Recommendation List JSX --- */}
-                        {recommendations.length > 0 && (
-                            <div className="ai-selection-grid-section">
-                                <h3>2. Choose Your Style:</h3>
-                                {/* You will need to style these new classes in App.css */}
-                                <div className="recommendation-list">
-                                    {recommendations.map((rec, index) => (
-                                        <div 
-                                            key={index} 
-                                            // Click the div to select this option
-                                            onClick={() => setSelectedAiLink(rec.imageLink)} 
-                                            className={`recommendation-option ${selectedAiLink === rec.imageLink ? 'selected' : ''}`}
-                                        >
-                                            {/* Display the name from the AI */}
-                                            <span className="recommendation-name">{rec.name}</span>
-                                            {/* This link lets them preview the Google search in a new tab */}
-                                            <a 
-                                                href={rec.imageLink} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                onClick={(e) => e.stopPropagation()} // Prevents selection when just clicking link
-                                            >
-                                                View Images
-                                            </a>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Share Option */}
-                                {/* <<< FIX: Check selectedAiLink state */}
-                                {selectedAiLink && (
-                                    <div className="join-with-ai-options">
-                                        <div className="form-group checkbox-group">
-                                            <input type="checkbox" id="share-ai-final" checked={shareAiImage} onChange={(e) => setShareAiImage(e.target.checked)} />
-                                            <label htmlFor="share-ai-final">Share selected style with the barber?</label>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                    {/* --- END AI Section --- */}
+                    {/* --- AI Section (REMOVED) --- */}
                     
-                    {/* --- FIX: Disable button if selectedBarberId is missing --- */}
-                    <button type="submit" disabled={isLoading || isGenerating || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
+                    <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
                 {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
            </>
@@ -1236,10 +1116,8 @@ function App() {
        }
    }, []); // Empty dependency array, it doesn't depend on props/state
 
-  // --- Helper to Check Role (wrapped in useCallback) ---
-  // --- Helper to Check Role (wrapped in useCallback) ---
+  // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
   const checkUserRole = useCallback(async (user) => {
-    // This new 'if' block prevents errors if the user object is incomplete
     if (!user || !user.id) {
       console.warn("checkUserRole called with incomplete user, defaulting to customer.");
       setUserRole('customer');
@@ -1270,9 +1148,9 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // Depends on updateAvailability
+  }, [updateAvailability]); // This dependency is correct
 
-  // --- Auth State Change Listener ---
+  // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
     if (!supabase?.auth) {
       console.error("Supabase auth not initialized.");
@@ -1281,7 +1159,6 @@ function App() {
     }
 
     // This ONE listener handles everything: page load, login, and logout.
-    // It removes the race condition.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       console.log("Auth State Change Detected:", _event, currentSession);
       setSession(currentSession);
@@ -1300,7 +1177,7 @@ function App() {
     });
 
     return () => subscription?.unsubscribe();
-  }, [checkUserRole]); // This dependency is correct
+  }, [checkUserRole]); 
 
   // --- Render Logic ---
   if (loadingRole) { return <div className="loading-fullscreen">Loading Application...</div>; }
@@ -1309,6 +1186,5 @@ function App() {
   else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
   else { return <CustomerAppLayout session={session} />; }
 }
-
 
 export default App;
