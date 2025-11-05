@@ -220,6 +220,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0,totalCutsAllTime: 0 });
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
+   const [feedback, setFeedback] = useState([]);
 
    // --- FIX: Wrap in useCallback ---
    const fetchAnalytics = useCallback(async () => {
@@ -228,6 +229,9 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
            const response = await axios.get(`${API_URL}/analytics/${barberId}`); 
            setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
            setShowEarnings(response.data?.showEarningsAnalytics ?? true);
+
+           const feedbackResponse = await axios.get(`${API_URL}/feedback/${barberId}`);
+           setFeedback(feedbackResponse.data || []);
        } 
        catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
    }, [barberId]); // Correct dependency
@@ -278,6 +282,30 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
             </div>
         )}
         <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
+
+        <div className="feedback-list-container">
+        <h3 className="analytics-subtitle">Recent Feedback</h3>
+        <ul className="feedback-list">
+            {feedback.length > 0 ? (
+                feedback.map((item, index) => (
+                    <li key={index} className="feedback-item">
+                        <div className="feedback-header">
+                            {/* Show an emoji based on the AI score */}
+                            <span className="feedback-score">
+                                {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
+                            </span>
+                            <span className="feedback-customer">
+                                {item.customer_name || 'Customer'}
+                            </span>
+                        </div>
+                        <p className="feedback-comment">"{item.comments}"</p>
+                    </li>
+                ))
+            ) : (
+                <p className="empty-text">No feedback yet.</p>
+            )}
+        </ul>
+    </div>
     </div> );
 }
 

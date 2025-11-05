@@ -982,3 +982,87 @@ button:disabled {
   background-color: #e0e0e0;
   text-decoration: underline;
 }
+.feedback-list-container {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.feedback-list {
+  list-style: none;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.feedback-item {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.feedback-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.feedback-score {
+  font-size: 1.2rem;
+  margin-right: 8px;
+}
+
+.feedback-customer {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.feedback-comment {
+  font-size: 0.95rem;
+  color: #555;
+  font-style: italic;
+  margin: 0;
+  padding-left: 26px; /* Aligns with customer name */
+}
+
+/* Feedback form in modal */
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 15px 0;
+}
+
+.feedback-form textarea {
+  width: 100%;
+  min-height: 70px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+.feedback-form button {
+  width: 100%;
+  padding: 12px;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-content .skip-button {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.9rem;
+  margin-top: 5px;
+  cursor: pointer;
+}
