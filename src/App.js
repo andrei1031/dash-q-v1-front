@@ -475,12 +475,17 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 return updated;
             });
 
-            // Fetch history when chat opens
+            // 1. Fetch persistent history from DB
             const fetchHistory = async () => {
                 try {
                     const { data } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
                     const formattedHistory = data.map(msg => ({ senderId: msg.sender_id, message: msg.message }));
-                    setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory }));
+                    
+                    // 2. Set the fetched history using a functional update to maintain new messages
+                    setChatMessages(prev => ({ 
+                        ...prev, 
+                        [customerUserId]: formattedHistory 
+                    }));
                 } catch(err) { console.error("Barber failed to fetch history:", err); }
             };
             fetchHistory();
@@ -684,19 +689,19 @@ function CustomerView({ session }) {
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
    // Add this new function inside CustomerView:
-const fetchChatHistory = useCallback(async (queueId) => {
-    if (!queueId) return;
-    try {
-        const { data, error } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
-        if (error) throw error;
-        // Map the data to the format ChatWindow expects (senderId, message)
-        const formattedHistory = data.map(msg => ({ 
-            senderId: msg.sender_id, 
-            message: msg.message 
-        }));
-        setChatMessagesFromBarber(formattedHistory);
-    } catch(err) { console.error("Error fetching chat history:", err); }
-}, []);
+    const fetchChatHistory = useCallback(async (queueId) => {
+        if (!queueId) return;
+        try {
+            const { data, error } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
+            if (error) throw error;
+            const formattedHistory = data.map(msg => ({ 
+                senderId: msg.sender_id, 
+                message: msg.message 
+            }));
+            // Use functional update to ensure no race conditions
+            setChatMessagesFromBarber(formattedHistory);
+        } catch(err) { console.error("Error fetching customer chat history:", err); }
+    }, []);
 
    // --- Effects ---
    useEffect(() => { // Geolocation Watcher
@@ -766,63 +771,54 @@ const fetchChatHistory = useCallback(async (queueId) => {
    
    // --- UseEffect for WebSocket Connection and History Fetch ---
     useEffect(() => { 
-        // Ensure we have a logged-in user, a barber selected, and the user to chat with
-        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
-            
-            // 1. WebSocket Setup
-            if (!socketRef.current) {
-                console.log("[Customer] Connecting WebSocket...");
-                socketRef.current = io(SOCKET_URL);
-                const socket = socketRef.current;
-                const customerUserId = session.user.id;
-
-                socket.on('connect', () => { 
-                    console.log(`[Customer] WebSocket connected.`);
-                    socket.emit('register', customerUserId);
-                    
-                    // 1b. Fetch History and Register Queue on connection
-                    if (myQueueEntryId) {
-                        fetchChatHistory(myQueueEntryId); // <<< FIX: Fetch history on connect
-                        socket.emit('registerQueueEntry', myQueueEntryId); // Ensure queueId is sent
-                    }
-                });
-
-                // 1c. Setup message listener (existing logic)
-                const messageListener = (incomingMessage) => {
-                    console.log("[Customer] Received chat message:", incomingMessage);
-                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
-                        // Update chat history with new message
-                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-                        // Handle unread status
-                        setIsChatOpen(currentIsOpen => {
-                            if (!currentIsOpen) { console.log("[Customer] Chat closed. Marking as unread."); setHasUnreadFromBarber(true); } 
-                            return currentIsOpen;
-                        });
-                    }
-                };
-                socket.on('chat message', messageListener);
-                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-            }
-        } else {
-            // Cleanup function: disconnect socket if the user leaves the queue or logs out
-            if (socketRef.current) { 
-                console.log("[Customer] Disconnecting WebSocket due to state change."); 
-                socketRef.current.disconnect(); 
-                socketRef.current = null; 
-            }
-        }
+    if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
         
-        // Cleanup on component unmount or dependency change
-        return () => { 
-            if (socketRef.current) { 
-                console.log("[Customer] Cleaning up WebSocket on unmount."); 
-                socketRef.current.disconnect(); 
-                socketRef.current = null; 
-            } 
-        };
-    // <<< FIX: Correct dependency array for stability >>>
-    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
+        // Fetch history immediately when IDs are set
+        fetchChatHistory(myQueueEntryId); 
+        
+        if (!socketRef.current) {
+            console.log("[Customer] Connecting WebSocket...");
+            socketRef.current = io(SOCKET_URL);
+            const socket = socketRef.current;
+            const customerUserId = session.user.id;
+
+            socket.on('connect', () => { 
+                console.log(`[Customer] WebSocket connected.`);
+                socket.emit('register', customerUserId);
+                socket.emit('registerQueueEntry', myQueueEntryId);
+            });
+
+            // The message listener must only update the state with NEW messages
+            const messageListener = (incomingMessage) => {
+                 console.log("[Customer] Received live chat message:", incomingMessage);
+                 if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                    // Append the new message to the existing history state
+                    setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
+                    setIsChatOpen(currentIsOpen => {
+                        if (!currentIsOpen) { setHasUnreadFromBarber(true); } 
+                        return currentIsOpen;
+                    });
+                }
+            };
+            socket.on('chat message', messageListener);
+            socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
+            socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
+        }
+    } else {
+         if (socketRef.current) { 
+            console.log("[Customer] Disconnecting WebSocket due to state change."); 
+            socketRef.current.disconnect(); 
+            socketRef.current = null; 
+         }
+    }
+    
+    return () => { 
+        if (socketRef.current) { 
+            socketRef.current.disconnect(); 
+            socketRef.current = null; 
+        } 
+    };
+}, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
 
    useEffect(() => { // EWT Before Joining
         if (selectedBarberId && !myQueueEntryId) { fetchPublicQueue(selectedBarberId); } 
