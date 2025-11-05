@@ -315,8 +315,6 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
 }
 
 // --- BarberDashboard (Handles Barber's Queue Management) ---
-// --- BarberDashboard (Handles Barber's Queue Management) ---
-// --- BarberDashboard (Handles Barber's Queue Management) ---
 function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
     const [error, setError] = useState('');
@@ -359,16 +357,16 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 const customerId = incomingMessage.senderId;
                 
                 // 1. ALWAYS append the message to the state object for persistence
-                setChatMessages(prev => { // <<< FIX: setChatMessages IS NOW DEFINED
+                setChatMessages(prev => { 
                     const msgs = prev[customerId] || []; 
                     return { ...prev, [customerId]: [...msgs, incomingMessage] }; 
                 });
 
-                // 2. Handle unread status (Only if the chat is NOT open)
-                setOpenChatCustomerId(currentOpenChatId => { // <<< FIX: setOpenChatCustomerId IS NOW DEFINED
+                // 2. Handle unread status (This is the badge logic)
+                setOpenChatCustomerId(currentOpenChatId => { 
                      if (customerId !== currentOpenChatId) {
                          // Message came from a different customer, or chat is closed.
-                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true })); // <<< FIX: setUnreadMessages IS NOW DEFINED
+                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true }));
                      }
                      return currentOpenChatId;
                 });
@@ -379,24 +377,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
         return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
     }, [session]); 
-
-    const synchronizeBadge = useCallback(() => {
-        // The unread message count is maintained in local state/memory (unreadMessages)
-        // Check if there's *any* customer ID flagged as having an unread message.
-        const totalUnread = Object.keys(unreadMessages).length;
-        
-        // This is where you would normally update a global store or dedicated state.
-        // For this local component, the badge is tied to the presence of unread keys.
-        
-        console.log(`[Badge Sync] Total unread conversations: ${totalUnread}`);
-        // No code change needed here, but this function centralizes the logic.
-    }, [unreadMessages]); // Dependency on the map of unread messages
-
-    // Add synchronizeBadge to run after fetching details
-    useEffect(() => {
-        // This hook runs whenever the component updates (e.g., after fetching queue or messages)
-        synchronizeBadge();
-    }, [unreadMessages, synchronizeBadge]);
 
     // UseEffect for initial load and realtime subscription
     useEffect(() => {
@@ -499,7 +479,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 try {
                     const { data } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
                     const formattedHistory = data.map(msg => ({ senderId: msg.sender_id, message: msg.message }));
-                    setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory })); // <<< CORRECTLY UPDATES STATE
+                    setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory })); // CORRECTLY UPDATES STATE
                 } catch(err) { console.error("Barber failed to fetch history:", err); }
             };
             fetchHistory();
