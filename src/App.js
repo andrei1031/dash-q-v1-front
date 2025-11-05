@@ -216,28 +216,35 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
 }
 
 // --- AnalyticsDashboard (Displays Barber Stats) ---
+// --- AnalyticsDashboard (Displays Barber Stats) ---
 function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0,totalCutsAllTime: 0 });
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
-   const [feedback, setFeedback] = useState([]);
+   const [feedback, setFeedback] = useState([]); // <<< ADDED THIS
 
-   // --- FIX: Wrap in useCallback ---
    const fetchAnalytics = useCallback(async () => {
-       if (!barberId) return; setError('');
+       if (!barberId) return; 
+       setError('');
        try { 
            const response = await axios.get(`${API_URL}/analytics/${barberId}`); 
            setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
            setShowEarnings(response.data?.showEarningsAnalytics ?? true);
-
+           
+           // <<< ADDED THIS CALL TO FETCH FEEDBACK >>>
            const feedbackResponse = await axios.get(`${API_URL}/feedback/${barberId}`);
            setFeedback(feedbackResponse.data || []);
-       } 
-       catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
-   }, [barberId]); // Correct dependency
 
-    // --- FIX: Add fetchAnalytics to dependency array ---
-    useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]);
+       } catch (err) { 
+           console.error('Failed fetch analytics/feedback:', err); 
+           setError('Could not load dashboard data.'); 
+           setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); 
+       }
+   }, [barberId]); 
+
+    useEffect(() => { 
+        fetchAnalytics(); 
+    }, [refreshSignal, barberId, fetchAnalytics]);
 
    const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
    const avgPriceWeek = (analytics.totalCutsWeek ?? 0) > 0 ? ((analytics.totalEarningsWeek ?? 0) / analytics.totalCutsWeek).toFixed(2) : '0.00';
@@ -283,29 +290,32 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         )}
         <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
 
+        {/* =============== THIS IS THE NEW FEEDBACK SECTION =============== */}
         <div className="feedback-list-container">
-        <h3 className="analytics-subtitle">Recent Feedback</h3>
-        <ul className="feedback-list">
-            {feedback.length > 0 ? (
-                feedback.map((item, index) => (
-                    <li key={index} className="feedback-item">
-                        <div className="feedback-header">
-                            {/* Show an emoji based on the AI score */}
-                            <span className="feedback-score">
-                                {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
-                            </span>
-                            <span className="feedback-customer">
-                                {item.customer_name || 'Customer'}
-                            </span>
-                        </div>
-                        <p className="feedback-comment">"{item.comments}"</p>
-                    </li>
-                ))
-            ) : (
-                <p className="empty-text">No feedback yet.</p>
-            )}
-        </ul>
-    </div>
+            <h3 className="analytics-subtitle">Recent Feedback</h3>
+            <ul className="feedback-list">
+                {feedback.length > 0 ? (
+                    feedback.map((item, index) => (
+                        <li key={index} className="feedback-item">
+                            <div className="feedback-header">
+                                {/* Show an emoji based on the AI score */}
+                                <span className="feedback-score">
+                                    {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
+                                </span>
+                                <span className="feedback-customer">
+                                    {item.customer_name || 'Customer'}
+                                </span>
+                            </div>
+                            <p className="feedback-comment">"{item.comments}"</p>
+                        </li>
+                    ))
+                ) : (
+                    <p className="empty-text">No feedback yet.</p>
+                )}
+            </ul>
+        </div>
+        {/* =============== END OF NEW SECTION =============== */}
+
     </div> );
 }
 
@@ -556,6 +566,7 @@ function CustomerView({ session }) {
    const liveQueueRef = useRef([]); // For smart EWT
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+   const [barberFeedback, setBarberFeedback] = useState([]);
    
    // --- AI Text-to-Image State (FIXED) ---
     // <<< FIX: Renamed state to be more accurate for text/links
@@ -698,6 +709,25 @@ function CustomerView({ session }) {
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
    // --- Effects ---
+    // --- NEW useEffect: Fetch feedback when barber is selected ---
+    useEffect(() => {
+        if (selectedBarberId) {
+            console.log(`Fetching feedback for barber ${selectedBarberId}`);
+            setBarberFeedback([]); // Clear old feedback
+            const fetchFeedback = async () => {
+                try {
+                    const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
+                    setBarberFeedback(response.data || []);
+                } catch (err) {
+                    console.error("Failed to fetch barber feedback:", err);
+                }
+            };
+            fetchFeedback();
+        } else {
+            setBarberFeedback([]); // Clear if no barber is selected
+        }
+    }, [selectedBarberId]); // This runs every time 'selectedBarberId' changes
+
    useEffect(() => { // Geolocation Watcher
      const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
      const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
@@ -953,6 +983,30 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
                     {/* --- FIX: Use selectedBarberId --- */}
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.length > 0 ? barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>)) : <option disabled>No barbers available</option>}</select></div>
+                    {selectedBarberId && (
+                        <div className="feedback-list-container customer-feedback">
+                            <h3 className="feedback-subtitle">Recent Feedback</h3>
+                            <ul className="feedback-list">
+                                {barberFeedback.length > 0 ? (
+                                    barberFeedback.map((item, index) => (
+                                        <li key={index} className="feedback-item">
+                                            <div className="feedback-header">
+                                                <span className="feedback-score">
+                                                    {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
+                                                </span>
+                                                <span className="feedback-customer">
+                                                    {item.customer_name || 'Customer'}
+                                                </span>
+                                            </div>
+                                            <p className="feedback-comment">"{item.comments}"</p>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <p className="empty-text">No feedback yet for this barber.</p>
+                                )}
+                            </ul>
+                        </div>
+                    )}
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
                     {/* --- AI Section (Text-to-Image) --- */}
