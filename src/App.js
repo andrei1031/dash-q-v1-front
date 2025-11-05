@@ -142,34 +142,53 @@ function AuthForm() {
                  if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required.");
                  const response = await axios.post(`${API_URL}/login/username`, { username: username.trim(), password, role: selectedRole, pin: selectedRole === 'barber' ? pin : undefined });
                  if (response.data.user?.email && supabase?.auth) {
-                    const { error } = await supabase.auth.signInWithPassword({ email: response.data.user.email, password });
-                    if (error) throw error;
-                    // On successful Supabase sign-in, the onAuthStateChange listener will handle the rest.
-                 } else {
-                     throw new Error(response.data.error || "Login failed. Please check your credentials.");
-                 }
-            } else { // Sign Up
-                if (!username || !email || !password || !fullName) throw new Error("All fields except Barber Code are required.");
-                if (selectedRole === 'barber' && !barberCode) throw new Error("Barber code is required for barber sign-up.");
-                const response = await axios.post(`${API_URL}/register`, { username: username.trim(), email: email.trim(), password, fullName, role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode : undefined });
-                setMessage(response.data.message);
+                      const { error } = await supabase.auth.signInWithPassword({ email: response.data.user.email, password });
+                      if (error) throw error;
+                  } else { throw new Error("Login failed: Invalid server response."); }
+            } else {
+                 if (!email.trim() || !fullName.trim()) throw new Error("Email/Full Name required.");
+                 if (selectedRole === 'barber' && !barberCode.trim()) throw new Error("Barber Code required.");
+                 const response = await axios.post(`${API_URL}/signup/username`, { username: username.trim(), email: email.trim(), password, fullName: fullName.trim(), role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined });
+                 setMessage(response.data.message || 'Account created! You can now log in.');
+                 setIsLogin(true);
+                 setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setPin(''); setSelectedRole('customer');
             }
-        } catch (error) {
-            setMessage(error.response?.data?.error || error.message || 'An unknown error occurred.');
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { console.error('Auth error:', error); setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'Unexpected error.'}`); }
+        finally { setLoading(false); }
     };
 
     return (
-        <div className="auth-form-container">
+        <div className="card auth-card">
+            {/* --- Welcome Modal (Only shows on Sign Up) --- */}
+            <div
+                className="modal-overlay"
+                style={{ display: (isWelcomeModalOpen && !isLogin) ? 'flex' : 'none' }}
+            >
+                <div className="modal-content">
+                    <h2>Welcome to Dash-Q!</h2>
+                    <p>This application was proudly developed by:<br/>
+                       <strong>Aquino, Zaldy Castro Jr.</strong><br/>
+                       <strong>Galima, Denmark Perpose</strong><br/>
+                       <strong>Saldivar, Reuben Andrei Santos</strong>
+                       <br/><br/>from<br/><br/>
+                       <strong>University of the Cordilleras</strong>
+                    </p>
+                    <button id="close-welcome-modal-btn" onClick={() => setIsWelcomeModalOpen(false)}>
+                        Get Started
+                    </button>
+                </div>
+            </div>
+
             <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
-            {message && <p className={`message ${message.includes('created') || message.includes('Success') ? 'success' : 'error'}`}>{message}</p>}
-            {/* The form JSX was missing, it is restored here */}
             <form onSubmit={handleAuth}>
-                {/* Form fields will go here, based on isLogin state */}
+                <div className="form-group"><label>Username:</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/></div>
+                <div className="form-group"><label>Password:</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/></div>
+                {isLogin && (<div className="login-role-select"><label>Login As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div>{selectedRole === 'barber' && (<div className="form-group pin-input"><label>Barber PIN:</label><input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" /></div>)}</div>)}
+                {!isLogin && (<><div className="signup-role-select"><label>Sign Up As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div></div><div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div><div className="form-group"><label>Full Name:</label><input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/></div>{selectedRole === 'barber' && (<div className="form-group"><label>Barber Code:</label><input type="text" value={barberCode} placeholder="Secret code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} /><small>Required.</small></div>)}</>)}
+                <button type="submit" disabled={loading}>{loading ? '...' : (isLogin ? 'Login' : 'Sign Up')}</button>
             </form>
-            <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); }} className="toggle-auth-button">{isLogin ? 'Need an account? Sign Up' : 'Have an account? Login'}</button>
+            {message && <p className={`message ${message.includes('successful') || message.includes('created') || message.includes('can now log in') ? 'success' : 'error'}`}>{message}</p>}
+            <button type="button" onClick={() => { setIsLogin(!isLogin); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); }} className="toggle-auth-button">{isLogin ? 'Need account? Sign Up' : 'Have account? Login'}</button>
         </div>
     );
 }
@@ -189,7 +208,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
             const response = await axios.put(`${API_URL}/barber/availability`, {
                 barberId: barberProfile.id, isAvailable: newAvailability, userId: session.user.id
             });
-            onAvailabilityChange(response.data.is_available);
+            onAvailabilityChange(response.data.is_available); // This prop is passed from BarberAppLayout
         } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
         finally { setLoading(false); }
     };
@@ -202,6 +221,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
 
+   // --- FIX: Wrap in useCallback ---
    const fetchAnalytics = useCallback(async () => {
       if (!barberId) return; setError('');
       try { 
@@ -210,8 +230,9 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
           setShowEarnings(response.data?.showEarningsAnalytics ?? true);
       } 
       catch (err) { console.error('Failed fetch analytics:', err); setError('Could not load analytics.'); setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 }); }
-    }, [barberId]);
+    }, [barberId]); // Correct dependency
 
+    // --- FIX: Add fetchAnalytics to dependency array ---
     useEffect(() => { fetchAnalytics(); }, [refreshSignal, barberId, fetchAnalytics]);
 
     const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
@@ -267,9 +288,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [fetchError, setFetchError] = useState('');
     const socketRef = useRef(null);
     const [chatMessages, setChatMessages] = useState({});
-    const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
+    const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
     const [unreadMessages, setUnreadMessages] = useState({});
 
+    // --- FIX: Wrap fetchQueueDetails in useCallback ---
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -285,8 +307,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             setFetchError(errMsg);
             setQueueDetails({ waiting: [], inProgress: null, upNext: null });
         }
-    }, [barberId]);
+    }, [barberId]); // Correct dependency
 
+    // --- WebSocket Connection Effect for Barber ---
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -301,6 +324,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 console.log(`[Barber] Received message from ${incomingMessage.senderId}:`, incomingMessage.message);
                 const customerId = incomingMessage.senderId;
                 setChatMessages(prev => { const msgs = prev[customerId] || []; return { ...prev, [customerId]: [...msgs, incomingMessage] }; });
+                // Use functional update to get latest state
                 setOpenChatCustomerId(currentOpenChatId => {
                      console.log(`[Barber] Checking if message sender ${customerId} matches open chat ${currentOpenChatId}`);
                      if (customerId !== currentOpenChatId) {
@@ -315,16 +339,17 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
         }
         return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session]);
+    }, [session]); // Dependency only on session
 
+    // UseEffect for initial load and realtime subscription
     useEffect(() => {
         if (!barberId || !supabase?.channel) return;
         let dashboardRefreshInterval = null;
-        fetchQueueDetails();
+        fetchQueueDetails(); // Initial fetch
         const channel = supabase.channel(`barber_queue_${barberId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${barberId}` }, (payload) => {
                 console.log('Barber dashboard received queue update (via Realtime):', payload);
-                fetchQueueDetails();
+                fetchQueueDetails(); // Refetch details
             })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') { console.log(`Barber dashboard subscribed to queue ${barberId}`); } 
@@ -335,8 +360,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             if (channel && supabase?.removeChannel) { supabase.removeChannel(channel).then(() => console.log('Barber unsubscribed.')); }
             if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); }
         };
-    }, [barberId, fetchQueueDetails]);
+    }, [barberId, fetchQueueDetails]); // <<< FIX: Added fetchQueueDetails
 
+    // --- Handlers ---
     const handleNextCustomer = async () => {
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
         if (!next) { alert('Queue empty!'); return; }
@@ -405,8 +431,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     };
     const closeChat = () => { setOpenChatCustomerId(null); };
 
+    // --- Debug Log ---
     console.log("[BarberDashboard] Rendering with state:", { barberId, queueDetails: { waiting: queueDetails.waiting.length, inProgress: !!queueDetails.inProgress, upNext: !!queueDetails.upNext }, error, fetchError, openChatCustomerId, unreadMessages });
 
+    // --- Render Barber Dashboard ---
     return (
         <div className="card">
             <h2>My Queue ({barberName || '...'})</h2>
@@ -462,6 +490,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
 // ##############################################
 
 // --- CustomerView (Handles Joining Queue & Live View for Customers) ---
+// --- DEFINED *BEFORE* CustomerAppLayout ---
 function CustomerView({ session }) {
    // --- State ---
    const [barbers, setBarbers] = useState([]);
@@ -581,7 +610,7 @@ function CustomerView({ session }) {
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
                 barber_id: selectedBarberId, // <<< FIX
-                reference_image_url: null, // We are no longer using the old file upload
+                reference_image_url: null,
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
@@ -595,13 +624,8 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
-                // Reset form
-                setSelectedBarberId(''); 
-                setSelectedServiceId(''); 
-                setPrompt(''); 
-                setImageOptions([]); 
-                setSelectedAiImage(null); 
-                setShareAiImage(false);
+                setSelectedBarberId(''); setSelectedServiceId(''); setPrompt(''); 
+                setImageOptions([]); setSelectedAiImage(null); setShareAiImage(false);
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -775,7 +799,6 @@ function CustomerView({ session }) {
    }, [myQueueEntryId]);
    
    useEffect(() => { // Customer WebSocket
-        // --- FIX: Use currentChatTargetBarberUserId ---
         if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId) {
             if (!socketRef.current) {
                 console.log("[Customer] Connecting WebSocket...");
@@ -789,7 +812,6 @@ function CustomerView({ session }) {
                 });
                 const messageListener = (incomingMessage) => {
                     console.log("[Customer] Received chat message:", incomingMessage);
-                    // --- FIX: Use currentChatTargetBarberUserId ---
                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
                         setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
                         setIsChatOpen(currentIsOpen => {
@@ -807,8 +829,7 @@ function CustomerView({ session }) {
              if (socketRef.current) { console.log("[Customer] Disconnecting WebSocket."); socketRef.current.disconnect(); socketRef.current = null; }
         }
         return () => { if (socketRef.current) { console.log("[Customer] Cleaning up WebSocket."); socketRef.current.disconnect(); socketRef.current = null; } };
-    // --- FIX: Use correct dependencies ---
-    }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]); // Removed isChatOpen
+    }, [session, joinedBarberId, myQueueEntryId, barbers, currentChatTargetBarberUserId]);
 
    // --- Debug Log ---
    console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
@@ -818,7 +839,7 @@ function CustomerView({ session }) {
       <div className="card">
         {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>(Optional) Use <strong>AI Preview</strong> to generate haircut ideas.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
-        <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>You're Up Next!</h2><p>Hey, let’s make sure everyone gets a chance to speak! If you’re not ready to jump in by the minute, please find a seat.</p><button id="close-modal-btn" onClick={handleModalClose}>Got It!</button></div></div>
+        <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
         <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Service Complete!</h2><p>Thank you!</p><button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
         <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
@@ -908,7 +929,7 @@ function CustomerView({ session }) {
                {!isChatOpen && myQueueEntryId && (
                    <button onClick={() => {
                            if (currentChatTargetBarberUserId) {
-                               setChatTargetBarberUserId(currentChatTargetBarberUserId); // <<< FIX
+                               setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                setIsChatOpen(true);
                                setHasUnreadFromBarber(false); // Mark as read
                            } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
@@ -925,7 +946,7 @@ function CustomerView({ session }) {
                {isChatOpen && currentChatTargetBarberUserId && (
                    <ChatWindow
                        currentUser_id={session.user.id}
-                       otherUser_id={currentChatTargetBarberUserId} // <<< FIX
+                       otherUser_id={currentChatTargetBarberUserId}
                        messages={chatMessagesFromBarber} // Pass message state
                        onSendMessage={sendCustomerMessage} // Pass send handler
                        isVisible={isChatOpen} // Pass visibility
