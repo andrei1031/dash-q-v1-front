@@ -690,7 +690,7 @@ function CustomerView({ session }) {
     // 2. Clear the local session (This is the actual logout)
     await supabase.auth.signOut();
 };
-   const handleLeaveQueue = () => { handleReturnToJoin(true); };
+   <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
    const handleReturnToJoin = async (userInitiated = false) => {
         console.log("[handleReturnToJoin] Function called.");
