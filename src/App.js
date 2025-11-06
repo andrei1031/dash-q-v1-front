@@ -547,17 +547,27 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     );
 }
 const handleLogout = async (userId) => {
-    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server
+    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server (The necessary update)
     try {
-        await axios.put(`${API_URL}/logout/flag`, { userId });
+        // This is the custom endpoint that fixes the 'is_available' status
+        await axios.put(`${API_URL}/logout/flag`, { userId }); 
         console.log("Server status updated successfully.");
     } catch (error) {
-        // Log the error but continue to log out the user locally, as this step is critical.
         console.error("Warning: Failed to clear barber availability status on server.", error.message);
     }
     
-    // 2. Clear the local session (This is the actual logout)
-    await supabase.auth.signOut();
+    // 2. Local Logout (Guaranteed Reset)
+    // The 403 error means standard signOut() is rejected. We force a local session clear.
+    
+    // First, try the standard method (best practice)
+    const { error: signOutError } = await supabase.auth.signOut();
+
+    if (signOutError) {
+        console.warn("Standard Supabase signout failed (403 Forbidden). Forcing local session clear.");
+        // If standard signout fails, clear the local token manually.
+        // This forces the user to the AuthForm when the app next loads.
+        await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
+    }
 };
 // ##############################################
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
