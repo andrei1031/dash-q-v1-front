@@ -677,6 +677,19 @@ function CustomerView({ session }) {
         } finally { setIsLoading(false); }
    };
    
+   const handleLogout = async (userId) => {
+    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server
+    try {
+        await axios.put(`${API_URL}/logout/flag`, { userId });
+        console.log("Server status updated successfully.");
+    } catch (error) {
+        // Log the error but continue to log out the user locally, as this step is critical.
+        console.error("Warning: Failed to clear barber availability status on server.", error.message);
+    }
+    
+    // 2. Clear the local session (This is the actual logout)
+    await supabase.auth.signOut();
+};
    const handleLeaveQueue = () => { handleReturnToJoin(true); };
    
    const handleReturnToJoin = async (userInitiated = false) => {
@@ -1091,7 +1104,13 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
             session={session}
             onAvailabilityChange={(newStatus) => setBarberProfile(prev => ({ ...prev, is_available: newStatus }))}
           />
-          <button onClick={() => supabase.auth.signOut()} className="logout-button">Logout</button>
+          {/* --- REPLACE THE LOGOUT BUTTON HANDLER --- */}
+          <button 
+             onClick={() => handleLogout(session.user.id)} 
+             className="logout-button"
+          >
+             Logout
+          </button>
         </div>
       </header>
       <div className="container">
