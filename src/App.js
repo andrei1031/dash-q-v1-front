@@ -546,7 +546,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         </div>
     );
 }
-
+const handleLogout = async (userId) => {
+    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server
+    try {
+        await axios.put(`${API_URL}/logout/flag`, { userId });
+        console.log("Server status updated successfully.");
+    } catch (error) {
+        // Log the error but continue to log out the user locally, as this step is critical.
+        console.error("Warning: Failed to clear barber availability status on server.", error.message);
+    }
+    
+    // 2. Clear the local session (This is the actual logout)
+    await supabase.auth.signOut();
+};
 // ##############################################
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
 // ##############################################
@@ -572,7 +584,7 @@ function CustomerView({ session }) {
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
-   const [chatTargetBarberUserId, setChatTargetBarberUserId] = useState(null);
+   const [setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -677,19 +689,6 @@ function CustomerView({ session }) {
         } finally { setIsLoading(false); }
    };
    
-   const handleLogout = async (userId) => {
-    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server
-    try {
-        await axios.put(`${API_URL}/logout/flag`, { userId });
-        console.log("Server status updated successfully.");
-    } catch (error) {
-        // Log the error but continue to log out the user locally, as this step is critical.
-        console.error("Warning: Failed to clear barber availability status on server.", error.message);
-    }
-    
-    // 2. Clear the local session (This is the actual logout)
-    await supabase.auth.signOut();
-};
    <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
    const handleReturnToJoin = async (userInitiated = false) => {
