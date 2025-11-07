@@ -367,7 +367,18 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         try {
             const response = await axios.get(`${API_URL}/queue/details/${barberId}`);
             console.log('[BarberDashboard] Successfully fetched queue details:', response.data);
-            setQueueDetails(response.data);
+            const details = response.data;
+            setQueueDetails(details);
+
+            // --- FIX: Sync unread state from server ---
+            const newUnreadState = {};
+            const allEntries = [...(details.waiting || []), details.inProgress, details.upNext].filter(Boolean);
+            allEntries.forEach(entry => {
+                if (entry.unread_count > 0 && entry.profiles?.id) {
+                    newUnreadState[entry.profiles.id] = true;
+                }
+            });
+            setUnreadMessages(prev => ({ ...prev, ...newUnreadState }));
        } catch (err) {
             console.error('[BarberDashboard] Failed fetch queue details:', err);
             const errMsg = err.response?.data?.error || err.message || 'Could not load queue details.';
@@ -437,15 +448,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     useEffect(() => {
         if (isPageVisible) {
             console.log("[Barber] Page is visible. Re-checking queue and unread messages.");
-            // Re-fetch the queue to get the absolute latest state
-            fetchQueueDetails().then(() => {
-                // After fetching, we need to re-evaluate unread messages based on the new queueDetails state.
-                // This is tricky because state updates are async. A simple approach is to check history on open.
-                // The most important part is that fetchQueueDetails() gets the latest list,
-                // so when a chat is opened via openChat(), it will have the correct data to fetch history.
-                // We can also proactively check for new messages here if we had a 'last_read' timestamp.
-                // For now, fetching the queue is the most critical step to ensure UI is up-to-date.
-            });
+            fetchQueueDetails();
         }
     }, [isPageVisible, fetchQueueDetails]);
 
