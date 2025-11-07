@@ -919,7 +919,17 @@ function CustomerView({ session }) {
                         if (newStatus === 'Up Next') { 
                             startBlinking(); 
                             setIsYourTurnModalOpen(true); 
+                            if ("Notification" in window && Notification.permission === "granted") {
+                                new Notification("You're Up Next!", {
+                                    body: `Hi ${customerName}, it's your turn for your haircut with ${currentBarberName}. Please head over!`,
+                                    icon: '/logo192.png', // Add a small icon file to your public folder
+                                    tag: 'dash-q-turn'    // Prevents multiple similar notifications
+                                });
+                            }
+                            
+                            // 2. Haptic Feedback (Existing code)
                             if (navigator.vibrate) navigator.vibrate([500,200,500]); 
+                        }
                         } 
                         else if (newStatus === 'Done') { 
                             setIsServiceCompleteModalOpen(true); 
