@@ -675,9 +675,6 @@ function CustomerView({ session }) {
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
-   // --- Notification Sound ---
-   const notificationSoundRef = useRef(new Audio('/notification.mp3')); // Assumes notification.mp3 is in your /public folder
-
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -1202,6 +1199,18 @@ function CustomerView({ session }) {
                 {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
                 <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
                 
+                {/* --- NEW: Test Notification Sound Button --- */}
+                <button
+                    onClick={() => {
+                        notificationSoundRef.current.play().catch(e => {
+                            console.warn("Test audio play failed:", e);
+                            setMessage("Could not play test sound. Check browser autoplay settings or device volume.");
+                        });
+                    }}
+                    className="test-sound-button"
+                >
+                    Test Notification Sound
+                </button>
                 {/* --- NEW: Change Reference Image Section --- */}
                 {myCurrentEntry && myCurrentEntry.status !== 'In Progress' && (
                     <div className="change-reference-section">
