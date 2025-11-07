@@ -360,6 +360,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [unreadMessages, setUnreadMessages] = useState({});
     const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
 
+    const notificationSoundRef = useRef(null); // For sound notifications
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -378,6 +379,12 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     }, [barberId]); 
 
     // --- WebSocket Connection Effect for Barber (FIXED) ---
+    useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -404,6 +411,23 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                      }
                      return currentOpenChatId;
                 });
+
+                // Vibrate on new message
+                if ('vibrate' in navigator) {
+                    console.log("[Vibration] Attempting to vibrate for barber.");
+                    try {
+                        navigator.vibrate(200); // Vibrate for 200ms
+                    } catch (e) {
+                        console.warn("[Vibration] Could not vibrate:", e);
+                    }
+                }
+                // Play sound on new message (for iOS and general audio notification)
+                if (notificationSoundRef.current) {
+                    console.log("[Audio] Attempting to play notification sound for barber.");
+                    notificationSoundRef.current.play().catch(e => {
+                        console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                    });
+                }
             };
             socket.on('chat message', messageListener);
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
@@ -532,6 +556,21 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             setOpenChatQueueId(queueId);
             markMessagesAsRead(queueId, session.user.id); // Mark messages as read on the backend
 
+            // --- VIBRATION UNLOCK ---
+            // A silent vibration on user interaction helps ensure subsequent vibrations work.
+            if ('vibrate' in navigator) {
+                console.log("[Vibration] Unlocking vibration with a user gesture.");
+                navigator.vibrate(1); // A tiny, silent vibration
+            }
+            // Audio unlock for iOS and other browsers
+            if (notificationSoundRef.current) {
+                console.log("[Audio] Unlocking audio with a user gesture.");
+                notificationSoundRef.current.play().then(() => {
+                    notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
+            }
+
+
             // Fetch history when chat opens
             const fetchHistory = async () => {
                 try {
@@ -572,16 +611,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                         ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
                     </div>
                     <h3 className="queue-subtitle">In Chair</h3>
-                    {queueDetails.inProgress ? (
-                        <ul className="queue-list">
-                            <li className="in-progress">
-                                <div>
-                                    <strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>
-                                    {queueDetails.inProgress.reference_image_url && <a href={queueDetails.inProgress.reference_image_url} target="_blank" rel="noopener noreferrer" className="reference-link">View Photo</a>}
-                                </div>
-                                <button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button>
-                            </li>
-                        </ul>) : (<p className="empty-text">Chair empty</p>)}
+                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
                     <h3 className="queue-subtitle">Up Next</h3>
                     {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
                     <h3 className="queue-subtitle">Waiting</h3>
@@ -668,16 +698,12 @@ function CustomerView({ session }) {
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
    const locationWatchId = useRef(null);
-   const [referenceImageFile, setReferenceImageFile] = useState(null); // For new uploads
-   const [isUploading, setIsUploading] = useState(false); // For image upload loading state
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
-   // --- Notification Sound ---
-   const notificationSoundRef = useRef(new Audio('/notification.mp3')); // Assumes notification.mp3 is in your /public folder
-
+   const notificationSoundRef = useRef(null); // For sound notifications
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -743,27 +769,12 @@ function CustomerView({ session }) {
 
         setIsLoading(true); setMessage('Joining queue...');
         try {
-            let imageUrl = null;
-            if (referenceImageFile) {
-                setMessage('Uploading reference photo...');
-                setIsUploading(true);
-                const fileExt = referenceImageFile.name.split('.').pop();
-                const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage.from('haircut_references').upload(fileName, referenceImageFile);
-                if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
-                const { data: urlData } = supabase.storage.from('haircut_references').getPublicUrl(fileName);
-                imageUrl = urlData.publicUrl;
-                setIsUploading(false);
-                setMessage('Photo uploaded! Joining queue...');
-            }
-
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
                 barber_id: selectedBarberId, 
-                // --- THIS IS THE KEY CHANGE ---
-                reference_image_url: imageUrl,
+                reference_image_url: null,
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
@@ -775,7 +786,7 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
-                setSelectedBarberId(''); setSelectedServiceId(''); setReferenceImageFile(null);
+                setSelectedBarberId(''); setSelectedServiceId(''); 
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -783,7 +794,6 @@ function CustomerView({ session }) {
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
         } finally { setIsLoading(false); }
    };
-   
    
    <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
@@ -802,7 +812,6 @@ function CustomerView({ session }) {
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
         setIsChatOpen(false); /* setChatTargetBarberUserId(null); <-- REMOVE if it's still here */ setHasUnreadFromBarber(false);
-       setReferenceImageFile(null); // Clear file input
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -811,34 +820,7 @@ function CustomerView({ session }) {
         setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-    }, [myQueueEntryId, setIsLoading, axios, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
-
-   const handleChangeReferenceImage = async (file) => {
-       if (!file || !myQueueEntryId) return;
-       setIsUploading(true);
-       setMessage("Uploading new reference photo...");
-       try {
-           const fileExt = file.name.split('.').pop();
-           const fileName = `${session.user.id}-${myQueueEntryId}-${Date.now()}.${fileExt}`;
-           const { error: uploadError } = await supabase.storage.from('haircut_references').upload(fileName, file);
-           if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
-
-           const { data: urlData } = supabase.storage.from('haircut_references').getPublicUrl(fileName);
-           const newImageUrl = urlData.publicUrl;
-
-           // Now, update the queue entry with the new URL
-           await axios.put(`${API_URL}/queue/reference-image`, {
-               queueId: myQueueEntryId,
-               imageUrl: newImageUrl
-           });
-
-           setMessage("Reference photo updated successfully!");
-           // The realtime subscription will automatically update the UI with the new image.
-       } catch (error) {
-           console.error("Failed to change reference image:", error);
-           setMessage(error.response?.data?.error || "Could not update photo.");
-       } finally { setIsUploading(false); }
-   };
+    }, [myQueueEntryId, setIsLoading, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
@@ -937,7 +919,6 @@ function CustomerView({ session }) {
                         if (newStatus === 'Up Next') { 
                             startBlinking(); 
                             setIsYourTurnModalOpen(true); 
-                            notificationSoundRef.current.play().catch(e => console.warn("Audio play failed:", e));
                             if (navigator.vibrate) navigator.vibrate([500,200,500]); 
                         } 
                         else if (newStatus === 'Done') { 
@@ -983,6 +964,12 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]); 
    
+   useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
    // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
     useEffect(() => { 
     if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
@@ -1014,6 +1001,23 @@ function CustomerView({ session }) {
                             if (!currentIsOpen) { setHasUnreadFromBarber(true); }
                             return currentIsOpen;
                         });
+
+                        // Vibrate on new message
+                        if ('vibrate' in navigator) {
+                            console.log("[Vibration] Attempting to vibrate for customer.");
+                            try {
+                                navigator.vibrate(200); // Vibrate for 200ms
+                            } catch (e) {
+                                console.warn("[Vibration] Could not vibrate:", e);
+                            }
+                        }
+                        // Play sound on new message (for iOS and general audio notification)
+                        if (notificationSoundRef.current) {
+                            console.log("[Audio] Attempting to play notification sound for customer.");
+                            notificationSoundRef.current.play().catch(e => {
+                                console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                            });
+                        }
                     }
                 };
                     socket.on('chat message', messageListener);
@@ -1155,7 +1159,6 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
                     <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
-                    <div className="form-group"><label>Reference Photo (Optional):</label><input type="file" accept="image/*" onChange={(e) => setReferenceImageFile(e.target.files[0])} /></div>
                     
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>))}</select></div>
 
@@ -1188,7 +1191,7 @@ function CustomerView({ session }) {
                     
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
-                    <button type="submit" disabled={isLoading || isUploading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? (isUploading ? 'Uploading...' : 'Joining...') : 'Join Queue'}</button>
+                    <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
                 {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
            </>
@@ -1200,21 +1203,6 @@ function CustomerView({ session }) {
                 {queueMessage && <p className="message error">{queueMessage}</p>}
                 {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
                 <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
-                
-                {/* --- NEW: Change Reference Image Section --- */}
-                <div className="change-reference-section">
-                    <label htmlFor="change-ref-input">
-                        {isUploading ? 'Uploading...' : 'Change Reference Photo'}
-                    </label>
-                    <input
-                        id="change-ref-input"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleChangeReferenceImage(e.target.files[0])}
-                        disabled={isUploading}
-                    />
-                </div>
-
                 <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
                 
                 {/* --- Chat Button (with Badge) --- */}
@@ -1223,6 +1211,21 @@ function CustomerView({ session }) {
                             if (currentChatTargetBarberUserId) {
                                 setIsChatOpen(true); // Open the chat window
                                 setHasUnreadFromBarber(false); // Mark as read
+
+                                // --- VIBRATION UNLOCK ---
+                                // A silent vibration on user interaction helps ensure subsequent vibrations work.
+                                if ('vibrate' in navigator) {
+                                    console.log("[Vibration] Unlocking vibration with a user gesture.");
+                                    navigator.vibrate(1); // A tiny, silent vibration
+                                }
+                                // Audio unlock for iOS and other browsers
+                                if (notificationSoundRef.current) {
+                                    console.log("[Audio] Unlocking audio with a user gesture.");
+                                    notificationSoundRef.current.play().then(() => {
+                                        notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                                    }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
+                                }
+
                                 markMessagesAsRead(myQueueEntryId, session.user.id); // Mark messages as read on the backend
                             } else { console.error("Barber user ID missing. Please refresh the page."); setMessage("Cannot initiate chat: Barber details not loaded."); }
                         }}
@@ -1381,7 +1384,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // This dependency is correct
+  }, []); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
