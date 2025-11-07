@@ -806,10 +806,21 @@ function CustomerView({ session }) {
                     if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
                         const newStatus = payload.new.status;
                         console.log(`My status updated to: ${newStatus}`);
-                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
-                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
-                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
-                    } 
+                        
+                        if (newStatus === 'Up Next') { 
+                            startBlinking(); 
+                            setIsYourTurnModalOpen(true); 
+                            if (navigator.vibrate) navigator.vibrate([500,200,500]); 
+                        } 
+                        else if (newStatus === 'Done') { 
+                            setIsServiceCompleteModalOpen(true); 
+                            stopBlinking(); 
+                        } 
+                        else if (newStatus === 'Cancelled') { 
+                            setIsCancelledModalOpen(true); 
+                            stopBlinking(); 
+                        }
+                    }
                     fetchPublicQueue(joinedBarberId);
                 })
                 .subscribe((status, err) => {
