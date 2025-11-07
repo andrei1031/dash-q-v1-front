@@ -347,6 +347,8 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
 }
 
 // --- BarberDashboard (Handles Barber's Queue Management) ---
+// --- BarberDashboard (Handles Barber's Queue Management) ---
+// --- BarberDashboard (Handles Barber's Queue Management) ---
 function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
     const [error, setError] = useState('');
@@ -358,7 +360,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [unreadMessages, setUnreadMessages] = useState({});
     const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
 
-    const notificationSoundRef = useRef(null); // For sound notifications
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -377,12 +378,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     }, [barberId]); 
 
     // --- WebSocket Connection Effect for Barber (FIXED) ---
-    useEffect(() => {
-        if (!notificationSoundRef.current) {
-            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
-            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
-        }
-    }, []);
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -409,23 +404,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                      }
                      return currentOpenChatId;
                 });
-
-                // Vibrate on new message
-                if ('vibrate' in navigator) {
-                    console.log("[Vibration] Attempting to vibrate for barber.");
-                    try {
-                        navigator.vibrate(200); // Vibrate for 200ms
-                    } catch (e) {
-                        console.warn("[Vibration] Could not vibrate:", e);
-                    }
-                }
-                // Play sound on new message (for iOS and general audio notification)
-                if (notificationSoundRef.current) {
-                    console.log("[Audio] Attempting to play notification sound for barber.");
-                    notificationSoundRef.current.play().catch(e => {
-                        console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
-                    });
-                }
             };
             socket.on('chat message', messageListener);
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
@@ -554,21 +532,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             setOpenChatQueueId(queueId);
             markMessagesAsRead(queueId, session.user.id); // Mark messages as read on the backend
 
-            // --- VIBRATION UNLOCK ---
-            // A silent vibration on user interaction helps ensure subsequent vibrations work.
-            if ('vibrate' in navigator) {
-                console.log("[Vibration] Unlocking vibration with a user gesture.");
-                navigator.vibrate(1); // A tiny, silent vibration
-            }
-            // Audio unlock for iOS and other browsers
-            if (notificationSoundRef.current) {
-                console.log("[Audio] Unlocking audio with a user gesture.");
-                notificationSoundRef.current.play().then(() => {
-                    notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
-                }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
-            }
-
-
             // Fetch history when chat opens
             const fetchHistory = async () => {
                 try {
@@ -692,18 +655,15 @@ function CustomerView({ session }) {
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
    const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // This is the persistent chat history
+   const [displayWait, setDisplayWait] = useState(0);
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
    const locationWatchId = useRef(null);
-   // --- NEW: Pre-join EWT State ---
-   const [preJoinEstimatedWait, setPreJoinEstimatedWait] = useState(0);
-   const [preJoinPeopleWaiting, setPreJoinPeopleWaiting] = useState(0);
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
-   const notificationSoundRef = useRef(null); // For sound notifications
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -750,26 +710,17 @@ function CustomerView({ session }) {
         } else { console.warn("[Customer] Cannot send message (socket disconnected or missing IDs)."); setMessage("Chat disconnected."); }
    };
    const fetchPublicQueue = useCallback(async (barberId) => {
-       if (!barberId) {
-           // Only clear live queue state if it's the actual joined barber's queue
-           if (barberId === joinedBarberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); }
-           return []; // Return empty array if no barberId
-       }
-       // Only set loading for the actual queue the customer is in
-       if (barberId === joinedBarberId) { setIsQueueLoading(true); }
+       if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
+       setIsQueueLoading(true);
        try {
          const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
          const queueData = response.data || [];
-         if (barberId === joinedBarberId) { // Only update live queue state if it's the actual joined barber's queue
-             setLiveQueue(queueData);
-             liveQueueRef.current = queueData; // Update ref
-         }
-         return queueData; // Return the fetched data
+         setLiveQueue(queueData);
+         liveQueueRef.current = queueData; // Update ref
        } catch (error) { 
            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
-           return []; // Return empty array on error
        } finally { setIsQueueLoading(false); }
-   }, [setIsQueueLoading, setLiveQueue, setQueueMessage, joinedBarberId]); // Include joinedBarberId in dependencies
+   }, [setIsQueueLoading, setLiveQueue, setQueueMessage]); // Include all setters in dependencies
    
    const handleJoinQueue = async (e) => {
         e.preventDefault();
@@ -823,13 +774,13 @@ function CustomerView({ session }) {
         setIsChatOpen(false); /* setChatTargetBarberUserId(null); <-- REMOVE if it's still here */ setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
-        // --- Feedback state resets --- //
+        // --- Feedback state resets ---
         setFeedbackText('');
         setFeedbackSubmitted(false);
         setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-    }, [myQueueEntryId, setIsLoading, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
+    }, [myQueueEntryId, setIsLoading, axios, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
@@ -866,6 +817,19 @@ function CustomerView({ session }) {
         if (!hasSeen) { setIsInstructionsModalOpen(true); }
    }, []);
    
+   // --- EFFECT: Re-fetch history when page becomes visible ---
+   useEffect(() => {
+       // If the page becomes visible AND we are in a queue
+       if (isPageVisible && myQueueEntryId) {
+           console.log("[Customer] Page is visible. Re-fetching chat history to check for unread messages.");
+           fetchChatHistory(myQueueEntryId).then(() => {
+               // After fetching, if the chat window is closed, we should assume there might be unread messages.
+               // The logic inside the message listener is the primary defense, but this is a good fallback.
+               if (!isChatOpen) setHasUnreadFromBarber(true);
+           });
+       }
+   }, [isPageVisible, myQueueEntryId, fetchChatHistory, isChatOpen]);
+
    useEffect(() => { // Fetch Services
         const fetchServices = async () => {
             try { const response = await axios.get(`${API_URL}/services`); setServices(response.data || []); } 
@@ -960,12 +924,6 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]); 
    
-   useEffect(() => {
-        if (!notificationSoundRef.current) {
-            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
-            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
-        }
-    }, []);
    // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
     useEffect(() => { 
     if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
@@ -997,23 +955,6 @@ function CustomerView({ session }) {
                             if (!currentIsOpen) { setHasUnreadFromBarber(true); }
                             return currentIsOpen;
                         });
-
-                        // Vibrate on new message
-                        if ('vibrate' in navigator) {
-                            console.log("[Vibration] Attempting to vibrate for customer.");
-                            try {
-                                navigator.vibrate(200); // Vibrate for 200ms
-                            } catch (e) {
-                                console.warn("[Vibration] Could not vibrate:", e);
-                            }
-                        }
-                        // Play sound on new message (for iOS and general audio notification)
-                        if (notificationSoundRef.current) {
-                            console.log("[Audio] Attempting to play notification sound for customer.");
-                            notificationSoundRef.current.play().catch(e => {
-                                console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
-                            });
-                        }
                     }
                 };
                     socket.on('chat message', messageListener);
@@ -1035,43 +976,43 @@ function CustomerView({ session }) {
             } 
         };
     }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
-   useEffect(() => { // OLD EWT Calculation (Pre-Join)
-        const managePreJoinEWT = async () => {
-            if (!selectedBarberId) {
-                setPreJoinEstimatedWait(0);
-                setPreJoinPeopleWaiting(0);
-                return;
-            }
-            try {
-                const queueData = await fetchPublicQueue(selectedBarberId);
-                const peopleInQueue = queueData.filter(entry => ['Waiting', 'Up Next', 'In Progress'].includes(entry.status));
-                const totalWaitInMinutes = peopleInQueue.reduce((sum, entry) => sum + (entry.services?.duration_minutes || 30), 0);
-                setPreJoinPeopleWaiting(peopleInQueue.length);
-                setPreJoinEstimatedWait(totalWaitInMinutes);
-            } catch (error) {
-                console.error("Error managing pre-join EWT:", error);
-            }
-        };
-        managePreJoinEWT();
-   }, [selectedBarberId, fetchPublicQueue]);
-
-   // OLD EWT Calculation (Post-Join)
-   useEffect(() => { 
+   useEffect(() => { // Smart EWT Calculation
        const calculateWaitTime = () => {
-           const myIndex = liveQueue.findIndex(e => e.id.toString() === myQueueEntryId);
-           if (myIndex === -1) { setEstimatedWait(0); setPeopleWaiting(0); return; }
-           const peopleAhead = liveQueue.slice(0, myIndex);
-           const totalWait = peopleAhead.reduce((sum, entry) => {
-               if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) {
-                   return sum + (entry.services?.duration_minutes || 30);
-               }
+           const oldQueue = liveQueueRef.current || [];
+           const newQueue = liveQueue;
+           const relevantEntries = newQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
+           setPeopleWaiting(relevantEntries.length);
+           const myIndexNew = newQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+           const peopleAheadNew = myIndexNew !== -1 ? newQueue.slice(0, myIndexNew) : newQueue; 
+           const newTotalWait = peopleAheadNew.reduce((sum, entry) => {
+               if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) { return sum + (entry.services?.duration_minutes || 30); }
                return sum;
            }, 0);
-           setEstimatedWait(totalWait);
-           setPeopleWaiting(peopleAhead.filter(e => ['Waiting', 'Up Next'].includes(e.status)).length);
+           setEstimatedWait(newTotalWait);
+           setDisplayWait(currentDisplayWait => {
+               const leaver = oldQueue.find(oldEntry => !newQueue.some(newEntry => newEntry.id === oldEntry.id));
+               const myIndexOld = oldQueue.findIndex(e => e.id.toString() === myQueueEntryId);
+               const leaverIndexOld = leaver ? oldQueue.findIndex(e => e.id === leaver.id) : -1;
+               if (leaver && myIndexOld !== -1 && leaverIndexOld !== -1 && leaverIndexOld < myIndexOld) {
+                   const leaverDuration = leaver.services?.duration_minutes || 30;
+                   console.log(`Leaver detected in front: ${leaver.id}, duration: ${leaverDuration}`);
+                   const newCountdown = currentDisplayWait - leaverDuration;
+                   return newCountdown > 0 ? newCountdown : 0;
+               }
+               if (currentDisplayWait === 0 || newTotalWait < currentDisplayWait) {
+                    return newTotalWait;
+               }
+               return currentDisplayWait; 
+           });
        };
        calculateWaitTime();
-   }, [liveQueue, myQueueEntryId]);
+   }, [liveQueue, myQueueEntryId, estimatedWait]); // Added estimatedWait
+   
+   useEffect(() => { // 1-Minute Countdown Timer
+       if (!myQueueEntryId) return; 
+       const timerId = setInterval(() => { setDisplayWait(prevTime => (prevTime > 0 ? prevTime - 1 : 0)); }, 60000);
+       return () => clearInterval(timerId);
+   }, [myQueueEntryId]);
    
    
    // --- Debug Log ---
@@ -1158,17 +1099,7 @@ function CustomerView({ session }) {
                     
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>))}</select></div>
 
-                    {/* --- NEW: Pre-join Estimated Wait Time Display --- */}
-                    {selectedBarberId && selectedServiceId && (
-                        <div className="ewt-container">
-                            <div className="ewt-item"><span>People ahead</span><strong>{preJoinPeopleWaiting} {preJoinPeopleWaiting === 1 ? 'person' : 'people'}</strong></div>
-                            <div className="ewt-item"><span>Estimated wait</span><strong>~ {preJoinEstimatedWait} min</strong></div>
-                        </div>
-                    )}
-                    {/* --- END NEW EWT DISPLAY --- */}
-
-
-                    {/* --- Feedback Section (Customer View) --- */}
+                    {/* =============== THIS IS THE NEW FEEDBACK SECTION (Customer View) =============== */}
                     {selectedBarberId && (
                         <div className="feedback-list-container customer-feedback">
                             <h3 className="feedback-subtitle">Recent Feedback</h3>
@@ -1193,6 +1124,9 @@ function CustomerView({ session }) {
                             </ul>
                         </div>
                     )}
+                    {/* =============== END OF NEW SECTION =============== */}
+                    
+                    {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
                     <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
@@ -1204,8 +1138,8 @@ function CustomerView({ session }) {
                 <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
                 <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
                 {queueMessage && <p className="message error">{queueMessage}</p>}
-                {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>} 
-                <div className="ewt-container"><div className="ewt-item"><span>People ahead</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {estimatedWait} min</strong></div></div>
+                {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
+                <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
                 <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
                 
                 {/* --- Chat Button (with Badge) --- */}
@@ -1214,21 +1148,6 @@ function CustomerView({ session }) {
                             if (currentChatTargetBarberUserId) {
                                 setIsChatOpen(true); // Open the chat window
                                 setHasUnreadFromBarber(false); // Mark as read
-
-                                // --- VIBRATION UNLOCK ---
-                                // A silent vibration on user interaction helps ensure subsequent vibrations work.
-                                if ('vibrate' in navigator) {
-                                    console.log("[Vibration] Unlocking vibration with a user gesture.");
-                                    navigator.vibrate(1); // A tiny, silent vibration
-                                }
-                                // Audio unlock for iOS and other browsers
-                                if (notificationSoundRef.current) {
-                                    console.log("[Audio] Unlocking audio with a user gesture.");
-                                    notificationSoundRef.current.play().then(() => {
-                                        notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
-                                    }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
-                                }
-
                                 markMessagesAsRead(myQueueEntryId, session.user.id); // Mark messages as read on the backend
                             } else { console.error("Barber user ID missing. Please refresh the page."); setMessage("Cannot initiate chat: Barber details not loaded."); }
                         }}
@@ -1387,7 +1306,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // This dependency is correct
+  }, [updateAvailability]); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
