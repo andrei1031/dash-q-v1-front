@@ -534,19 +534,18 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
         const queueId = customer?.id; // The queue entry ID is the 'id' field
-        
-        // --- FIX: Clear unread status immediately on open ---
-        setUnreadMessages(prev => {
-            const updated = { ...prev }; // Create a new object to trigger re-render
-            if (customerUserId) {
-                delete updated[String(customerUserId)]; // Ensure key is string and remove
-                console.log(`[BarberDashboard] Clearing unread badge for customer ${customerUserId}`);
-            }
-            return updated;
-        });
 
         if (customerUserId && queueId) {
             console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
+            // --- FIX: Clear unread status immediately on open ---
+            setUnreadMessages(prev => {
+                const updated = { ...prev };
+                if (updated[String(customerUserId)]) {
+                    delete updated[String(customerUserId)];
+                    console.log(`[BarberDashboard] Clearing unread badge for customer ${customerUserId}`);
+                }
+                return updated;
+            });
             setOpenChatCustomerId(customerUserId);
             setOpenChatQueueId(queueId);
             markMessagesAsRead(queueId, session.user.id); // Mark messages as read on the backend
@@ -1160,14 +1159,15 @@ function CustomerView({ session }) {
                 
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
-                    <button onClick={() => {
-                            if (currentChatTargetBarberUserId) {
-                                setIsChatOpen(true); // Open the chat window
-                                setHasUnreadFromBarber(false); // Mark as read
-                                markMessagesAsRead(myQueueEntryId, session.user.id); // Mark messages as read on the backend
-                            } else { console.error("Barber user ID missing. Please refresh the page."); setMessage("Cannot initiate chat: Barber details not loaded."); }
-                        }}
-                        className="chat-toggle-button"
+                    <button 
+                       onClick={() => {
+                           if (currentChatTargetBarberUserId) {
+                               setIsChatOpen(true);
+                               setHasUnreadFromBarber(false); // FIX: Immediately clear the unread state
+                               markMessagesAsRead(myQueueEntryId, session.user.id);
+                           } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
+                       }}
+                       className="chat-toggle-button"
                     >
                         Chat with Barber
                         {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
