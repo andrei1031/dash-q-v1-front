@@ -675,6 +675,9 @@ function CustomerView({ session }) {
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
+   // --- Notification Sound ---
+   const notificationSoundRef = useRef(new Audio('/notification.mp3')); // Assumes notification.mp3 is in your /public folder
+
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -935,6 +938,7 @@ function CustomerView({ session }) {
                         if (newStatus === 'Up Next') { 
                             startBlinking(); 
                             setIsYourTurnModalOpen(true); 
+                            notificationSoundRef.current.play().catch(e => console.warn("Audio play failed:", e));
                             if (navigator.vibrate) navigator.vibrate([500,200,500]); 
                         } 
                         else if (newStatus === 'Done') { 
