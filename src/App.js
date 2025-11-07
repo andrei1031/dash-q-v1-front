@@ -360,6 +360,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [unreadMessages, setUnreadMessages] = useState({});
     const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
 
+    const notificationSoundRef = useRef(null); // For sound notifications
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -378,6 +379,12 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     }, [barberId]); 
 
     // --- WebSocket Connection Effect for Barber (FIXED) ---
+    useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -413,6 +420,13 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                     } catch (e) {
                         console.warn("[Vibration] Could not vibrate:", e);
                     }
+                }
+                // Play sound on new message (for iOS and general audio notification)
+                if (notificationSoundRef.current) {
+                    console.log("[Audio] Attempting to play notification sound for barber.");
+                    notificationSoundRef.current.play().catch(e => {
+                        console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                    });
                 }
             };
             socket.on('chat message', messageListener);
@@ -548,6 +562,13 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 console.log("[Vibration] Unlocking vibration with a user gesture.");
                 navigator.vibrate(1); // A tiny, silent vibration
             }
+            // Audio unlock for iOS and other browsers
+            if (notificationSoundRef.current) {
+                console.log("[Audio] Unlocking audio with a user gesture.");
+                notificationSoundRef.current.play().then(() => {
+                    notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
+            }
 
 
             // Fetch history when chat opens
@@ -682,6 +703,7 @@ function CustomerView({ session }) {
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
+   const notificationSoundRef = useRef(null); // For sound notifications
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -942,6 +964,12 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]); 
    
+   useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
    // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
     useEffect(() => { 
     if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
@@ -982,6 +1010,13 @@ function CustomerView({ session }) {
                             } catch (e) {
                                 console.warn("[Vibration] Could not vibrate:", e);
                             }
+                        }
+                        // Play sound on new message (for iOS and general audio notification)
+                        if (notificationSoundRef.current) {
+                            console.log("[Audio] Attempting to play notification sound for customer.");
+                            notificationSoundRef.current.play().catch(e => {
+                                console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                            });
                         }
                     }
                 };
@@ -1182,6 +1217,13 @@ function CustomerView({ session }) {
                                 if ('vibrate' in navigator) {
                                     console.log("[Vibration] Unlocking vibration with a user gesture.");
                                     navigator.vibrate(1); // A tiny, silent vibration
+                                }
+                                // Audio unlock for iOS and other browsers
+                                if (notificationSoundRef.current) {
+                                    console.log("[Audio] Unlocking audio with a user gesture.");
+                                    notificationSoundRef.current.play().then(() => {
+                                        notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                                    }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
                                 }
 
                                 markMessagesAsRead(myQueueEntryId, session.user.id); // Mark messages as read on the backend
