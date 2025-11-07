@@ -684,6 +684,7 @@ function CustomerView({ session }) {
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+   const myCurrentEntry = liveQueue.find(entry => entry.id.toString() === myQueueEntryId);
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
    const currentChatTargetBarberUserId = targetBarber?.user_id;
 
@@ -1198,18 +1199,20 @@ function CustomerView({ session }) {
                 <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
                 
                 {/* --- NEW: Change Reference Image Section --- */}
-                <div className="change-reference-section">
-                    <label htmlFor="change-ref-input">
-                        {isUploading ? 'Uploading...' : 'Change Reference Photo'}
-                    </label>
-                    <input
-                        id="change-ref-input"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleChangeReferenceImage(e.target.files[0])}
-                        disabled={isUploading}
-                    />
-                </div>
+                {myCurrentEntry && myCurrentEntry.status !== 'In Progress' && (
+                    <div className="change-reference-section">
+                        <label htmlFor="change-ref-input">
+                            {isUploading ? 'Uploading...' : 'Change Reference Photo'}
+                        </label>
+                        <input
+                            id="change-ref-input"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleChangeReferenceImage(e.target.files[0])}
+                            disabled={isUploading}
+                        />
+                    </div>
+                )}
 
                 <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
                 
