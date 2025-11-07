@@ -698,6 +698,9 @@ function CustomerView({ session }) {
    const locationWatchId = useRef(null);
    // --- NEW: Pre-join EWT State ---
    const [preJoinEstimatedWait, setPreJoinEstimatedWait] = useState(0);
+   // Refs to track the last selection for which preJoinDisplayWait was calculated
+   const lastCalculatedBarberId = useRef(null);
+   const lastCalculatedServiceId = useRef(null);
    const [preJoinDisplayWait, setPreJoinDisplayWait] = useState(0); // For countdown
    const [preJoinPeopleWaiting, setPreJoinPeopleWaiting] = useState(0);
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
@@ -878,10 +881,16 @@ function CustomerView({ session }) {
    // --- NEW EFFECT: Calculate pre-join EWT when barber or service changes ---
    useEffect(() => {
        const calculatePreJoinEWT = async () => {
-           if (!selectedBarberId || !selectedServiceId) {
+           const currentBarberId = selectedBarberId;
+           const currentServiceId = selectedServiceId;
+
+           // 1. Handle no selection: reset all related states
+           if (!currentBarberId || !currentServiceId) {
                setPreJoinEstimatedWait(0);
                setPreJoinPeopleWaiting(0);
                setPreJoinDisplayWait(0);
+               lastCalculatedBarberId.current = null;
+               lastCalculatedServiceId.current = null;
                return;
            }
 
@@ -889,10 +898,25 @@ function CustomerView({ session }) {
            // (We don't want to use setIsQueueLoading as that's for the *actual* queue)
            // For simplicity, we'll just show "Calculating..." in the UI
            // No explicit loading state for this, as it's quick.
+           
+           // 2. Determine if the selection has changed since the last calculation
+           const selectionHasChanged = (
+               lastCalculatedBarberId.current !== currentBarberId ||
+               lastCalculatedServiceId.current !== currentServiceId
+           );
 
+           // 3. Prevent unnecessary recalculations/resets if selection is the same
+           if (!selectionHasChanged) {
+               // If selection is the same AND countdown is currently 0 or active, let it be.
+               // The dedicated countdown effect handles decrementing.
+               // If it's 0, we want it to stay 0 until a new selection.
+               return;
+           }
+
+           // If we reach here, the selection has changed, or it's an initial load. Proceed with calculation.
            try {
-               const queueData = await fetchPublicQueue(selectedBarberId); // Fetch queue for the selected barber
-               const selectedService = services.find(s => s.id.toString() === selectedServiceId);
+               const queueData = await fetchPublicQueue(currentBarberId); // Fetch queue for the selected barber
+               const selectedService = services.find(s => s.id.toString() === currentServiceId);
 
                if (!selectedService) { // Should not happen if selectedServiceId is valid
                    setPreJoinEstimatedWait(0);
@@ -905,8 +929,12 @@ function CustomerView({ session }) {
 
                setPreJoinPeopleWaiting(peopleAhead.length);
                setPreJoinEstimatedWait(totalWaitInMinutes);
-               setPreJoinDisplayWait(totalWaitInMinutes * 60); // Set countdown in seconds
-           } catch (error) { console.error("Error calculating pre-join EWT:", error); setPreJoinEstimatedWait(0); setPreJoinPeopleWaiting(0); setPreJoinDisplayWait(0); }
+               setPreJoinDisplayWait(totalWaitInMinutes * 60); // Initialize countdown in seconds
+
+               // Store the current selection as the last calculated one
+               lastCalculatedBarberId.current = currentBarberId;
+               lastCalculatedServiceId.current = currentServiceId;
+           } catch (error) { console.error("Error calculating pre-join EWT:", error); setPreJoinEstimatedWait(0); setPreJoinPeopleWaiting(0); setPreJoinDisplayWait(0); lastCalculatedBarberId.current = null; lastCalculatedServiceId.current = null; }
        };
        calculatePreJoinEWT();
    }, [selectedBarberId, selectedServiceId, services, fetchPublicQueue]);
@@ -930,7 +958,7 @@ function CustomerView({ session }) {
            return; // Stop if no selection or time is up
        }
        const timerId = setInterval(() => { setPreJoinDisplayWait(prevTime => (prevTime > 0 ? prevTime - 1 : 0)); }, 1000);
-       return () => clearInterval(timerId);
+       return () => clearInterval(timerId); // Cleanup on unmount or dependency change
    }, [selectedBarberId, selectedServiceId, preJoinDisplayWait]);
 
    useEffect(() => { // Fetch Services
