@@ -1074,7 +1074,6 @@ function CustomerView({ session }) {
            });
        };
        calculateWaitTime();
-   }, [liveQueue, myQueueEntryId, estimatedWait]); // Added estimatedWait
     }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]); // Dependencies are correct
 
    // --- Smart EWT Calculation and Countdown ---
