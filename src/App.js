@@ -468,6 +468,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         if (customerUserId && queueId) {
             console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
             setOpenChatCustomerId(customerUserId);
+            setOpenChatQueueId(queueId);
             const queueId = customer?.id;
             
             setUnreadMessages(prev => {
@@ -663,7 +664,7 @@ function CustomerView({ session }) {
        } catch (error) { 
            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
        } finally { setIsQueueLoading(false); }
-   }, []);
+   }, [setIsQueueLoading, setLiveQueue, setQueueMessage]); // Include all setters in dependencies
    
    const handleJoinQueue = async (e) => {
         e.preventDefault();
