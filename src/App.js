@@ -771,7 +771,8 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); /* setChatTargetBarberUserId(null); <-- REMOVE if it's still here */ setHasUnreadFromBarber(false);
+        setIsChatOpen(false); /* setChatTargetBarberUserId(null); <-- REMOVE if it's still here */ 
+        setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -819,16 +820,23 @@ function CustomerView({ session }) {
    
    // --- EFFECT: Re-fetch history when page becomes visible ---
    useEffect(() => {
-       // If the page becomes visible AND we are in a queue
-       if (isPageVisible && myQueueEntryId) {
-           console.log("[Customer] Page is visible. Re-fetching chat history to check for unread messages.");
-           fetchChatHistory(myQueueEntryId).then(() => {
-               // After fetching, if the chat window is closed, we should assume there might be unread messages.
-               // The logic inside the message listener is the primary defense, but this is a good fallback.
-               if (!isChatOpen) setHasUnreadFromBarber(true);
-           });
-       }
-   }, [isPageVisible, myQueueEntryId, fetchChatHistory, isChatOpen]);
+    // If the page becomes visible AND we are in a queue
+    if (isPageVisible && myQueueEntryId) {
+        console.log("[Customer] Page is visible. Re-fetching chat history and clearing badge if chat is open.");
+        
+        // 1. Re-fetch history to load any messages that arrived while frozen
+        fetchChatHistory(myQueueEntryId).then(() => {
+            // 2. If the chat is currently OPEN, or was just OPENED and closed
+            // We assume the user saw the message and we explicitly clear the badge.
+            // This is the CRUCIAL STEP to clear stale state from deep sleep/freeze.
+            if (isChatOpen || hasUnreadFromBarber) { 
+                setHasUnreadFromBarber(false); 
+                // Since the user is active, let's mark the messages read on the backend too (no harm in running it again).
+                markMessagesAsRead(myQueueEntryId, session.user.id);
+            }
+        });
+    }
+}, [isPageVisible, myQueueEntryId, fetchChatHistory, isChatOpen, hasUnreadFromBarber, session]); // <-- Added hasUnreadFromBarber and session to dependencies
 
    useEffect(() => { // Fetch Services
         const fetchServices = async () => {
