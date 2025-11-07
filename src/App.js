@@ -677,6 +677,7 @@ function CustomerView({ session }) {
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
    const locationWatchId = useRef(null);
+   const [targetBarberProfile, setTargetBarberProfile] = useState(null); // <<< NEW: State for the specific barber profile
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
@@ -690,9 +691,8 @@ function CustomerView({ session }) {
    // --- Calculated Vars ---
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
-   const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
-   const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
-   const currentChatTargetBarberUserId = targetBarber?.user_id;
+   const currentBarberName = targetBarberProfile?.full_name || `Barber #${joinedBarberId}`;
+   const currentChatTargetBarberUserId = targetBarberProfile?.user_id;
 
    // --- Utilities ---
    const fetchChatHistory = useCallback(async (queueId) => {
@@ -835,6 +835,24 @@ function CustomerView({ session }) {
         if (!hasSeen) { setIsInstructionsModalOpen(true); }
    }, []);
    
+   // --- NEW useEffect: Fetch the specific barber's profile when in a queue ---
+   useEffect(() => {
+       if (joinedBarberId) {
+           const fetchBarberProfile = async () => {
+               try {
+                   // This endpoint gets a barber by their profile ID, not user ID
+                   const response = await axios.get(`${API_URL}/barber/profile/by-id/${joinedBarberId}`);
+                   setTargetBarberProfile(response.data);
+               } catch (error) {
+                   console.error(`Failed to fetch profile for barber ${joinedBarberId}:`, error);
+                   setMessage("Could not load barber details for chat.");
+               }
+           };
+           fetchBarberProfile();
+       } else {
+           setTargetBarberProfile(null); // Clear profile when not in a queue
+       }
+   }, [joinedBarberId]);
    // --- EFFECT: Re-fetch history when page becomes visible ---
    useEffect(() => {
        // If the page becomes visible AND we are in a queue
