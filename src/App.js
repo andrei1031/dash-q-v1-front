@@ -1099,7 +1099,10 @@ function CustomerView({ session }) {
          <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
          
          {/* --- Service Complete Modal (with NEW AI Feedback Form) --- */}
-          <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
+          <div 
+             className="modal-overlay" 
+             style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none', pointerEvents: isServiceCompleteModalOpen ? 'auto' : 'none' }}
+          >
               <div className="modal-content">
                   
                   {!feedbackSubmitted ? (
