@@ -1045,17 +1045,31 @@ function CustomerView({ session }) {
         };
     }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
    useEffect(() => { // Smart EWT Calculation
+       const EWT_IN_PROGRESS_KEY = 'inProgressEwt';
         const managePreJoinEWT = async () => {
             if (!selectedBarberId) {
                 setPreJoinEstimatedWait(0);
                 setPreJoinPeopleWaiting(0);
+                localStorage.removeItem(EWT_IN_PROGRESS_KEY);
                 return;
             }
             try {
                 const queueData = await fetchPublicQueue(selectedBarberId);
-                const peopleInQueue = queueData.filter(entry => ['Waiting', 'Up Next', 'In Progress'].includes(entry.status));
-                const totalWaitInMinutes = peopleInQueue.reduce((sum, entry) => sum + (entry.services?.duration_minutes || 30), 0);
-                setPreJoinPeopleWaiting(peopleInQueue.length);
+                const inProgressCustomer = queueData.find(e => e.status === 'In Progress');
+                const waitingCustomers = queueData.filter(e => ['Waiting', 'Up Next'].includes(e.status));
+
+                const waitingDuration = waitingCustomers.reduce((sum, entry) => sum + (entry.services?.duration_minutes || 30), 0);
+
+                let inProgressRemaining = 0;
+                if (inProgressCustomer) {
+                    const startTime = new Date(inProgressCustomer.start_time).getTime();
+                    const durationMillis = (inProgressCustomer.services?.duration_minutes || 30) * 60 * 1000;
+                    const endTime = startTime + durationMillis;
+                    inProgressRemaining = Math.max(0, Math.ceil((endTime - Date.now()) / (60 * 1000)));
+                }
+
+                const totalWaitInMinutes = inProgressRemaining + waitingDuration;
+                setPreJoinPeopleWaiting(queueData.filter(e => ['Waiting', 'Up Next', 'In Progress'].includes(e.status)).length);
                 setPreJoinEstimatedWait(totalWaitInMinutes);
             } catch (error) {
                 console.error("Error managing pre-join EWT:", error);
