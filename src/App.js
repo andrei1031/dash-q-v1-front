@@ -521,8 +521,11 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         
         // --- FIX: Clear unread status immediately on open ---
         setUnreadMessages(prev => {
-            const updated = { ...prev };
-            if (customerUserId) delete updated[customerUserId]; // Mark as read
+            const updated = { ...prev }; // Create a new object to trigger re-render
+            if (customerUserId) {
+                delete updated[String(customerUserId)]; // Ensure key is string and remove
+                console.log(`[BarberDashboard] Clearing unread badge for customer ${customerUserId}`);
+            }
             return updated;
         });
 
@@ -572,14 +575,14 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                         ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
                     </div>
                     <h3 className="queue-subtitle">In Chair</h3>
-                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
+                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[String(queueDetails.inProgress.profiles.id)] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
                     <h3 className="queue-subtitle">Up Next</h3>
-                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
+                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[String(queueDetails.upNext.profiles.id)] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
                     <h3 className="queue-subtitle">Waiting</h3>
                     <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (
                         <li key={c.id}>
                             <div>#{c.id} - {c.customer_name}</div>
-                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[String(c.profiles.id)] && (<span className="notification-badge">1</span>)}</button>
                         </li>
                     )))}</ul>
                     
@@ -629,7 +632,7 @@ const handleLogout = async (userId) => {
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
 // ##############################################
 
-// --- CustomerView (Handles Joining Queue & Live View for Customers) ---
+// --- CustomerView (Handles Joining Queue & Live View for Customers) --- {/* Removed extra space */}
 function CustomerView({ session }) {
    // --- State ---
    const [barbers, setBarbers] = useState([]);
