@@ -700,21 +700,21 @@ function CustomerView({ session }) {
    
    <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
-   const handleReturnToJoin = async (userInitiated = false) => {
-        console.log("[handleReturnToJoin] Function called.");
-        if (userInitiated && myQueueEntryId) {
-            setIsLoading(true);
-            try { await axios.delete(`${API_URL}/queue/${myQueueEntryId}`); setMessage("You left the queue."); } 
-            catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
-            finally { setIsLoading(false); }
-        }
+   const handleReturnToJoin = useCallback(async (userInitiated = false) => {
+    console.log("[handleReturnToJoin] Function called.");
+    if (userInitiated && myQueueEntryId) {
+        setIsLoading(true);
+        try { await axios.delete(`${API_URL}/queue/${myQueueEntryId}`); setMessage("You left the queue."); } 
+        catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
+        finally { setIsLoading(false); }
+    }
         setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false); setIsYourTurnModalOpen(false);
         stopBlinking();
         localStorage.removeItem('myQueueEntryId'); localStorage.removeItem('joinedBarberId');
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setHasUnreadFromBarber(false);
+        setIsChatOpen(false); /* setChatTargetBarberUserId(null); <-- REMOVE if it's still here */ setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -723,7 +723,7 @@ function CustomerView({ session }) {
         setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-   };
+    }, [myQueueEntryId, setIsLoading, axios, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
