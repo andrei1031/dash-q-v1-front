@@ -655,6 +655,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                             {renderQueueItemContent(c)}
                         </li>
                     )))}</ul>
+                        <li key={c.id}>
+                            <div>#{c.id} - {c.customer_name}</div>
+                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                        </li>
                     
                     {openChatCustomerId && (
                         <div className="barber-chat-container">
@@ -845,19 +849,22 @@ const handleReplaceImage = async (e) => {
        if (!barberId) { setLiveQueue([]); liveQueueRef.current = []; setIsQueueLoading(false); return; }
        setIsQueueLoading(true);
        try {
-         const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
-         const queueData = response.data || [];
-         setLiveQueue(queueData);
-         liveQueueRef.current = queueData;
-         const newEntry = queueData.find(e => e.id.toString() === myQueueEntryId);
-         setCurrentQueueEntryDetails(newEntry || null);
-         if (newEntry) {
-         setReferenceImageUrl(newEntry.reference_image_url || ''); // Save the URL
-         setReferenceImageFile(null); // Clear the file input
-       } catch (error) { 
-           console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
-       } finally { setIsQueueLoading(false); }
-   }, [setIsQueueLoading, setLiveQueue, setQueueMessage]); // Include all setters in dependencies
+            const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
+            const queueData = response.data || [];
+            setLiveQueue(queueData);
+            liveQueueRef.current = queueData;
+            const newEntry = queueData.find(e => e.id.toString() === myQueueEntryId);
+            setCurrentQueueEntryDetails(newEntry || null);
+            if (newEntry) {
+                setReferenceImageUrl(newEntry.reference_image_url || ''); // Save the URL
+                setReferenceImageFile(null); // Clear the file input
+            }
+        } catch (error) {
+            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data.");
+        } finally {
+            setIsQueueLoading(false);
+        }
+   }, [myQueueEntryId, setLiveQueue, setIsQueueLoading, setQueueMessage, setCurrentQueueEntryDetails, setReferenceImageUrl, setReferenceImageFile]);
    
    const handleJoinQueue = async (e) => { // eslint-disable-line no-unused-vars
         e.preventDefault();
