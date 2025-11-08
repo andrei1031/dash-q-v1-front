@@ -70,21 +70,6 @@ function stopBlinking() {
 }
 
 // ##############################################
-// ##     NOTIFICATION SOUND HELPER            ##
-// ##############################################
-function playNotificationSound(audioRef) {
-    if (audioRef.current) {
-        // Set to start in case it was played before
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(error => {
-            // Autoplay is often blocked.
-            console.warn("Audio playback failed. User interaction might be needed.", error);
-        });
-    }
-}
-
-
-// ##############################################
 // ##           CHAT COMPONENT               ##
 // ##############################################
 function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage }) {
@@ -622,7 +607,6 @@ function CustomerView({ session }) {
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const liveQueueRef = useRef([]); 
-   const notificationSoundRef = useRef(null); // <<< For notification sound
    
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
@@ -715,7 +699,7 @@ function CustomerView({ session }) {
         } finally { setIsLoading(false); }
    };
    
-   //<button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
+   <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
    const handleReturnToJoin = async (userInitiated = false) => {
         console.log("[handleReturnToJoin] Function called.");
@@ -822,12 +806,7 @@ function CustomerView({ session }) {
                     if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
                         const newStatus = payload.new.status;
                         console.log(`My status updated to: ${newStatus}`);
-                        if (newStatus === 'Up Next') { 
-                            startBlinking(); 
-                            setIsYourTurnModalOpen(true); 
-                            if (navigator.vibrate) navigator.vibrate([500,200,500]); 
-                            playNotificationSound(notificationSoundRef); // <<< PLAY SOUND
-                        } 
+                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
                         else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
                         else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
                     } 
@@ -959,9 +938,6 @@ function CustomerView({ session }) {
    // --- Render Customer View ---
    return (
        <div className="card">
-         {/* --- Notification Sound Element --- */}
-         <audio ref={notificationSoundRef} src="/notification.mp3" preload="auto" />
-       
          {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
          <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
          
@@ -1233,13 +1209,6 @@ function App() {
         console.log("Role check successful: This is a BARBER.");
         setUserRole('barber');
         setBarberProfile(response.data);
-        
-        // --- FIX: Use the function ---
-        // This call is to satisfy ESLint and use the updateAvailability function.
-        // We call it with the profile's current state to ensure no state is accidentally changed on login,
-        // as your server-side logic and toggle already handle this.
-        await updateAvailability(response.data.id, user.id, response.data.is_available);
-
     } catch(error) {
         if (error.response && error.response.status === 404) {
           // 404 is a clean "Not Found," meaning they are a customer
@@ -1254,7 +1223,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // <<< FIX: Add dependency back
+  }, [updateAvailability]); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
