@@ -1263,7 +1263,6 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
   const handleCutComplete = useCallback(() => {
     setRefreshAnalyticsSignal(prev => prev + 1); // Trigger analytics refresh
   }, []);
-  
 
   return (
     <div className="barber-app-layout">
