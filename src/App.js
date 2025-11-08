@@ -594,7 +594,7 @@ function CustomerView({ session }) {
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
-   const [setChatTargetBarberUserId] = useState(null);
+   //const [setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -618,7 +618,7 @@ function CustomerView({ session }) {
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
-   const currentChatTargetBarberUserId = targetBarber?.user_id;
+   const currentChatTargetBarberUserId = targetBarber?.user_id; // check mo to kung mag coconsole
 
    // --- Utilities ---
    const fetchChatHistory = useCallback(async (queueId) => {
@@ -715,7 +715,8 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setChatTargetBarberUserId(null);
+        setIsChatOpen(false); 
+        //setChatTargetBarberUserId(null);
         // setHasUnreadFromBarge(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
@@ -1062,13 +1063,15 @@ function CustomerView({ session }) {
                 
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
-                    <button onClick={() => {
+                    <button onClick={() => { 
+                     // comment mo tong if statment
                             if (currentChatTargetBarberUserId) {
-                                console.log(currentChatTargetBarberUserId)
-                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
+
+                              //  setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                 setIsChatOpen(true);
-                                setHasUnreadFromBarber(false); // Mark as read
-                            } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
+                                setHasUnreadFromBarber(false); // Mark as read matetest ba naten to sa local ? hindi naakdeploy sa local iba nandun ehh wag 3000
+                            } else { console.error("Barber user ID missing."); setMessage("Cannot/initiate chat."); }
+                            
                         }}
                         className="chat-toggle-button"//ayan bro dun sa chat with barber button kay barber to e yong kay customer 
                     >
