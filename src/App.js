@@ -126,7 +126,7 @@ function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage
     <div className="chat-window">
       <div className="message-list">
         {messages.map((msg, index) => (
-          <div key={index} className={msg.senderId === currentUser_id ? 'my-message' : 'other-message'}>
+          <div key={`${index}-${msg.message.slice(0, 10)}`} className={msg.senderId === currentUser_id ? 'my-message' : 'other-message'}>
             {msg.message}
           </div>
         ))}
@@ -359,7 +359,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [openChatQueueId, setOpenChatQueueId] = useState(null); // The Queue ID of the current open chat
     const [unreadMessages, setUnreadMessages] = useState({});
     const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
-
+    const [referenceImageFile, setReferenceImageFile] = useState(null);
+    const [referenceImageUrl, setReferenceImageUrl] = useState(''); // Saved URL after upload
+    const [currentQueueEntryDetails, setCurrentQueueEntryDetails] = useState(null); // Full details for image replacement logic
     const notificationSoundRef = useRef(null); // For sound notifications
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
@@ -730,6 +732,59 @@ function CustomerView({ session }) {
       } catch(err) { console.error("Error fetching customer chat history:", err); }
   }, []);
 
+  const uploadImage = async (file) => {
+    if (!file) return null;
+    setIsLoading(true);
+    setMessage('Uploading image...');
+    const filePath = `${session.user.id}/${Date.now()}_${file.name}`;
+    try {
+        const { error: uploadError } = await supabase.storage.from('haircut-images').upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage.from('haircut-images').getPublicUrl(filePath);
+        setMessage('Image uploaded successfully.');
+        return publicUrl;
+    } catch (error) {
+        console.error('Image upload failed:', error);
+        setMessage(`Image upload failed: ${error.message}`);
+        return null;
+    } finally {
+        setIsLoading(false);
+    }
+};
+
+// --- Image Replacement Endpoint (NEW) ---
+const handleReplaceImage = async (e) => {
+    e.preventDefault();
+    if (!referenceImageFile || !myQueueEntryId) return;
+    if (currentQueueEntryDetails?.status === 'In Progress') {
+         setMessage('Cannot change image while In Progress!');
+         return;
+    }
+
+    const newUrl = await uploadImage(referenceImageFile);
+    if (!newUrl) return;
+
+    setIsLoading(true); setMessage('Updating image in queue...');
+    try {
+        // New dedicated endpoint in server.js would be better, but for now, we update directly
+        const { error: updateError } = await supabase.from('queue_entries')
+            .update({ reference_image_url: newUrl })
+            .eq('id', myQueueEntryId);
+
+        if (updateError) throw updateError;
+
+        setReferenceImageUrl(newUrl);
+        setReferenceImageFile(null);
+        setMessage('Image replaced successfully!');
+    } catch (error) {
+        console.error('Failed to replace image:', error);
+        setMessage(`Failed to replace image: ${error.message}`);
+    } finally {
+        setIsLoading(false);
+    }
+};
+
    // --- Handlers ---
    const handleCloseInstructions = () => {
        localStorage.setItem('hasSeenInstructions_v1', 'true');
@@ -757,6 +812,8 @@ function CustomerView({ session }) {
          const queueData = response.data || [];
          setLiveQueue(queueData);
          liveQueueRef.current = queueData; // Update ref
+         setReferenceImageUrl(newEntry.reference_image_url || ''); // Save the URL
+         setReferenceImageFile(null); // Clear the file input
        } catch (error) { 
            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
        } finally { setIsQueueLoading(false); }
@@ -768,6 +825,15 @@ function CustomerView({ session }) {
         if (myQueueEntryId) { setMessage('You are already checked in!'); return; }
 
         setIsLoading(true); setMessage('Joining queue...');
+        let imageUrl = null;
+        if (referenceImageFile) {
+            imageUrl = await uploadImage(referenceImageFile);
+            if (!imageUrl) { // Stop if upload failed
+                setIsLoading(false); 
+                setMessage('Image upload failed. Please try again.');
+                return; 
+            }
+        }
         try {
             const response = await axios.post(`${API_URL}/queue`, {
                 customer_name: customerName,
@@ -787,6 +853,8 @@ function CustomerView({ session }) {
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
                 setSelectedBarberId(''); setSelectedServiceId(''); 
+                setReferenceImageUrl(newEntry.reference_image_url || ''); // Save the URL
+                setReferenceImageFile(null); // Clear the file input
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -818,6 +886,7 @@ function CustomerView({ session }) {
         setFeedbackText('');
         setFeedbackSubmitted(false);
         setBarberFeedback([]);
+        
 
         console.log("[handleReturnToJoin] State reset complete.");
     }, [myQueueEntryId, setIsLoading, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
@@ -919,8 +988,17 @@ function CustomerView({ session }) {
                         if (newStatus === 'Up Next') { 
                             startBlinking(); 
                             setIsYourTurnModalOpen(true); 
-                            if (navigator.vibrate) navigator.vibrate([500,200,500]); 
-                        } 
+                            if ("Notification" in window && Notification.permission === "granted") {
+                                new Notification("You're Up Next!", {
+                                    body: `Hi ${customerName}, it's your turn for your haircut with ${currentBarberName}. Please head over!`,
+                                    icon: '/logo192.png', // Add a small icon file to your public folder
+                                    tag: 'dash-q-turn'    // Prevents multiple similar notifications
+                                });
+                            }
+
+                            // 2. Haptic Feedback (Existing code)
+                            if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+                        }
                         else if (newStatus === 'Done') { 
                             setIsServiceCompleteModalOpen(true); 
                             stopBlinking(); 
@@ -1090,7 +1168,10 @@ function CustomerView({ session }) {
          <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
          
          {/* --- Service Complete Modal (with NEW AI Feedback Form) --- */}
-          <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
+          <div 
+             className="modal-overlay" 
+             style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none', pointerEvents: isServiceCompleteModalOpen ? 'auto' : 'none' }}
+          >
               <div className="modal-content">
                   
                   {!feedbackSubmitted ? (
@@ -1307,7 +1388,7 @@ function CustomerAppLayout({ session }) {
     <div className="customer-app-layout">
       <header className="App-header">
         <h1>Welcome, {session.user?.user_metadata?.full_name || 'Customer'}!</h1>
-        <button onClick={() => supabase.auth.signOut()} className="logout-button">Logout</button>
+        <button onClick={() => handleLogout(session.user.id)} className="logout-button">Logout</button>
       </header>
       <div className="container">
         <CustomerView session={session} />
@@ -1341,6 +1422,16 @@ function App() {
     return () => { /* Cleanup if needed */ };
   }, []);
 
+  // --- Helper to Update Availability (wrapped in useCallback) ---
+  const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
+       if (!barberId || !userId) return;
+       try {
+           const response = await axios.put(`${API_URL}/barber/availability`, { barberId, userId, isAvailable });
+            setBarberProfile(prev => prev ? { ...prev, is_available: response.data.is_available } : null);
+       } catch (error) {
+            console.error("Failed to update availability on logout/login:", error);
+       }
+   }, []); // Empty dependency array, it doesn't depend on props/state
 
   // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
   const checkUserRole = useCallback(async (user) => {
