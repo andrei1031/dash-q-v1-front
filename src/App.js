@@ -1387,7 +1387,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // This dependency is correct
+  }, [updateAvailability]); // FIX: Add `updateAvailability` as a dependency
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
