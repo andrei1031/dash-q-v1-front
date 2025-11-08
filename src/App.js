@@ -1353,6 +1353,7 @@ function App() {
     return () => { /* Cleanup if needed */ };
   }, [updateAvailability]);
 
+  
   // --- Helper to Update Availability (wrapped in useCallback) ---
   const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
        if (!barberId || !userId) return;
