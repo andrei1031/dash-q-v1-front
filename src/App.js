@@ -594,7 +594,7 @@ function CustomerView({ session }) {
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
-   const [setChatTargetBarberUserId] = useState(null);
+   const [, setChatTargetBarberUserId] = useState(null); // This state is kept for consistency but could be removed.
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -715,7 +715,7 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
+        setIsChatOpen(false); setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -1062,8 +1062,7 @@ function CustomerView({ session }) {
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
-                            if (currentChatTargetBarberUserId) {
-                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
+                            if (currentChatTargetBarberUserId) {                                
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false); // Mark as read
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
