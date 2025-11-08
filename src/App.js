@@ -621,6 +621,7 @@ function CustomerView({ session }) {
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
+   const [setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -1101,6 +1102,7 @@ function CustomerView({ session }) {
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
+                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false); // Mark as read
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
