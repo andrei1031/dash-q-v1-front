@@ -460,7 +460,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         } else { console.warn("Cannot send barber msg, socket disconnected or queueId missing."); }
     };
     
-    // --- FIX: Chat Opener (Fetches history and sets queueId) ---
+    // --- FIX: Chat Opener (Fetches history and sets queueId) --- eton yung kay barber ehh yung kanina yugn kay customer parang yung id ni barber asa kay customer tas vice versa tingen nga ulet ui nung kay customer part ahh chat with barber oo bro sige don sa chat with barber
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
         const queueId = customer?.id; // The queue entry ID is the 'id' field
@@ -1064,12 +1064,13 @@ function CustomerView({ session }) {
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
+                                console.log(currentChatTargetBarberUserId)
                                 setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false); // Mark as read
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
                         }}
-                        className="chat-toggle-button"
+                        className="chat-toggle-button"//ayan bro dun sa chat with barber button kay barber to e yong kay customer 
                     >
                         Chat with Barber
                         {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
