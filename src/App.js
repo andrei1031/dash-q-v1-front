@@ -1182,7 +1182,7 @@ function App() {
   }, []);
 
   // --- Helper to Update Availability (wrapped in useCallback) ---
-  const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
+  /*const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
        if (!barberId || !userId) return;
        try {
            const response = await axios.put(`${API_URL}/barber/availability`, { barberId, userId, isAvailable });
@@ -1191,6 +1191,8 @@ function App() {
             console.error("Failed to update availability on logout/login:", error);
        }
    }, []); // Empty dependency array, it doesn't depend on props/state
+ */
+
 
   // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
   const checkUserRole = useCallback(async (user) => {
