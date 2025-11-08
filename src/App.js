@@ -9,9 +9,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Toolti
 
 import './App.css';
 
-// <<< --- NEW SOUND NOTIFICATION SETUP --- >>>
-// NOTE: Make sure 'queue-alert.mp3' and 'message-alert.mp3'
-// are placed in your 'public' folder!
+// --- SOUND NOTIFICATION SETUP ---
 const queueNotificationSound = new Audio('/queue_sound.mp3');
 const messageNotificationSound = new Audio('/chat_sound.mp3');
 
@@ -21,19 +19,15 @@ const messageNotificationSound = new Audio('/chat_sound.mp3');
  */
 const playSound = (audioElement) => {
   if (!audioElement) return;
-  // We reset currentTime to 0 so the sound can be re-triggered
-  // even if it's already playing.
   audioElement.currentTime = 0; 
   audioElement.play().catch(error => {
-    // Log autoplay policy errors, etc.
     console.warn("Sound notification was blocked by the browser:", error.message);
   });
 };
-// <<< --- END OF NEW SOUND SETUP --- >>>
 
 
 // --- Global Constants ---
-const SOCKET_URL = 'https://dash-q-backend.onrender.com'; // Your backend URL
+const SOCKET_URL = 'https://dash-q-backend.onrender.com';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 const API_URL = 'https://dash-q-backend.onrender.com/api';
 
@@ -58,14 +52,14 @@ if (supabaseUrl && supabaseAnonKey) {
 
 // --- Helper Function: Calculate Distance ---
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3;
   const phi1 = (lat1 * Math.PI) / 180;
   const phi2 = (lat2 * Math.PI) / 180;
   const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
   const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
   const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // in meters
+  return R * c;
 }
 
 // ##############################################
@@ -178,7 +172,6 @@ function AuthForm() {
 
     return (
         <div className="card auth-card">
-            {/* --- Welcome Modal (Only shows on Sign Up) --- */}
             <div
                 className="modal-overlay"
                 style={{ display: (isWelcomeModalOpen && !isLogin) ? 'flex' : 'none' }}
@@ -227,7 +220,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
             const response = await axios.put(`${API_URL}/barber/availability`, {
                 barberId: barberProfile.id, isAvailable: newAvailability, userId: session.user.id
             });
-            onAvailabilityChange(response.data.is_available); // This prop is passed from BarberAppLayout
+            onAvailabilityChange(response.data.is_available);
         } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
         finally { setLoading(false); }
     };
@@ -239,7 +232,7 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0,totalCutsAllTime: 0 });
    const [error, setError] = useState('');
    const [showEarnings, setShowEarnings] = useState(true);
-   const [feedback, setFeedback] = useState([]); // <<< FOR FEEDBACK
+   const [feedback, setFeedback] = useState([]);
 
    const fetchAnalytics = useCallback(async () => {
        if (!barberId) return; 
@@ -249,7 +242,6 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
            setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
            setShowEarnings(response.data?.showEarningsAnalytics ?? true);
            
-           // <<< FETCH FEEDBACK >>>
            const feedbackResponse = await axios.get(`${API_URL}/feedback/${barberId}`);
            setFeedback(feedbackResponse.data || []);
 
@@ -308,7 +300,6 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         )}
         <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
 
-        {/* =============== THIS IS THE FEEDBACK SECTION =============== */}
         <div className="feedback-list-container">
             <h3 className="analytics-subtitle">Recent Feedback</h3>
             <ul className="feedback-list">
@@ -316,7 +307,6 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
                     feedback.map((item, index) => (
                         <li key={index} className="feedback-item">
                             <div className="feedback-header">
-                                {/* Show an emoji based on the AI score */}
                                 <span className="feedback-score">
                                     {item.score > 0 ? '😊' : item.score < 0 ? '😠' : '😐'}
                                 </span>
@@ -332,13 +322,9 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
                 )}
             </ul>
         </div>
-        {/* =============== END OF NEW SECTION =============== */}
-
     </div> );
 }
 
-// --- BarberDashboard (Handles Barber's Queue Management) ---
-// --- BarberDashboard (Handles Barber's Queue Management) ---
 // --- BarberDashboard (Handles Barber's Queue Management) ---
 function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
@@ -346,8 +332,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [fetchError, setFetchError] = useState('');
     const socketRef = useRef(null);
     const [chatMessages, setChatMessages] = useState({});
-    const [openChatCustomerId, setOpenChatCustomerId] = useState(null); // This is the CUSTOMER'S USER ID
-    const [openChatQueueId, setOpenChatQueueId] = useState(null); // The Queue ID of the current open chat
+    const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
+    const [openChatQueueId, setOpenChatQueueId] = useState(null);
     const [unreadMessages, setUnreadMessages] = useState({});
 
     const fetchQueueDetails = useCallback(async () => {
@@ -367,7 +353,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     }, [barberId]); 
 
-    // --- WebSocket Connection Effect for Barber (FIXED) ---
+    // --- WebSocket Connection Effect for Barber ---
     useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
@@ -379,23 +365,20 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
 
             const messageListener = (incomingMessage) => {
-                // <<< --- PLAY SOUND NOTIFICATION --- >>>
                 playSound(messageNotificationSound); 
-                // <<< --- END SOUND NOTIFICATION --- >>>
                 
                 const customerId = incomingMessage.senderId;
                 
                 // 1. ALWAYS append the message to the state object for persistence
-                setChatMessages(prev => { // <<< FIX: setChatMessages IS NOW DEFINED
+                setChatMessages(prev => {
                     const msgs = prev[customerId] || []; 
                     return { ...prev, [customerId]: [...msgs, incomingMessage] }; 
                 });
 
                 // 2. Handle unread status (Only if the chat is NOT open)
-                setOpenChatCustomerId(currentOpenChatId => { // <<< FIX: setOpenChatCustomerId IS NOW DEFINED
+                setOpenChatCustomerId(currentOpenChatId => {
                      if (customerId !== currentOpenChatId) {
-                         // Message came from a different customer, or chat is closed.
-                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true })); // <<< FIX: setUnreadMessages IS NOW DEFINED
+                         setUnreadMessages(prevUnread => ({ ...prevUnread, [customerId]: true }));
                      }
                      return currentOpenChatId;
                 });
@@ -411,11 +394,11 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     useEffect(() => {
         if (!barberId || !supabase?.channel) return;
         let dashboardRefreshInterval = null;
-        fetchQueueDetails(); // Initial fetch
+        fetchQueueDetails();
         const channel = supabase.channel(`barber_queue_${barberId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `barber_id=eq.${barberId}` }, (payload) => {
                 console.log('Barber dashboard received queue update (via Realtime):', payload);
-                fetchQueueDetails(); // Refetch details
+                fetchQueueDetails();
             })
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') { console.log(`Barber dashboard subscribed to queue ${barberId}`); } 
@@ -441,10 +424,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         if (!queueDetails.inProgress) return;
         const serviceName = queueDetails.inProgress.services?.name || 'Service';
         const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
-        const tipAmount = prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
+        const tipAmount = window.prompt(`Service: ${serviceName} (₱${servicePrice.toFixed(2)}). \n\nPlease enter TIP amount (e.g., 50):`);
         if (tipAmount === null) return;
         const parsedTip = parseInt(tipAmount);
-        if (isNaN(parsedTip) || parsedTip < 0) { alert('Invalid tip. Please enter 0 or more.'); return; }
+        if (isNaN(parsedTip) || parsedTip < 0) { window.alert('Invalid tip. Please enter 0 or more.'); return; }
         setError('');
         try {
           await axios.post(`${API_URL}/queue/complete`, {
@@ -453,7 +436,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             tip_amount: parsedTip
           });
           onCutComplete();
-          alert(`Cut completed! Total logged profit: ₱${(servicePrice + parsedTip).toFixed(2)}`);
+          window.alert(`Cut completed! Total logged profit: ₱${(servicePrice + parsedTip).toFixed(2)}`);
         } catch (err) { console.error('Failed complete cut:', err); setError(err.response?.data?.error || 'Failed to complete cut.'); }
     };
     const handleCancel = async (customerToCancel) => {
@@ -473,9 +456,9 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         }
     };
 
-    // --- FIX: Message Sender (Sends queueId for persistence) ---
+    // --- Message Sender (Sends queueId for persistence) ---
     const sendBarberMessage = (recipientId, messageText) => {
-        const queueId = openChatQueueId; // Use the stored queue ID
+        const queueId = openChatQueueId;
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
             const messageData = { senderId: session.user.id, recipientId, message: messageText, queueId }; 
             socketRef.current.emit('chat message', messageData);
@@ -487,19 +470,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         } else { console.warn("Cannot send barber msg, socket disconnected or queueId missing."); }
     };
     
-    // --- FIX: Chat Opener (Fetches history and sets queueId) ---
+    // --- Chat Opener (Fetches history and sets queueId) ---
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
-        const queueId = customer?.id; // The queue entry ID is the 'id' field
+        const queueId = customer?.id;
         
         if (customerUserId && queueId) {
             console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
             setOpenChatCustomerId(customerUserId);
-            setOpenChatQueueId(queueId); // SET THE QUEUE ID
+            setOpenChatQueueId(queueId);
             
             setUnreadMessages(prev => {
                 const updated = { ...prev };
-                delete updated[customerUserId]; // Mark as read
+                delete updated[customerUserId];
                 return updated;
             });
 
@@ -508,7 +491,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                 try {
                     const { data } = await supabase.from('chat_messages').select('sender_id, message').eq('queue_entry_id', queueId).order('created_at', { ascending: true });
                     const formattedHistory = data.map(msg => ({ senderId: msg.sender_id, message: msg.message }));
-                    setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory })); // <<< CORRECTLY UPDATES STATE
+                    setChatMessages(prev => ({ ...prev, [customerUserId]: formattedHistory }));
                 } catch(err) { console.error("Barber failed to fetch history:", err); }
             };
             fetchHistory();
@@ -516,7 +499,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         } else { console.error("Cannot open chat: Customer user ID or Queue ID missing.", customer); setError("Could not get customer details."); }
     };
     
-    const closeChat = () => { setOpenChatCustomerId(null); setOpenChatQueueId(null); }; // CLEAR BOTH
+    const closeChat = () => { setOpenChatCustomerId(null); setOpenChatQueueId(null); };
+
+    // --- Helper to render photo if available ---
+    const PhotoDisplay = ({ entry, label }) => {
+        if (!entry?.reference_image_url) return null;
+        return (
+            <div className="barber-photo-display">
+                <a href={entry.reference_image_url} target="_blank" rel="noopener noreferrer">
+                    {label} Photo Available 📸
+                </a>
+            </div>
+        );
+    };
 
     // --- Render Barber Dashboard ---
     return (
@@ -542,15 +537,35 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                             <button onClick={handleNextCustomer} className="next-button">Call: #{queueDetails.waiting[0].id} - {queueDetails.waiting[0].customer_name}</button>
                         ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
                     </div>
+                    
                     <h3 className="queue-subtitle">In Chair</h3>
-                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
+                    {queueDetails.inProgress ? (
+                        <ul className="queue-list">
+                            <li className="in-progress">
+                                <div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div>
+                                <button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                                <PhotoDisplay entry={queueDetails.inProgress} label="In Chair" />
+                            </li>
+                        </ul>
+                    ) : (<p className="empty-text">Chair empty</p>)}
+                    
                     <h3 className="queue-subtitle">Up Next</h3>
-                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
+                    {queueDetails.upNext ? (
+                        <ul className="queue-list">
+                            <li className="up-next">
+                                <div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div>
+                                <button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                                <PhotoDisplay entry={queueDetails.upNext} label="Up Next" />
+                            </li>
+                        </ul>
+                    ) : (<p className="empty-text">Nobody Up Next</p>)}
+                    
                     <h3 className="queue-subtitle">Waiting</h3>
                     <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (
                         <li key={c.id}>
                             <div>#{c.id} - {c.customer_name}</div>
                             <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button>
+                            {c.reference_image_url && <PhotoDisplay entry={c} label="Waiting" />}
                         </li>
                     )))}</ul>
                     
@@ -574,9 +589,8 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     );
 }
 const handleLogout = async (userId) => {
-    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server (The necessary update)
+    // 1. Send API call to mark UNAVAILABLE and clear session flag on the server
     try {
-        // This is the custom endpoint that fixes the 'is_available' status
         await axios.put(`${API_URL}/logout/flag`, { userId }); 
         console.log("Server status updated successfully.");
     } catch (error) {
@@ -584,15 +598,10 @@ const handleLogout = async (userId) => {
     }
     
     // 2. Local Logout (Guaranteed Reset)
-    // The 403 error means standard signOut() is rejected. We force a local session clear.
-    
-    // First, try the standard method (best practice)
     const { error: signOutError } = await supabase.auth.signOut();
 
     if (signOutError) {
         console.warn("Standard Supabase signout failed (403 Forbidden). Forcing local session clear.");
-        // If standard signout fails, clear the local token manually.
-        // This forces the user to the AuthForm when the app next loads.
         await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
     }
 };
@@ -626,7 +635,7 @@ function CustomerView({ session }) {
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
-   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]); // This is the persistent chat history
+   const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
    const [displayWait, setDisplayWait] = useState(0);
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
@@ -634,6 +643,9 @@ function CustomerView({ session }) {
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const liveQueueRef = useRef([]); 
+   const [selectedFile, setSelectedFile] = useState(null);
+   const [referenceImageUrl, setReferenceImageUrl] = useState('');
+   const [isUploading, setIsUploading] = useState(false);
    
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
@@ -646,6 +658,10 @@ function CustomerView({ session }) {
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
    const currentChatTargetBarberUserId = targetBarber?.user_id;
+
+   // FIX for no-undef errors: Define calculated state variables at the top of the component
+   const myQueueEntry = liveQueue.find(e => e.id.toString() === myQueueEntryId);
+   const isQueueUpdateAllowed = myQueueEntry && (myQueueEntry.status === 'Waiting' || myQueueEntry.status === 'Up Next');
 
    // --- Utilities ---
    const fetchChatHistory = useCallback(async (queueId) => {
@@ -667,7 +683,6 @@ function CustomerView({ session }) {
        setIsInstructionsModalOpen(false);
    };
    const sendCustomerMessage = (recipientId, messageText) => {
-        // Find the Queue ID to send to the server for logging
         const queueId = myQueueEntryId; 
 
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
@@ -688,12 +703,78 @@ function CustomerView({ session }) {
          const response = await axios.get(`${API_URL}/queue/public/${barberId}`);
          const queueData = response.data || [];
          setLiveQueue(queueData);
-         liveQueueRef.current = queueData; // Update ref
+         liveQueueRef.current = queueData;
        } catch (error) { 
            console.error("Failed fetch public queue:", error); setLiveQueue([]); liveQueueRef.current = []; setQueueMessage("Could not load queue data."); 
        } finally { setIsQueueLoading(false); }
    }, []);
    
+   const handleFileChange = (e) => {
+       const file = e.target.files[0];
+       setSelectedFile(file);
+       setReferenceImageUrl('');
+   };
+   
+   const handleUploadPhoto = async (targetQueueId = myQueueEntryId) => {
+       if (!selectedFile) { setMessage("Please select a file first."); return; }
+       if (!targetQueueId && myQueueEntryId) { targetQueueId = myQueueEntryId; }
+
+       setIsUploading(true);
+       setMessage('Uploading photo...');
+
+       try {
+           const fileExtension = selectedFile.name.split('.').pop();
+           const filePath = `${session.user.id}/${targetQueueId || 'new'}-${Date.now()}.${fileExtension}`;
+           
+           // 1. Upload to Supabase Storage
+           const { error: uploadError } = await supabase.storage
+               .from('haircut_references')
+               .upload(filePath, selectedFile, {
+                   cacheControl: '3600',
+                   upsert: true
+               });
+           if (uploadError) throw uploadError;
+
+           // 2. Get public URL
+           const { data: publicUrlData } = supabase.storage
+               .from('haircut_references')
+               .getPublicUrl(filePath);
+           
+           if (!publicUrlData.publicUrl) throw new Error("Failed to get public URL.");
+           
+           const imageUrl = publicUrlData.publicUrl;
+           
+           // 3. Update the queue entry with the new URL (Applies to Join or Update)
+           if (!myQueueEntryId) {
+               // Only set state for initial join form
+               setReferenceImageUrl(imageUrl);
+               setMessage('Photo uploaded. Ready to join queue.');
+           } else {
+               // Update existing queue entry
+               const updateResponse = await axios.put(`${API_URL}/queue/photo`, {
+                   queueId: targetQueueId,
+                   barberId: joinedBarberId,
+                   referenceImageUrl: imageUrl
+               });
+               
+               if (updateResponse.status !== 200) throw new Error("Failed to update queue entry.");
+               setReferenceImageUrl(imageUrl);
+               setMessage('Photo successfully updated!');
+               // Force a queue refresh to get the updated URL in the liveQueue
+               fetchPublicQueue(joinedBarberId);
+           }
+           
+           setSelectedFile(null);
+
+       } catch (error) {
+           console.error('Photo upload failed:', error);
+           setMessage(`Photo upload failed: ${error.message || 'Server error.'}`);
+           setReferenceImageUrl('');
+       } finally {
+           setIsUploading(false);
+       }
+   };
+
    const handleJoinQueue = async (e) => {
         e.preventDefault();
         if (!customerName || !selectedBarberId || !selectedServiceId) { setMessage('Name, Barber, AND Service required.'); return; }
@@ -706,7 +787,7 @@ function CustomerView({ session }) {
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
                 barber_id: selectedBarberId, 
-                reference_image_url: null,
+                reference_image_url: referenceImageUrl || null,
                 service_id: selectedServiceId,
                 player_id: player_id,
                 user_id: session.user.id,
@@ -719,6 +800,8 @@ function CustomerView({ session }) {
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
                 setSelectedBarberId(''); setSelectedServiceId(''); 
+                setReferenceImageUrl(newEntry.reference_image_url || '');
+                fetchPublicQueue(newEntry.barber_id.toString());
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -726,8 +809,6 @@ function CustomerView({ session }) {
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
         } finally { setIsLoading(false); }
    };
-   
-   <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
    
    const handleReturnToJoin = async (userInitiated = false) => {
         console.log("[handleReturnToJoin] Function called.");
@@ -744,10 +825,11 @@ function CustomerView({ session }) {
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
         setIsChatOpen(false);
-        // setHasUnreadFromBarge(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
+        setReferenceImageUrl('');
+        setSelectedFile(null);
+        setIsUploading(false);
         
-        // --- Feedback state resets ---
         setFeedbackText('');
         setFeedbackSubmitted(false);
         setBarberFeedback([]);
@@ -759,8 +841,8 @@ function CustomerView({ session }) {
 
    // --- Effects ---
    useEffect(() => { // Geolocation Watcher 
-     const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR  
-     const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
+     const BARBERSHOP_LAT = 16.414830431367967;
+     const BARBERSHOP_LON = 120.59712292628716;
      const DISTANCE_THRESHOLD_METERS = 200;
      if (!('geolocation' in navigator)) { console.warn('Geolocation not available.'); return; }
      if (myQueueEntryId) {
@@ -871,7 +953,7 @@ function CustomerView({ session }) {
     useEffect(() => {
         if (selectedBarberId) {
             console.log(`Fetching feedback for barber ${selectedBarberId}`);
-            setBarberFeedback([]); // Clear old feedback
+            setBarberFeedback([]);
             const fetchFeedback = async () => {
                 try {
                     const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
@@ -882,15 +964,14 @@ function CustomerView({ session }) {
             };
             fetchFeedback();
         } else {
-            setBarberFeedback([]); // Clear if no barber is selected
+            setBarberFeedback([]);
         }
     }, [selectedBarberId]); 
    
-   // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
+   // --- UseEffect for WebSocket Connection and History Fetch ---
     useEffect(() => { 
     if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
         
-        // This must run immediately to pull missed messages from the database.
             fetchChatHistory(myQueueEntryId); 
             
             if (!socketRef.current) {
@@ -905,14 +986,10 @@ function CustomerView({ session }) {
                     socket.emit('registerQueueEntry', myQueueEntryId);
                 });
 
-                // The message listener must append the new message to the existing history state
                 const messageListener = (incomingMessage) => {
                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
-                        // <<< --- PLAY SOUND NOTIFICATION --- >>>
                         playSound(messageNotificationSound); 
-                        // <<< --- END SOUND NOTIFICATION --- >>>
                         
-                        // Append the new message to the existing history state
                         setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
                         setIsChatOpen(currentIsOpen => {
                             if (!currentIsOpen) { setHasUnreadFromBarber(true); } 
@@ -969,7 +1046,7 @@ function CustomerView({ session }) {
            });
        };
        calculateWaitTime();
-   }, [liveQueue, myQueueEntryId, estimatedWait]); // Added estimatedWait
+   }, [liveQueue, myQueueEntryId, estimatedWait]);
    
    useEffect(() => { // 1-Minute Countdown Timer
        if (!myQueueEntryId) return; 
@@ -978,13 +1055,11 @@ function CustomerView({ session }) {
    }, [myQueueEntryId]);
    
    
-   // --- Debug Log ---
    console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
    // --- Render Customer View ---
    return (
        <div className="card">
-         {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
          <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
          <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}>
             <div className="modal-content">
@@ -993,7 +1068,6 @@ function CustomerView({ session }) {
                 <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
             </div>
          </div>
-         {/* --- Service Complete Modal (with NEW AI Feedback Form) --- */}
           <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
               <div className="modal-content">
                   
@@ -1005,7 +1079,7 @@ function CustomerView({ session }) {
                           <form className="feedback-form" onSubmit={async (e) => {
                               e.preventDefault();
                               if (!feedbackText.trim()) {
-                                  setFeedbackSubmitted(true); // Allow skipping
+                                  setFeedbackSubmitted(true);
                                   return;
                               }
                               try {
@@ -1017,7 +1091,7 @@ function CustomerView({ session }) {
                               } catch (err) {
                                   console.error("Failed to submit feedback", err);
                               }
-                              setFeedbackSubmitted(true); // Mark as submitted
+                              setFeedbackSubmitted(true);
                           }}>
                               <textarea
                                   value={feedbackText}
@@ -1041,7 +1115,6 @@ function CustomerView({ session }) {
                               id="close-complete-modal-btn" 
                               onClick={() => {
                                   handleReturnToJoin(false);
-                                  // States are reset inside handleReturnToJoin
                               }}
                           >
                               Okay
@@ -1054,9 +1127,8 @@ function CustomerView({ session }) {
          <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p><button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)}>Okay</button></div></div>
          <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far—we’d really appreciate it if you stayed close to the queue!</p><button id="close-too-far-modal-btn" onClick={() => { setIsTooFarModalOpen(false); console.log("Cooldown started."); setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000); }}>Okay, I'll stay close</button></div></div>
 
-         {/* --- Join Form or Live Queue View --- */}
          {!myQueueEntryId ? (
-            <> {/* --- JOIN FORM JSX --- */}
+            <>
                 <h2>Join the Queue</h2>
                 <form onSubmit={handleJoinQueue}>
                     <div className="form-group"><label>Your Name:</label><input type="text" value={customerName} required readOnly className="prefilled-input" /></div>
@@ -1064,9 +1136,17 @@ function CustomerView({ session }) {
                     <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                     <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
                     
+                    <div className="form-group photo-upload-group">
+                        <label>Desired Haircut Photo (Optional):</label>
+                        <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} />
+                        <button type="button" onClick={() => handleUploadPhoto(null)} disabled={!selectedFile || isUploading || referenceImageUrl} className="upload-button">
+                            {isUploading ? 'Uploading...' : (referenceImageUrl ? 'Photo Attached' : 'Upload Photo')}
+                        </button>
+                        {referenceImageUrl && <p className="success-message small">Photo ready. <a href={referenceImageUrl} target="_blank" rel="noopener noreferrer">View Photo</a></p>}
+                    </div>
+
                     <div className="form-group"><label>Select Available Barber:</label><select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)} required><option value="">-- Choose --</option>{barbers.map((b) => (<option key={b.id} value={b.id}>{b.full_name}</option>))}</select></div>
 
-                    {/* =============== THIS IS THE NEW FEEDBACK SECTION (Customer View) =============== */}
                     {selectedBarberId && (
                         <div className="feedback-list-container customer-feedback">
                             <h3 className="feedback-subtitle">Recent Feedback</h3>
@@ -1091,16 +1171,15 @@ function CustomerView({ session }) {
                             </ul>
                         </div>
                     )}
-                    {/* =============== END OF NEW SECTION =============== */}
                     
                     {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
                     
-                    <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
+                    <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0 || isUploading} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
                 </form>
                 {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
            </>
          ) : (
-            <div className="live-queue-view"> {/* --- LIVE QUEUE VIEW JSX --- */}
+            <div className="live-queue-view">
                 <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
                 <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
                 <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
@@ -1109,13 +1188,24 @@ function CustomerView({ session }) {
                 <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
                 <ul className="queue-list live">{!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''}`}><span>{index + 1}. {entry.id.toString() === myQueueEntryId ? `You (${entry.customer_name})` : `Customer #${entry.id}`}</span><span className="queue-status">{entry.status}</span></li>)))}</ul>
                 
-                {/* --- Chat Button (with Badge) --- */}
+                {isQueueUpdateAllowed && (
+                    <div className="form-group photo-upload-group live-update-group">
+                        <label>Update Haircut Photo:</label>
+                        <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} />
+                        <button type="button" onClick={() => handleUploadPhoto(myQueueEntryId)} disabled={!selectedFile || isUploading} className="upload-button">
+                            {isUploading ? 'Uploading...' : 'Replace Photo'}
+                        </button>
+                        {myQueueEntry?.reference_image_url && <p className="success-message small">Current Photo: <a href={myQueueEntry.reference_image_url} target="_blank" rel="noopener noreferrer">View</a></p>}
+                        {referenceImageUrl && referenceImageUrl !== myQueueEntry?.reference_image_url && <p className="success-message small">New photo uploaded. Refresh queue to confirm.</p>}
+                    </div>
+                )}
+
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
                                 
                                 setIsChatOpen(true);
-                                setHasUnreadFromBarber(false); // Mark as read
+                                setHasUnreadFromBarber(false);
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
                         }}
                         className="chat-toggle-button"
@@ -1126,14 +1216,13 @@ function CustomerView({ session }) {
                 )}
                 {isChatOpen && (<button onClick={() => setIsChatOpen(false)} className="chat-toggle-button close">Close Chat</button>)}
 
-                {/* --- Chat Window --- */}
                 {isChatOpen && currentChatTargetBarberUserId && (
                     <ChatWindow
                         currentUser_id={session.user.id}
                         otherUser_id={currentChatTargetBarberUserId}
-                        messages={chatMessagesFromBarber} // Pass message state
-                        onSendMessage={sendCustomerMessage} // Pass send handler
-                        isVisible={isChatOpen} // Pass visibility
+                        messages={chatMessagesFromBarber}
+                        onSendMessage={sendCustomerMessage}
+                        isVisible={isChatOpen}
                     />
                 )}
                 <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
@@ -1150,7 +1239,7 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
   const [refreshAnalyticsSignal, setRefreshAnalyticsSignal] = useState(0);
 
   const handleCutComplete = useCallback(() => {
-    setRefreshAnalyticsSignal(prev => prev + 1); // Trigger analytics refresh
+    setRefreshAnalyticsSignal(prev => prev + 1);
   }, []);
 
   return (
@@ -1163,7 +1252,6 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
             session={session}
             onAvailabilityChange={(newStatus) => setBarberProfile(prev => ({ ...prev, is_available: newStatus }))}
           />
-          {/* --- REPLACE THE LOGOUT BUTTON HANDLER --- */}
           <button 
              onClick={() => handleLogout(session.user.id)} 
              className="logout-button"
@@ -1227,23 +1315,10 @@ function App() {
         });
       });
     }
-    return () => { /* Cleanup if needed */ };
+    return () => {};
   }, []);
 
-  // --- Helper to Update Availability (wrapped in useCallback) ---
-  /*const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
-       if (!barberId || !userId) return;
-       try {
-           const response = await axios.put(`${API_URL}/barber/availability`, { barberId, userId, isAvailable });
-            setBarberProfile(prev => prev ? { ...prev, is_available: response.data.is_available } : null);
-       } catch (error) {
-            console.error("Failed to update availability on logout/login:", error);
-       }
-   }, []); // Empty dependency array, it doesn't depend on props/state
- */
-
-
-  // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
+  // --- Helper to Check Role ---
   const checkUserRole = useCallback(async (user) => {
     if (!user || !user.id) {
       console.warn("checkUserRole called with incomplete user, defaulting to customer.");
@@ -1275,9 +1350,9 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // <<< === THIS IS THE FIX === (Removed updateAvailability) 
+  }, []);
 
-  // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
+  // --- Auth State Change Listener ---
   useEffect(() => {
     if (!supabase?.auth) {
       console.error("Supabase auth not initialized.");
@@ -1285,7 +1360,6 @@ function App() {
       return;
     }
 
-    // This ONE listener handles everything: page load, login, and logout.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       console.log("Auth State Change Detected:", _event, currentSession);
       setSession(currentSession);
