@@ -622,6 +622,7 @@ function CustomerView({ session }) {
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
+   const [modalAlert, setModalAlert] = useState({ title: "You're up next!", text: "Please take a seat and stay put." });
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
    const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(false);
@@ -834,14 +835,20 @@ function CustomerView({ session }) {
                     if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
                         const newStatus = payload.new.status;
                         console.log(`My status updated to: ${newStatus}`);
-                        if (newStatus === 'Up Next') { 
-                            // <<< --- PLAY SOUND NOTIFICATION --- >>>
+                        if (newStatus === 'Up Next') {
+                            setModalAlert({ title: "You're up next!", text: "Please take a seat and stay put." });
                             playSound(queueNotificationSound); 
-                            // <<< --- END SOUND NOTIFICATION --- >>>
                             startBlinking(); 
                             setIsYourTurnModalOpen(true); 
                             if (navigator.vibrate) navigator.vibrate([500,200,500]); 
                         } 
+                        else if (newStatus === 'In Progress') {
+                            setModalAlert({ title: "It's your turn!", text: "The barber is calling you now." });
+                            playSound(queueNotificationSound); 
+                            startBlinking(); 
+                            setIsYourTurnModalOpen(true); 
+                            if (navigator.vibrate) navigator.vibrate([500,200,500]);
+                        }
                         else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
                         else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
                     } 
@@ -979,9 +986,13 @@ function CustomerView({ session }) {
        <div className="card">
          {/* --- All 5 Modals (Instructions, Your Turn, Complete, Cancel, Too Far) --- */}
          <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}><div className="modal-content instructions-modal"><h2>How to Join</h2><ol className="instructions-list"><li>Select your <strong>Service</strong>.</li><li>Choose an <strong>Available Barber</strong>.</li><li>Click <strong>"Join Queue"</strong> and wait!</li></ol><button onClick={handleCloseInstructions}>Got It!</button></div></div>
-         
-         <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}><div className="modal-content"><h2>Great, you’re up next!</h2><p>Please take a seat and stay put.</p><button id="close-modal-btn" onClick={handleModalClose}>Okay!</button></div></div>
-         
+         <div id="your-turn-modal-overlay" className="modal-overlay" style={{ display: isYourTurnModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content">
+                <h2>{modalAlert.title}</h2>
+                <p>{modalAlert.text}</p>
+                <button id="close-modal-btn" onClick={handleModalClose}>Okay!</button>
+            </div>
+         </div>
          {/* --- Service Complete Modal (with NEW AI Feedback Form) --- */}
           <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
               <div className="modal-content">
