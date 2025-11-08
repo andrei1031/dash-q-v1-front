@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
@@ -460,7 +461,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         } else { console.warn("Cannot send barber msg, socket disconnected or queueId missing."); }
     };
     
-    // --- FIX: Chat Opener (Fetches history and sets queueId) --- eton yung kay barber ehh yung kanina yugn kay customer parang yung id ni barber asa kay customer tas vice versa tingen nga ulet ui nung kay customer part ahh chat with barber oo bro sige don sa chat with barber
+    // --- FIX: Chat Opener (Fetches history and sets queueId) ---
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
         const queueId = customer?.id; // The queue entry ID is the 'id' field
@@ -594,7 +595,7 @@ function CustomerView({ session }) {
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
    const [isChatOpen, setIsChatOpen] = useState(false);
-   //const [setChatTargetBarberUserId] = useState(null);
+   const [setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -618,7 +619,7 @@ function CustomerView({ session }) {
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
    const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
    const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
-   const currentChatTargetBarberUserId = targetBarber?.user_id; // check mo to kung mag coconsole
+   const currentChatTargetBarberUserId = targetBarber?.user_id;
 
    // --- Utilities ---
    const fetchChatHistory = useCallback(async (queueId) => {
@@ -715,8 +716,7 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); 
-        //setChatTargetBarberUserId(null);
+        setIsChatOpen(false); setChatTargetBarberUserId(null);
         // setHasUnreadFromBarge(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
@@ -1063,17 +1063,14 @@ function CustomerView({ session }) {
                 
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
-                    <button onClick={() => { 
-                     // comment mo tong if statment
+                    <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
-
-                              //  setChatTargetBarberUserId(currentChatTargetBarberUserId);
+                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                 setIsChatOpen(true);
-                                setHasUnreadFromBarber(false); // Mark as read matetest ba naten to sa local ? hindi naakdeploy sa local iba nandun ehh wag 3000
-                            } else { console.error("Barber user ID missing."); setMessage("Cannot/initiate chat."); }
-                            
+                                setHasUnreadFromBarber(false); // Mark as read
+                            } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
                         }}
-                        className="chat-toggle-button"//ayan bro dun sa chat with barber button kay barber to e yong kay customer 
+                        className="chat-toggle-button"
                     >
                         Chat with Barber
                         {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
