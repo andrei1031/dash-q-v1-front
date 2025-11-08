@@ -780,7 +780,7 @@ function CustomerView({ session }) {
         setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-    }, [myQueueEntryId, setIsLoading, axios, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
+    }, [myQueueEntryId]);
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
@@ -1306,7 +1306,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // This dependency is correct
+  }, []); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
