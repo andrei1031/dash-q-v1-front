@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
@@ -9,6 +8,29 @@ import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
 import './App.css';
+
+// <<< --- NEW SOUND NOTIFICATION SETUP --- >>>
+// NOTE: Make sure 'queue-alert.mp3' and 'message-alert.mp3'
+// are placed in your 'public' folder!
+const queueNotificationSound = new Audio('/queue_sound.mp3');
+const messageNotificationSound = new Audio('/chat_sound.mp3');
+
+/**
+ * Helper function to play a sound, with error handling
+ * for browser autoplay policies.
+ */
+const playSound = (audioElement) => {
+  if (!audioElement) return;
+  // We reset currentTime to 0 so the sound can be re-triggered
+  // even if it's already playing.
+  audioElement.currentTime = 0; 
+  audioElement.play().catch(error => {
+    // Log autoplay policy errors, etc.
+    console.warn("Sound notification was blocked by the browser:", error.message);
+  });
+};
+// <<< --- END OF NEW SOUND SETUP --- >>>
+
 
 // --- Global Constants ---
 const SOCKET_URL = 'https://dash-q-backend.onrender.com'; // Your backend URL
@@ -357,6 +379,10 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
 
             const messageListener = (incomingMessage) => {
+                // <<< --- PLAY SOUND NOTIFICATION --- >>>
+                playSound(messageNotificationSound); 
+                // <<< --- END SOUND NOTIFICATION --- >>>
+                
                 const customerId = incomingMessage.senderId;
                 
                 // 1. ALWAYS append the message to the state object for persistence
@@ -808,7 +834,14 @@ function CustomerView({ session }) {
                     if (payload.eventType === 'UPDATE' && payload.new.id.toString() === myQueueEntryId) {
                         const newStatus = payload.new.status;
                         console.log(`My status updated to: ${newStatus}`);
-                        if (newStatus === 'Up Next') { startBlinking(); setIsYourTurnModalOpen(true); if (navigator.vibrate) navigator.vibrate([500,200,500]); } 
+                        if (newStatus === 'Up Next') { 
+                            // <<< --- PLAY SOUND NOTIFICATION --- >>>
+                            playSound(queueNotificationSound); 
+                            // <<< --- END SOUND NOTIFICATION --- >>>
+                            startBlinking(); 
+                            setIsYourTurnModalOpen(true); 
+                            if (navigator.vibrate) navigator.vibrate([500,200,500]); 
+                        } 
                         else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
                         else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
                     } 
@@ -868,6 +901,10 @@ function CustomerView({ session }) {
                 // The message listener must append the new message to the existing history state
                 const messageListener = (incomingMessage) => {
                     if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                        // <<< --- PLAY SOUND NOTIFICATION --- >>>
+                        playSound(messageNotificationSound); 
+                        // <<< --- END SOUND NOTIFICATION --- >>>
+                        
                         // Append the new message to the existing history state
                         setChatMessagesFromBarber(prev => [...prev, incomingMessage]); 
                         setIsChatOpen(currentIsOpen => {
