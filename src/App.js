@@ -675,7 +675,7 @@ function CustomerView({ session }) {
             // 1. Send live message to server (server logs and pushes notification)
             socketRef.current.emit('chat message', messageData);
             
-            
+
             // 2. Immediately update local state to show message
             setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
         } else { console.warn("[Customer] Cannot send message (socket disconnected or missing IDs)."); setMessage("Chat disconnected."); }
@@ -1102,7 +1102,7 @@ function CustomerView({ session }) {
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
-                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
+                                
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false); // Mark as read
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
