@@ -715,7 +715,7 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
+        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarge(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -1223,7 +1223,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // This dependency is correct
+  }, []); // <<< === THIS IS THE FIX === (Removed updateAvailability)
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
