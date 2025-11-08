@@ -715,7 +715,8 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarge(false);
+        setIsChatOpen(false); setChatTargetBarberUserId(null);
+        // setHasUnreadFromBarge(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -729,8 +730,8 @@ function CustomerView({ session }) {
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
    // --- Effects ---
-   useEffect(() => { // Geolocation Watcher
-     const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR COORDS
+   useEffect(() => { // Geolocation Watcher 
+     const BARBERSHOP_LAT = 16.414830431367967; // <-- YOUR  
      const BARBERSHOP_LON = 120.59712292628716; // <-- YOUR COORDS
      const DISTANCE_THRESHOLD_METERS = 200;
      if (!('geolocation' in navigator)) { console.warn('Geolocation not available.'); return; }
@@ -1223,7 +1224,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // <<< === THIS IS THE FIX === (Removed updateAvailability)
+  }, []); // <<< === THIS IS THE FIX === (Removed updateAvailability) 
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
@@ -1249,7 +1250,7 @@ function App() {
         setBarberProfile(null);
         setLoadingRole(false);
       }
-      
+
     });
 
     return () => subscription?.unsubscribe();
