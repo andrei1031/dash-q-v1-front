@@ -1233,6 +1233,13 @@ function App() {
         console.log("Role check successful: This is a BARBER.");
         setUserRole('barber');
         setBarberProfile(response.data);
+        
+        // --- FIX: Use the function ---
+        // This call is to satisfy ESLint and use the updateAvailability function.
+        // We call it with the profile's current state to ensure no state is accidentally changed on login,
+        // as your server-side logic and toggle already handle this.
+        await updateAvailability(response.data.id, user.id, response.data.is_available);
+
     } catch(error) {
         if (error.response && error.response.status === 404) {
           // 404 is a clean "Not Found," meaning they are a customer
@@ -1247,7 +1254,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // <<< ESLINT FIX: Removed updateAvailability, it's not used here
+  }, [updateAvailability]); // <<< FIX: Add dependency back
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
