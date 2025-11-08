@@ -1249,6 +1249,7 @@ function App() {
         setBarberProfile(null);
         setLoadingRole(false);
       }
+      
     });
 
     return () => subscription?.unsubscribe();
