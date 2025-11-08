@@ -593,7 +593,8 @@ function CustomerView({ session }) {
    const [isQueueLoading, setIsQueueLoading] = useState(true);
    const [services, setServices] = useState([]);
    const [selectedServiceId, setSelectedServiceId] = useState('');
-   const [isChatOpen, setIsChatOpen] = useState(false);   
+   const [isChatOpen, setIsChatOpen] = useState(false);
+   const [setChatTargetBarberUserId] = useState(null);
    const [isYourTurnModalOpen, setIsYourTurnModalOpen] = useState(false);
    const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
    const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
@@ -714,7 +715,7 @@ function CustomerView({ session }) {
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false); setHasUnreadFromBarber(false);
+        setIsChatOpen(false); setChatTargetBarberUserId(null); setHasUnreadFromBarber(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
         
         // --- Feedback state resets ---
@@ -1061,7 +1062,8 @@ function CustomerView({ session }) {
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
                     <button onClick={() => {
-                            if (currentChatTargetBarberUserId) {                                
+                            if (currentChatTargetBarberUserId) {
+                                setChatTargetBarberUserId(currentChatTargetBarberUserId);
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false); // Mark as read
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
@@ -1178,6 +1180,17 @@ function App() {
     return () => { /* Cleanup if needed */ };
   }, []);
 
+  // --- Helper to Update Availability (wrapped in useCallback) ---
+  const updateAvailability = useCallback(async (barberId, userId, isAvailable) => {
+       if (!barberId || !userId) return;
+       try {
+           const response = await axios.put(`${API_URL}/barber/availability`, { barberId, userId, isAvailable });
+            setBarberProfile(prev => prev ? { ...prev, is_available: response.data.is_available } : null);
+       } catch (error) {
+            console.error("Failed to update availability on logout/login:", error);
+       }
+   }, []); // Empty dependency array, it doesn't depend on props/state
+
   // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
   const checkUserRole = useCallback(async (user) => {
     if (!user || !user.id) {
@@ -1210,7 +1223,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, []); // This dependency is correct
+  }, [updateAvailability]); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
