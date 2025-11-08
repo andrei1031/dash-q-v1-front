@@ -360,6 +360,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const [unreadMessages, setUnreadMessages] = useState({});
     const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
 
+    const notificationSoundRef = useRef(null); // For sound notifications
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -379,6 +380,12 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
 
     // --- WebSocket Connection Effect for Barber (FIXED) ---
     useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
+    useEffect(() => {
         if (!session?.user?.id) return;
         if (!socketRef.current) {
             console.log("[Barber] Connecting WebSocket...");
@@ -389,7 +396,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
             socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
 
             const messageListener = (incomingMessage) => {
-                const senderId = String(incomingMessage.senderId);
+                const senderId = incomingMessage.senderId;
 
                 // 1. Append the message to the correct chat history
                 setChatMessages(prev => {
@@ -404,6 +411,23 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                      }
                      return currentOpenChatId;
                 });
+
+                // Vibrate on new message
+                if ('vibrate' in navigator) {
+                    console.log("[Vibration] Attempting to vibrate for barber.");
+                    try {
+                        navigator.vibrate(200); // Vibrate for 200ms
+                    } catch (e) {
+                        console.warn("[Vibration] Could not vibrate:", e);
+                    }
+                }
+                // Play sound on new message (for iOS and general audio notification)
+                if (notificationSoundRef.current) {
+                    console.log("[Audio] Attempting to play notification sound for barber.");
+                    notificationSoundRef.current.play().catch(e => {
+                        console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                    });
+                }
             };
             socket.on('chat message', messageListener);
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
@@ -435,35 +459,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
 
     // --- EFFECT: Check for unread messages when page becomes visible ---
     useEffect(() => {
-        if (isPageVisible && barberId && session?.user?.id) {
+        if (isPageVisible) {
             console.log("[Barber] Page is visible. Re-checking queue and unread messages.");
-            const checkMissedMessages = async () => {
-                try {
-                    // First, get the latest queue to know which customers are relevant
-                    await fetchQueueDetails();
-
-                    // Then, check for any unread messages from customers in that queue
-                    // This assumes your `chat_messages` table has a `read_by_barber` boolean column
-                    const { data: unread, error } = await supabase
-                        .from('chat_messages')
-                        .select('sender_id')
-                        .eq('recipient_id', session.user.id)
-                        .is('read_by_barber', false);
-
-                    if (error) throw error;
-
-                    const newUnreadState = {};
-                    for (const msg of unread) {
-                        newUnreadState[String(msg.sender_id)] = true;
-                    }
-                    setUnreadMessages(newUnreadState);
-                } catch (err) {
-                    console.error("[Barber] Error checking for missed messages:", err);
-                }
-            };
-            checkMissedMessages();
+            // Re-fetch the queue to get the absolute latest state
+            fetchQueueDetails().then(() => {
+                // After fetching, we need to re-evaluate unread messages based on the new queueDetails state.
+                // This is tricky because state updates are async. A simple approach is to check history on open.
+                // The most important part is that fetchQueueDetails() gets the latest list,
+                // so when a chat is opened via openChat(), it will have the correct data to fetch history.
+                // We can also proactively check for new messages here if we had a 'last_read' timestamp.
+                // For now, fetching the queue is the most critical step to ensure UI is up-to-date.
+            });
         }
-    }, [isPageVisible, fetchQueueDetails, barberId, session?.user?.id]);
+    }, [isPageVisible, fetchQueueDetails]);
 
     // This effect ensures that when queueDetails changes, we can update unread status
     useEffect(() => {
@@ -534,21 +542,34 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
         const queueId = customer?.id; // The queue entry ID is the 'id' field
+        
+        // --- FIX: Clear unread status immediately on open ---
+        setUnreadMessages(prev => {
+            const updated = { ...prev };
+            if (customerUserId) delete updated[customerUserId]; // Mark as read
+            return updated;
+        });
 
         if (customerUserId && queueId) {
             console.log(`[openChat] Opening chat for ${customerUserId} on queue ${queueId}`);
-            // --- FIX: Clear unread status immediately on open ---
-            setUnreadMessages(prev => {
-                const updated = { ...prev };
-                if (updated[String(customerUserId)]) {
-                    delete updated[String(customerUserId)];
-                    console.log(`[BarberDashboard] Clearing unread badge for customer ${customerUserId}`);
-                }
-                return updated;
-            });
             setOpenChatCustomerId(customerUserId);
             setOpenChatQueueId(queueId);
             markMessagesAsRead(queueId, session.user.id); // Mark messages as read on the backend
+
+            // --- VIBRATION UNLOCK ---
+            // A silent vibration on user interaction helps ensure subsequent vibrations work.
+            if ('vibrate' in navigator) {
+                console.log("[Vibration] Unlocking vibration with a user gesture.");
+                navigator.vibrate(1); // A tiny, silent vibration
+            }
+            // Audio unlock for iOS and other browsers
+            if (notificationSoundRef.current) {
+                console.log("[Audio] Unlocking audio with a user gesture.");
+                notificationSoundRef.current.play().then(() => {
+                    notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
+            }
+
 
             // Fetch history when chat opens
             const fetchHistory = async () => {
@@ -590,14 +611,14 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
                         ) : ( <button className="next-button disabled" disabled>Queue Empty</button> )}
                     </div>
                     <h3 className="queue-subtitle">In Chair</h3>
-                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[String(queueDetails.inProgress.profiles.id)] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
+                    {queueDetails.inProgress ? (<ul className="queue-list"><li className="in-progress"><div><strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong></div><button onClick={() => openChat(queueDetails.inProgress)} className="chat-icon-button" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>💬{queueDetails.inProgress.profiles?.id && unreadMessages[queueDetails.inProgress.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Chair empty</p>)}
                     <h3 className="queue-subtitle">Up Next</h3>
-                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[String(queueDetails.upNext.profiles.id)] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
+                    {queueDetails.upNext ? (<ul className="queue-list"><li className="up-next"><div><strong>#{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</strong></div><button onClick={() => openChat(queueDetails.upNext)} className="chat-icon-button" title={queueDetails.upNext.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.upNext.profiles?.id}>💬{queueDetails.upNext.profiles?.id && unreadMessages[queueDetails.upNext.profiles.id] && (<span className="notification-badge">1</span>)}</button></li></ul>) : (<p className="empty-text">Nobody Up Next</p>)}
                     <h3 className="queue-subtitle">Waiting</h3>
                     <ul className="queue-list">{queueDetails.waiting.length === 0 ? (<li className="empty-text">Waiting queue empty.</li>) : (queueDetails.waiting.map(c => (
                         <li key={c.id}>
                             <div>#{c.id} - {c.customer_name}</div>
-                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[String(c.profiles.id)] && (<span className="notification-badge">1</span>)}</button>
+                            <button onClick={() => openChat(c)} className="chat-icon-button" title={c.profiles?.id ? "Chat" : "Guest"} disabled={!c.profiles?.id}>💬{c.profiles?.id && unreadMessages[c.profiles.id] && (<span className="notification-badge">1</span>)}</button>
                         </li>
                     )))}</ul>
                     
@@ -647,7 +668,7 @@ const handleLogout = async (userId) => {
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
 // ##############################################
 
-// --- CustomerView (Handles Joining Queue & Live View for Customers) --- {/* Removed extra space */}
+// --- CustomerView (Handles Joining Queue & Live View for Customers) ---
 function CustomerView({ session }) {
    // --- State ---
    const [barbers, setBarbers] = useState([]);
@@ -677,12 +698,12 @@ function CustomerView({ session }) {
    const [isTooFarModalOpen, setIsTooFarModalOpen] = useState(false);
    const [isOnCooldown, setIsOnCooldown] = useState(false);
    const locationWatchId = useRef(null);
-   const [targetBarberProfile, setTargetBarberProfile] = useState(null); // <<< NEW: State for the specific barber profile
    const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
    const socketRef = useRef(null);
    const isPageVisible = usePageVisibility(); // <<< ADDED: Hook to detect when page is active
    const liveQueueRef = useRef([]); 
    
+   const notificationSoundRef = useRef(null); // For sound notifications
    // --- AI Feedback & UI State ---
    const [feedbackText, setFeedbackText] = useState('');
    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -691,8 +712,9 @@ function CustomerView({ session }) {
    // --- Calculated Vars ---
    const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
    const upNext = liveQueue.find(entry => entry.status === 'Up Next');
-   const currentBarberName = targetBarberProfile?.full_name || `Barber #${joinedBarberId}`;
-   const currentChatTargetBarberUserId = targetBarberProfile?.user_id;
+   const targetBarber = barbers.find(b => b.id === parseInt(joinedBarberId));
+   const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
+   const currentChatTargetBarberUserId = targetBarber?.user_id;
 
    // --- Utilities ---
    const fetchChatHistory = useCallback(async (queueId) => {
@@ -798,7 +820,7 @@ function CustomerView({ session }) {
         setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-    }, [myQueueEntryId, setIsLoading, axios, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
+    }, [myQueueEntryId, setIsLoading, setMyQueueEntryId, setJoinedBarberId, setLiveQueue, setQueueMessage, setSelectedBarberId, setSelectedServiceId, setMessage, setIsChatOpen, setHasUnreadFromBarber, setChatMessagesFromBarber, setDisplayWait, setEstimatedWait, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setIsYourTurnModalOpen, setFeedbackText, setFeedbackSubmitted, setBarberFeedback]);
    
    const handleModalClose = () => { setIsYourTurnModalOpen(false); stopBlinking(); };
 
@@ -835,33 +857,18 @@ function CustomerView({ session }) {
         if (!hasSeen) { setIsInstructionsModalOpen(true); }
    }, []);
    
-   // --- NEW useEffect: Fetch the specific barber's profile when in a queue ---
-   useEffect(() => {
-       if (joinedBarberId) {
-           const fetchBarberProfile = async () => {
-               try {
-                   // This endpoint gets a barber by their profile ID, not user ID
-                   const response = await axios.get(`${API_URL}/barber/profile/by-id/${joinedBarberId}`);
-                   setTargetBarberProfile(response.data);
-               } catch (error) {
-                   console.error(`Failed to fetch profile for barber ${joinedBarberId}:`, error);
-                   setMessage("Could not load barber details for chat.");
-               }
-           };
-           fetchBarberProfile();
-       } else {
-           setTargetBarberProfile(null); // Clear profile when not in a queue
-       }
-   }, [joinedBarberId]);
    // --- EFFECT: Re-fetch history when page becomes visible ---
    useEffect(() => {
        // If the page becomes visible AND we are in a queue
        if (isPageVisible && myQueueEntryId) {
            console.log("[Customer] Page is visible. Re-fetching chat history to check for unread messages.");
-           // This call will now also update hasUnreadFromBarber based on the actual unread status from the DB
-           fetchChatHistory(myQueueEntryId);
+           fetchChatHistory(myQueueEntryId).then(() => {
+               // After fetching, if the chat window is closed, we should assume there might be unread messages.
+               // The logic inside the message listener is the primary defense, but this is a good fallback.
+               if (!isChatOpen) setHasUnreadFromBarber(true);
+           });
        }
-   }, [isPageVisible, myQueueEntryId, fetchChatHistory]);
+   }, [isPageVisible, myQueueEntryId, fetchChatHistory, isChatOpen]);
 
    useEffect(() => { // Fetch Services
         const fetchServices = async () => {
@@ -957,6 +964,12 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]); 
    
+   useEffect(() => {
+        if (!notificationSoundRef.current) {
+            notificationSoundRef.current = new Audio('/sounds/notification.mp3'); // Path to your notification sound
+            notificationSoundRef.current.volume = 0.7; // Adjust volume as needed
+        }
+    }, []);
    // --- UseEffect for WebSocket Connection and History Fetch (FIXED) ---
     useEffect(() => { 
     if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
@@ -988,6 +1001,23 @@ function CustomerView({ session }) {
                             if (!currentIsOpen) { setHasUnreadFromBarber(true); }
                             return currentIsOpen;
                         });
+
+                        // Vibrate on new message
+                        if ('vibrate' in navigator) {
+                            console.log("[Vibration] Attempting to vibrate for customer.");
+                            try {
+                                navigator.vibrate(200); // Vibrate for 200ms
+                            } catch (e) {
+                                console.warn("[Vibration] Could not vibrate:", e);
+                            }
+                        }
+                        // Play sound on new message (for iOS and general audio notification)
+                        if (notificationSoundRef.current) {
+                            console.log("[Audio] Attempting to play notification sound for customer.");
+                            notificationSoundRef.current.play().catch(e => {
+                                console.warn("[Audio] Could not play sound (user gesture required or blocked):", e);
+                            });
+                        }
                     }
                 };
                     socket.on('chat message', messageListener);
@@ -1177,15 +1207,29 @@ function CustomerView({ session }) {
                 
                 {/* --- Chat Button (with Badge) --- */}
                 {!isChatOpen && myQueueEntryId && (
-                    <button 
-                       onClick={() => {
-                           if (currentChatTargetBarberUserId) {
-                               setIsChatOpen(true);
-                               setHasUnreadFromBarber(false); // FIX: Immediately clear the unread state
-                               markMessagesAsRead(myQueueEntryId, session.user.id);
-                           } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
-                       }}
-                       className="chat-toggle-button"
+                    <button onClick={() => {
+                            if (currentChatTargetBarberUserId) {
+                                setIsChatOpen(true); // Open the chat window
+                                setHasUnreadFromBarber(false); // Mark as read
+
+                                // --- VIBRATION UNLOCK ---
+                                // A silent vibration on user interaction helps ensure subsequent vibrations work.
+                                if ('vibrate' in navigator) {
+                                    console.log("[Vibration] Unlocking vibration with a user gesture.");
+                                    navigator.vibrate(1); // A tiny, silent vibration
+                                }
+                                // Audio unlock for iOS and other browsers
+                                if (notificationSoundRef.current) {
+                                    console.log("[Audio] Unlocking audio with a user gesture.");
+                                    notificationSoundRef.current.play().then(() => {
+                                        notificationSoundRef.current.pause(); notificationSoundRef.current.currentTime = 0;
+                                    }).catch(e => console.warn("[Audio] Could not unlock audio:", e));
+                                }
+
+                                markMessagesAsRead(myQueueEntryId, session.user.id); // Mark messages as read on the backend
+                            } else { console.error("Barber user ID missing. Please refresh the page."); setMessage("Cannot initiate chat: Barber details not loaded."); }
+                        }}
+                        className="chat-toggle-button"
                     >
                         Chat with Barber
                         {hasUnreadFromBarber && (<span className="notification-badge">1</span>)}
@@ -1340,7 +1384,7 @@ function App() {
     } finally {
         setLoadingRole(false);
     }
-  }, [updateAvailability]); // This dependency is correct
+  }, []); // This dependency is correct
 
   // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
   useEffect(() => {
