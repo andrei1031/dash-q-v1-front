@@ -829,3 +829,25 @@ form button[type="submit"]:hover:not(:disabled) {
 .message.success {
   color: var(--success-color);
 }
+/* Add this to App.css */
+
+.password-group {
+  position: relative;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 10px;
+  top: 40px; /* Adjust this to vertically center the button */
+  background: #555;
+  border: none;
+  color: white;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toggle-password:hover {
+  background: #777;
+}

@@ -146,6 +146,7 @@ function AuthForm() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [selectedRole, setSelectedRole] = useState('customer');
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleAuth = async (e) => {
         e.preventDefault(); setLoading(true); setMessage('');
@@ -194,7 +195,27 @@ function AuthForm() {
             <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
             <form onSubmit={handleAuth}>
                 <div className="form-group"><label>Username:</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username"/></div>
-                <div className="form-group"><label>Password:</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" autoComplete={isLogin ? "current-password" : "new-password"}/></div>
+                {/* <<< --- 2. THIS IS THE MODIFIED PASSWORD BLOCK --- >>> */}
+                <div className="form-group password-group">
+                  <label>Password:</label>
+                  <input 
+                    type={showPassword ? 'text' : 'password'} // <-- This line changed
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    minLength="6" 
+                    autoComplete={isLogin ? "current-password" : "new-password"}
+                  />
+                  {/* This button toggles the state */}
+                  <button 
+                    type="button" 
+                    className="toggle-password" 
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {/* <<< --- END OF MODIFICATION --- >>> */}
                 {isLogin && (<div className="login-role-select"><label>Login As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div>{selectedRole === 'barber' && (<div className="form-group pin-input"><label>Barber PIN:</label><input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" /></div>)}</div>)}
                 {!isLogin && (<><div className="signup-role-select"><label>Sign Up As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div></div><div className="form-group"><label>Email:</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={!isLogin} autoComplete="email"/><small>Needed for account functions.</small></div><div className="form-group"><label>Full Name:</label><input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} autoComplete="name"/></div>{selectedRole === 'barber' && (<div className="form-group"><label>Barber Code:</label><input type="text" value={barberCode} placeholder="Secret code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber' && !isLogin} /><small>Required.</small></div>)}</>)}
                 <button type="submit" disabled={loading}>{loading ? '...' : (isLogin ? 'Login' : 'Sign Up')}</button>
