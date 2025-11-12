@@ -924,10 +924,12 @@ function CustomerView({ session }) {
            setLiveQueue(() => []); 
            liveQueueRef.current = []; 
            setQueueMessage(() => "Could not load queue data."); 
+       } finally {
+         // --- The old, buggy Catcher logic is now GONE from here ---
+         setIsQueueLoading(() => false);
        }
-       // <<< --- THIS IS THE FIX --- >>>
+   // --- FIX: Clean the dependency array. This prevents the race condition. ---
    }, [setIsQueueLoading, setLiveQueue, setQueueMessage]);
-   // <<< --- END OF FIX --- >>>
    
    const handleFileChange = (e) => {
        const file = e.target.files[0];
@@ -1187,24 +1189,6 @@ function CustomerView({ session }) {
         };
     }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
    
-    // --- NEW useEffect: Fetch feedback when barber is selected ---
-    useEffect(() => {
-        if (selectedBarberId) {
-            console.log(`Fetching feedback for barber ${selectedBarberId}`);
-            setBarberFeedback([]);
-            const fetchFeedback = async () => {
-                try {
-                    const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
-                    setBarberFeedback(response.data || []);
-                } catch (err) {
-                    console.error("Failed to fetch barber feedback:", err);
-                }
-            };
-            fetchFeedback();
-        } else {
-            setBarberFeedback([]);
-        }
-    }, [selectedBarberId]); 
    
    // --- UseEffect for WebSocket Connection and History Fetch ---
     useEffect(() => { 
