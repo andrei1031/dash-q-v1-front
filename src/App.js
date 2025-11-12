@@ -627,53 +627,53 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session}) {
         catch (err) { console.error('Failed next customer:', err); setError(err.response?.data?.error || 'Failed call next.'); }
     };
     const handleCompleteCut = async () => {
-        if (!queueDetails.inProgress) return;
-        const queueId = queueDetails.inProgress.id;
-        let isVIP = false;
-        let servicePrice = 0;
-        let serviceName = '';
-        try {
-            // Fetch the entry directly from the DB to get the latest price and VIP status
-            // Note: This relies on your Supabase client having 'services(price_php, name)' available.
-            const { data: entryData, error: fetchError } = await supabase.from('queue_entries')
-                .select(`services(price_php, name), is_vip`)
-                .eq('id', queueId)
-                .maybeSingle();
+    if (!queueDetails.inProgress) return;
 
-            if (fetchError || !entryData || !entryData.services) throw new Error("Failed to fetch current service data.");
-
-            serviceName = entryData.services.name || 'Service';
-            servicePrice = parseFloat(entryData.services.price_php) || 0;
-            isVIP = entryData.is_vip || false;
-
-        } catch (err) {
-            console.error('Failed to fetch entry details for completion:', err);
-            setError("Could not confirm service price/VIP status.");
-            return;
-        }
-        // --- END NEW FETCH ---
-
-        // --- NEW: Calculate the VIP charge and adjust the displayed price ---
-        const vipCharge = isVIP ? 100 : 0;
-        const priceToDisplay = servicePrice + vipCharge;
-        
-        const tipAmount = window.prompt(
-            `Service: ${serviceName} (₱${servicePrice.toFixed(2)}) ${isVIP ? ' + VIP Fee (₱100.00)' : ''}. \n\nTotal Due: ₱${priceToDisplay.toFixed(2)}.\n\nPlease enter TIP amount (e.g., 50):`
-        );
-        if (tipAmount === null) return;
-        const parsedTip = parseInt(tipAmount);
-        if (isNaN(parsedTip) || parsedTip < 0) { window.alert('Invalid tip. Please enter 0 or more.'); return; }
-        setError('');
-        try {
-          await axios.post(`${API_URL}/queue/complete`, {
-            queue_id: queueDetails.inProgress.id,
-            barber_id: barberId,
-            tip_amount: parsedTip
-          });
-          onCutComplete();
-          window.alert(`Cut completed! Total logged profit: ₱${(servicePrice + parsedTip).toFixed(2)}`);
-        } catch (err) { console.error('Failed complete cut:', err); setError(err.response?.data?.error || 'Failed to complete cut.'); }
-    };
+    const queueId = queueDetails.inProgress.id;
+    
+    // --- Step 1: Get data from the state (now containing is_vip) ---
+    const serviceName = queueDetails.inProgress.services?.name || 'Service';
+    const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0;
+    const isVIP = queueDetails.inProgress.is_vip || false; // This is now retrieved from state
+    
+    // --- Step 2: Calculate the charges ---
+    const vipCharge = isVIP ? 100 : 0;
+    const priceToDisplay = servicePrice + vipCharge;
+    
+    // --- Step 3: Prompt the barber for tip amount ---
+    // Note: The prompt calculates the total due *without* the tip for display clarity.
+    const tipAmount = window.prompt(
+        `Service: ${serviceName} (₱${servicePrice.toFixed(2)})${isVIP ? ' + VIP Fee (₱100.00)' : ''}. \n\nTotal Due: ₱${priceToDisplay.toFixed(2)}.\n\nPlease enter TIP amount (e.g., 50):`
+    );
+    
+    if (tipAmount === null) return;
+    const parsedTip = parseInt(tipAmount);
+    
+    // Check if the input is a valid non-negative number
+    if (isNaN(parsedTip) || parsedTip < 0) { 
+        window.alert('Invalid tip. Please enter 0 or more.'); 
+        return; 
+    }
+    
+    setError('');
+    try {
+      // --- Step 4: Send ALL charges to the server ---
+      await axios.post(`${API_URL}/queue/complete`, {
+        queue_id: queueId,
+        barber_id: barberId,
+        tip_amount: parsedTip, // Send the tip
+        vip_charge: vipCharge, // Send the calculated VIP charge (100 or 0)
+      });
+      
+      onCutComplete();
+      
+      // The final alert should reflect the true profit (Base 150 + VIP 100 + Tip)
+      window.alert(`Cut completed! Total logged profit: ₱${(priceToDisplay + parsedTip).toFixed(2)}`);
+    } catch (err) { 
+        console.error('Failed complete cut:', err); 
+        setError(err.response?.data?.error || 'Failed to complete cut.'); 
+    }
+};
     const handleCancel = async (customerToCancel) => {
         if (!customerToCancel) return;
         const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This will not log earnings.`);
