@@ -1368,7 +1368,8 @@ function CustomerView({ session }) {
                 console.log(`[Loader] Found stored queue ID: ${currentQueueId}. Checking its status...`);
                 try {
                     // This calls your NEW, CORRECT endpoint in server.js
-                    const response = await axios.get(`${API_URL}/api/queue-status/${currentQueueId}`);
+                    const cacheBuster = `_=${new Date().getTime()}`;
+                    const response = await axios.get(`${API_URL}/api/queue-status/${currentQueueId}?${cacheBuster}`);
                     const status = response.data.status; // "Waiting", "Done", "Cancelled", "Archived", or null
                     
                     console.log(`[Loader] Server reports status: ${status}`);
