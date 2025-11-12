@@ -925,11 +925,41 @@ function CustomerView({ session }) {
            liveQueueRef.current = []; 
            setQueueMessage(() => "Could not load queue data."); 
        } finally {
-         // --- The old, buggy Catcher logic is now GONE from here ---
          setIsQueueLoading(() => false);
+         
+         // --- THIS IS THE NEW "MISSED EVENT" LOGIC ---
+         const currentQueueId = localStorage.getItem('myQueueEntryId');
+         
+         // This logic only runs if we have a queue ID stored
+         if (currentQueueId) {
+             // Check if my ID is in the *active* queue data we just fetched
+             const amIInActiveQueue = queueData.some(entry => entry.id.toString() === currentQueueId);
+             
+             // This checks if the user is *not* in the active queue,
+             // AND if the "Done" modal is not *already* open (to prevent loops),
+             // AND if the "Cancelled" modal is not *already* open.
+             setIsServiceCompleteModalOpen(isDoneOpen => {
+                setIsCancelledModalOpen(isCancelledOpen => {
+
+                    if (!amIInActiveQueue && !isDoneOpen && !isCancelledOpen) {
+                        // My ID is NOT in the active queue.
+                        // This means I must have been "Done" or "Cancelled" while my app was closed.
+                        console.log("Missed Event Catcher: My entry is no longer active. Showing Feedback/Cancelled modal.");
+                        
+                        // We can't be sure which it was, so we'll just default to showing 
+                        // the "Service Complete" / Feedback modal, as it's the most common case.
+                        return true; // Show the "Done" modal
+                    }
+                    return isDoneOpen; // Keep its current state
+
+                });
+                return isDoneOpen; // Keep its current state
+             });
+         }
+         // --- END NEW LOGIC ---
        }
-   // --- FIX: Clean the dependency array. This prevents the race condition. ---
-   }, [setIsQueueLoading, setLiveQueue, setQueueMessage]);
+   }, [setIsQueueLoading, setLiveQueue, setQueueMessage, setIsServiceCompleteModalOpen, setIsCancelledModalOpen]); // <-- Dependencies are added
+   // <<< --- END OF REPLACEMENT --- >>>
    
    const handleFileChange = (e) => {
        const file = e.target.files[0];
@@ -1037,37 +1067,35 @@ function CustomerView({ session }) {
         if (userInitiated && myQueueEntryId) {
             setIsLoading(true);
             try { 
+                // --- THIS IS THE CHANGE ---
                 // We must send our user ID to prove who we are
                 await axios.delete(`${API_URL}/queue/${myQueueEntryId}`, {
                    data: { userId: session.user.id } 
                 });
+                // --- END CHANGE ---
                 setMessage("You left the queue."); 
             } 
             catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
             finally { setIsLoading(false); }
         }
-        
-        // --- SIMPLIFIED STATE RESET ---
-        setIsServiceCompleteModalOpen(false); // Clear Feedback modal
-        setIsCancelledModalOpen(false);     // Clear Cancelled modal
-        setIsYourTurnModalOpen(false);      // Clear You're Next modal
+        setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false); setIsYourTurnModalOpen(false);
         stopBlinking();
-        
-        // Reset all local storage and state for a clean start
-        localStorage.removeItem('myQueueEntryId'); 
-        localStorage.removeItem('joinedBarberId');
-        localStorage.removeItem('stickyModal'); // Clear sticky modal
-        
+        localStorage.removeItem('myQueueEntryId'); localStorage.removeItem('joinedBarberId');
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
         setIsChatOpen(false);
         setChatMessagesFromBarber([]); setDisplayWait(0); setEstimatedWait(0);
-        setReferenceImageUrl(''); setSelectedFile(null); setIsUploading(false);
-        setFeedbackText(''); setFeedbackSubmitted(false); setBarberFeedback([]);
+        setReferenceImageUrl('');
+        setSelectedFile(null);
+        setIsUploading(false);
+        
+        setFeedbackText('');
+        setFeedbackSubmitted(false);
+        setBarberFeedback([]);
 
         console.log("[handleReturnToJoin] State reset complete.");
-    };
+   };
    
    const handleModalClose = () => { 
     setIsYourTurnModalOpen(false); 
@@ -1109,6 +1137,14 @@ function CustomerView({ session }) {
         if (!hasSeen) { setIsInstructionsModalOpen(true); }
    }, []);
 
+   useEffect(() => {
+        const modalFlag = localStorage.getItem('stickyModal');
+        if (modalFlag === 'yourTurn') {
+            setIsYourTurnModalOpen(true);
+        } else if (modalFlag === 'tooFar') {
+            setIsTooFarModalOpen(true);
+        }
+    }, []);
    
    useEffect(() => { // Fetch Services
         const fetchServices = async () => {
@@ -1172,6 +1208,7 @@ function CustomerView({ session }) {
                             if (navigator.vibrate) navigator.vibrate([500,200,500]);
                         }
                         else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); } 
+                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
                     } 
                     fetchPublicQueue(joinedBarberId);
                 })
@@ -1188,6 +1225,24 @@ function CustomerView({ session }) {
         };
     }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
    
+    // --- NEW useEffect: Fetch feedback when barber is selected ---
+    useEffect(() => {
+        if (selectedBarberId) {
+            console.log(`Fetching feedback for barber ${selectedBarberId}`);
+            setBarberFeedback([]);
+            const fetchFeedback = async () => {
+                try {
+                    const response = await axios.get(`${API_URL}/feedback/${selectedBarberId}`);
+                    setBarberFeedback(response.data || []);
+                } catch (err) {
+                    console.error("Failed to fetch barber feedback:", err);
+                }
+            };
+            fetchFeedback();
+        } else {
+            setBarberFeedback([]);
+        }
+    }, [selectedBarberId]); 
    
    // --- UseEffect for WebSocket Connection and History Fetch ---
     useEffect(() => { 
@@ -1324,66 +1379,50 @@ function CustomerView({ session }) {
    }, [isYourTurnModalOpen, isServiceCompleteModalOpen, isCancelledModalOpen, isTooFarModalOpen]); // <-- All 4 modals are now in the array
    // <<< --- END MODIFIED BLOCK --- >>>
 
-   // <<< --- NEW "MASTER LOADER" useEffect (Replaces old Catcher) --- >>>
-    useEffect(() => {
-        // ... (inside the useEffect starting at line 1335)
-
-        const runOnLoadChecks = async () => {
+   // <<< --- NEW "MISSED EVENT CATCHER" (Your Idea) --- >>>
+   useEffect(() => {
+        // This runs ONCE when the component loads
+        const checkMissedEvents = async () => {
             const currentQueueId = localStorage.getItem('myQueueEntryId');
-            const stickyModal = localStorage.getItem('stickyModal');
-            
-            // --- Priority 1: Check for sticky modals ---
-            if (stickyModal === 'yourTurn') {
-                setIsYourTurnModalOpen(true);
-                return;
-            }
-            if (stickyModal === 'tooFar') {
-                setIsTooFarModalOpen(true);
-                return;
-            }
-            
-            // --- Priority 2: Check for a "stale" queue entry (Feedback Only) ---
-            if (currentQueueId) {
-                console.log(`[Loader] Checking status for missed event: ${currentQueueId}`);
-                try {
-                    // Call the server to get the status
-                    const cacheBuster = `_=${new Date().getTime()}`;
-                    const response = await axios.get(`${API_URL}/api/queue-status/${currentQueueId}?${cacheBuster}`);
-                    const status = response.data.status;
-                    
-                    console.log(`[Loader] Server reports final status: ${status}`);
+            const userId = session?.user?.id;
 
-                    if (status === 'Done') {
-                        // THIS IS THE ONLY THING WE CARE ABOUT! Show Feedback modal.
+            // Only run if we think we *should* be in a queue, but might have missed it
+            if (currentQueueId && userId) {
+                console.log("[Catcher] Checking backend for missed 'Done' or 'Cancelled' events...");
+                try {
+                    const response = await axios.get(`${API_URL}/missed-event/${userId}`);
+                    const eventType = response.data.event; // "Done", "Cancelled", or null
+
+                    if (eventType === 'Done') {
+                        console.log("[Catcher] Backend reports a missed 'Done' event. Showing Feedback modal.");
                         setIsServiceCompleteModalOpen(true);
-                        // Clear the stale ID to prevent showing it again on refresh
+                        // We were completed, so clear the queue IDs from storage
                         localStorage.removeItem('myQueueEntryId');
                         localStorage.removeItem('joinedBarberId');
-                    } else if (status === 'Cancelled' || status === 'Archived' || status === null) {
-                        // If it's anything else (Cancelled, or the ID is gone), 
-                        // we just clear the local storage and do NOT show a modal.
-                        // This prevents the incorrect "Cancelled" modal from popping up.
+                        localStorage.removeItem('stickyModal'); // Clear sticky modal too
+                    } else if (eventType === 'Cancelled') {
+                        console.log("[Catcher] Backend reports a missed 'Cancelled' event. Showing Cancelled modal.");
+                        setIsCancelledModalOpen(true);
+                        // We were cancelled, so clear the queue IDs
                         localStorage.removeItem('myQueueEntryId');
                         localStorage.removeItem('joinedBarberId');
+                        localStorage.removeItem('stickyModal'); // Clear sticky modal too
+                    } else {
+                        console.log("[Catcher] Backend reports no missed events.");
                     }
-                    // If status is "Waiting", "Up Next", or "In Progress", we do nothing.
 
                 } catch (error) {
-                    console.error("[Loader] Error fetching queue status:", error.message);
-                    // Failsafe: clear local storage if the server call fails.
-                    localStorage.removeItem('myQueueEntryId');
-                    localStorage.removeItem('joinedBarberId');
+                    console.error("[Catcher] Error fetching missed event:", error.message);
                 }
             }
         };
-        
-        // Run this check 1 second after app load to let session load
-        const timer = setTimeout(runOnLoadChecks, 1000); 
+
+        // Wait 2 seconds just to let the main queue load/realtime settle
+        const timer = setTimeout(checkMissedEvents, 2000);
         return () => clearTimeout(timer);
         
-    }, []); // <-- Empty array ensures this runs only ONCE on load
-    // <<< --- END NEW BLOCK --- >>>
-
+    }, [session]); // Run this check when the session becomes available
+   // <<< --- END NEW BLOCK --- >>>
    
    console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
