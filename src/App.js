@@ -1140,11 +1140,11 @@ function CustomerView({ session }) {
    }, []);
 
    // <<< --- NEW "MASTER LOADER" useEffect (Replaces both Catcher and Sticky Modal) --- >>>
-   useEffect(() => {
+    useEffect(() => {
         const runOnLoadChecks = async () => {
             const currentQueueId = localStorage.getItem('myQueueEntryId');
             const stickyModal = localStorage.getItem('stickyModal');
-            
+
             // --- Priority 1: Check for a "sticky" modal ---
             // This happens if the user just refreshed the page while a modal was open
             if (stickyModal === 'yourTurn') {
@@ -1157,16 +1157,16 @@ function CustomerView({ session }) {
                 setIsTooFarModalOpen(true);
                 return; // Stop here.
             }
-            
+
             // --- Priority 2: Check for a "stale" queue entry ---
             // This happens if the app was closed and missed an event
             if (currentQueueId) {
                 console.log(`[Loader] Found stored queue ID: ${currentQueueId}. Checking its status...`);
                 try {
-                    // This calls your NEW endpoint
+                    // This calls your NEW, CORRECT endpoint
                     const response = await axios.get(`${API_URL}/api/queue-status/${currentQueueId}`);
                     const status = response.data.status; // "Waiting", "Done", "Cancelled", "Archived", or null
-                    
+
                     console.log(`[Loader] Server reports status: ${status}`);
 
                     if (status === 'Done') {
@@ -1193,13 +1193,13 @@ function CustomerView({ session }) {
                 }
             }
         };
-        
+
         // Run this check 1 second after app load to let session load
         const timer = setTimeout(runOnLoadChecks, 1000); 
         return () => clearTimeout(timer);
-        
+
     }, []); // <-- Empty array ensures this runs only ONCE on load
-   // <<< --- END NEW BLOCK --- >>>
+    // <<< --- END NEW BLOCK --- >>>
    
    useEffect(() => { // Fetch Services
         const fetchServices = async () => {
