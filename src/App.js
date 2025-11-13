@@ -1474,6 +1474,61 @@ function CustomerView({ session }) {
        };
    }, [isYourTurnModalOpen, isServiceCompleteModalOpen, isCancelledModalOpen, isTooFarModalOpen]); // <-- All 4 modals are now in the array
    // <<< --- END MODIFIED BLOCK --- >>>
+   useEffect(() => {
+    
+    const checkMissedEvents = async () => {
+        const currentQueueId = localStorage.getItem('myQueueEntryId');
+        const userId = session?.user?.id;
+
+        // Only run if we think we *should* be in a queue and are logged in
+        if (currentQueueId && userId) {
+            console.log("[Catcher] Checking backend for missed 'Done' or 'Cancelled' events...");
+            try {
+                // Call the server endpoint which FINDS the event and DELETES it from the DB
+                const response = await axios.get(`${API_URL}/missed-event/${userId}`);
+                const eventType = response.data.event; // "Done", "Cancelled", or null
+
+                if (eventType === 'Done') {
+                    console.log("[Catcher] Backend reports a missed 'Done' event. Showing Feedback modal.");
+                    setIsServiceCompleteModalOpen(true);
+                    // Clear local storage entries so the user can join again
+                    localStorage.removeItem('myQueueEntryId');
+                    localStorage.removeItem('joinedBarberId');
+                    localStorage.removeItem('stickyModal'); 
+                } else if (eventType === 'Cancelled') {
+                    console.log("[Catcher] Backend reports a missed 'Cancelled' event. Showing Cancelled modal.");
+                    setIsCancelledModalOpen(true);
+                    // Clear local storage entries
+                    localStorage.removeItem('myQueueEntryId');
+                    localStorage.removeItem('joinedBarberId');
+                    localStorage.removeItem('stickyModal'); 
+                }
+
+            } catch (error) {
+                console.error("[Catcher] Error fetching missed event:", error.message);
+            }
+        }
+    };
+    
+    // Check when the component loads (with a slight delay)
+    const loadTimer = setTimeout(checkMissedEvents, 2000);
+
+    // Also check whenever the app comes back into focus (wakes up from screen off)
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            checkMissedEvents();
+        }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+        clearTimeout(loadTimer);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+    
+}, [session]); // Rerun the check when the session/user changes
+// --- END RE-IMPLEMENTED CATCHER ---
 
    console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
