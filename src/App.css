@@ -924,22 +924,29 @@ form button[type="submit"]:hover:not(:disabled) {
 }
 /* --- Final VIP Banner Implementation (App.css) --- */
 
+/* 1. Base VIP Style (Ensures background/font weight) */
 .queue-list.live .vip-entry {
-    /* Use !important to override the standard background color set by .up-next-public */
-    background-color: var(--vip-maroon-light) !important; 
+    background-color: var(--vip-maroon-light) !important; /* Force VIP background */
     font-weight: 600;
     box-shadow: 0 2px 5px rgba(122, 0, 38, 0.5); 
     transition: all 0.2s ease;
 }
 
-/* Ensure the border color overrides BOTH the orange Up Next and any other status border */
-.queue-list.live li.vip-entry {
-    /* Use !important to ensure the maroon border always wins */
+/* 2. CRITICAL FIX: Ensure ALL borders for a VIP entry are maroon */
+.queue-list.live li.vip-entry,
+.queue-list.live li.vip-entry.up-next-public,
+.queue-list.live li.vip-entry.in-progress-public {
+    /* Override standard list item borders */
     border: 1px solid var(--vip-maroon-border) !important;
-    border-left: 5px solid var(--vip-maroon-border) !important; /* Thicker left bar */
+    
+    /* Override the general list border-left */
+    border-left: 5px solid var(--vip-maroon-border) !important; 
+    
+    /* Override background in case of secondary class conflict */
+    background-color: var(--vip-maroon-light) !important;
 }
 
-/* Style for the "👑 VIP" tag (unchanged) */
+/* Style for the "👑 VIP" tag (Unchanged) */
 .queue-status .vip-tag {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     font-size: 0.9em; 
