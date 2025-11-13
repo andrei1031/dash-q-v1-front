@@ -1211,8 +1211,7 @@ function CustomerView({ session }) {
    };
    
    const handleModalClose = () => { 
-    setIsYourTurnModalOpen(false); 
-    localStorage.removeItem('stickyModal'); // <<< --- ADD THIS
+    setIsYourTurnModalOpen(false); // <<< --- ADD THIS
     stopBlinking(); 
 };
 
