@@ -1,24 +1,103 @@
 /* ===================================================================
-   GLOBAL STYLES (BLACK & ORANGE THEME)
+   MODERN FONT IMPORT (Inter)
+   =================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+
+/* ===================================================================
+   GLOBAL STYLES (Color Variables)
    =================================================================== */
 
-/* Define our color palette */
+/* Define our color palette (Dark Mode by default) */
 :root {
   --bg-dark: #121212;
   --surface-color: #1E1E1E;
-  --primary-orange: #FF9500;
-  --primary-orange-hover: #E08400;
   --text-primary: #FFFFFF;
   --text-secondary: #AAAAAA;
   --border-color: #333333;
+  --card-border-color: #282828;
+  --prefilled-bg: #333333;
+  --hover-bg-dark: #2a2a2a;
+  
+  --primary-orange: #FF9500;
+  --primary-orange-hover: #E08400;
   --success-color: #34C759;
   --error-color: #FF3B30;
   --go-online-color: var(--success-color);
   --go-offline-color: #FF3B30;
-  --vip-maroon-dark: #7A0026; /* Deep Maroon for tag background */
-  --vip-maroon-light: #A5003515; /* Very light Maroon for row background */
-  --vip-maroon-border: #A50035; /* Brighter Maroon for border */
+  --link-color: #007aff;
+
+  --button-text-primary: #000000; /* For orange buttons */
+  --button-text-light: #FFFFFF; /* For red/green/gray buttons */
+
+  --my-message-bg: var(--primary-orange);
+  --my-message-text: #000000;
+  --other-message-bg: #333333;
+  --other-message-text: #FFFFFF;
+
+  --toggle-password-bg: #555555;
+  --toggle-password-hover-bg: #777777;
+  
+  --priority-border: #333333;
+  --priority-bg: #333333;
+  --priority-text: #FFFFFF;
+  --priority-hover-bg: #444444;
+  --priority-active-bg: var(--primary-orange);
+  --priority-active-text: #000000;
+
+  --spinner-base: rgba(0, 0, 0, 0.3);
+  --spinner-highlight: #000000;
+  --spinner-light-base: rgba(255, 255, 255, 0.3);
+  --spinner-light-highlight: #FFFFFF;
+  
+  --skeleton-base: #2a2a2a;
+  --skeleton-highlight: #333333;
+
+  --vip-maroon-dark: #7A0026; 
+  --vip-maroon-light: #A5003515;
+  --vip-maroon-border: #A50035;
 }
+
+/* ===================================================================
+   LIGHT MODE THEME
+   =================================================================== */
+body.light-mode {
+  --bg-dark: #F4F4F5; /* Light gray background */
+  --surface-color: #FFFFFF; /* White cards */
+  --text-primary: #18181B; /* Near-black text */
+  --text-secondary: #52525B; /* Gray text */
+  --border-color: #E4E4E7; /* Light gray border */
+  --card-border-color: #E4E4E7;
+  --prefilled-bg: #E4E4E7;
+  --hover-bg-dark: #F4F4F5;
+
+  /* Button text colors stay the same */
+
+  --my-message-bg: var(--primary-orange);
+  --my-message-text: #000000;
+  --other-message-bg: #E4E4E7;
+  --other-message-text: #18181B;
+  
+  --toggle-password-bg: #A1A1AA;
+  --toggle-password-hover-bg: #71717A;
+  
+  --priority-border: #D4D4D8;
+  --priority-bg: #FAFAFA;
+  --priority-text: #18181B;
+  --priority-hover-bg: #F4F4F5;
+  --priority-active-bg: var(--primary-orange);
+  --priority-active-text: #000000;
+
+  /* Spinners are swapped for light mode */
+  --spinner-base: rgba(255, 255, 255, 0.3);
+  --spinner-highlight: #FFFFFF;
+  --spinner-light-base: rgba(0, 0, 0, 0.2);
+  --spinner-light-highlight: #18181B;
+
+  --skeleton-base: #E4E4E7;
+  --skeleton-highlight: #F4F4F5;
+}
+
 
 /* Global reset and theme */
 * {
@@ -27,24 +106,32 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  /* --- 1. MODERN FONT APPLIED --- */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-dark);
   color: var(--text-primary);
+  transition: background-color 0.2s linear, color 0.2s linear;
 }
 
+/* --- 2. UPDATED FULLSCREEN LOADER --- */
 .loading-fullscreen {
   display: flex;
+  flex-direction: column; /* Stack spinner and text */
   justify-content: center;
   align-items: center;
   height: 100vh;
-  font-size: 1.5rem;
-  font-weight: 500;
-  color: var(--primary-orange);
+  gap: 15px; /* Space between spinner and text */
 }
+.loading-fullscreen span {
+  font-size: 1.25rem; /* Slightly smaller */
+  font-weight: 500;
+  color: var(--text-secondary); /* Softer color */
+}
+
 
 /* ===================================================================
    MAIN LAYOUT & HEADER
@@ -94,7 +181,8 @@ body {
 .card {
   background-color: var(--surface-color);
   border-radius: 12px;
-  border: 1px solid var(--border-color);
+  /* --- 3. SOFTER BORDER (Using Variable) --- */
+  border: 1px solid var(--card-border-color);
   padding: 20px 25px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
@@ -131,7 +219,8 @@ body {
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 12px;
+  /* --- 4. MORE "AIR" IN INPUTS --- */
+  padding: 14px; /* Was 12px */
   background-color: var(--bg-dark);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -147,7 +236,7 @@ body {
 }
 
 .prefilled-input {
-  background-color: #333 !important;
+  background-color: var(--prefilled-bg) !important;
   color: var(--text-secondary) !important;
 }
 
@@ -176,13 +265,19 @@ form button[type="submit"] {
   width: 100%;
   padding: 12px;
   font-size: 1rem;
-  color: #000;
+  color: var(--button-text-primary);
   background-color: var(--primary-orange);
   border: none;
+  /* --- 5. BUTTON "POP" --- */
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 form button[type="submit"]:hover:not(:disabled) {
   background-color: var(--primary-orange-hover);
+  /* --- 5. BUTTON "POP" HOVER --- */
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 .toggle-auth-button {
@@ -226,7 +321,7 @@ form button[type="submit"]:hover:not(:disabled) {
 
 .role-toggle button.active {
   background: var(--primary-orange);
-  color: #000;
+  color: var(--button-text-primary);
   border-color: var(--primary-orange);
 }
 
@@ -258,7 +353,7 @@ form button[type="submit"]:hover:not(:disabled) {
   padding: 8px 14px;
   font-size: 0.9rem;
   border: none;
-  color: white;
+  color: var(--button-text-light);
 }
 .go-online-button {
   background-color: var(--go-online-color);
@@ -327,7 +422,7 @@ form button[type="submit"]:hover:not(:disabled) {
 }
 .next-button, .complete-button {
   background-color: var(--primary-orange);
-  color: #000;
+  color: var(--button-text-primary);
   grid-column: 1 / -1; /* Make it span full width */
 }
 .next-button:hover, .complete-button:hover {
@@ -335,7 +430,7 @@ form button[type="submit"]:hover:not(:disabled) {
 }
 .cancel-button {
   background-color: var(--error-color);
-  color: white;
+  color: var(--button-text-light);
   grid-column: 1 / -1; /* Make it span full width */
 }
 
@@ -375,6 +470,10 @@ form button[type="submit"]:hover:not(:disabled) {
   font-size: 1.2rem;
   padding: 5px;
   position: relative;
+  color: var(--text-secondary);
+}
+.chat-icon-button:hover {
+  color: var(--text-primary);
 }
 .notification-badge {
   position: absolute;
@@ -411,6 +510,8 @@ form button[type="submit"]:hover:not(:disabled) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  /* --- 6. SET MIN-HEIGHT FOR SKELETONS --- */
+  min-height: 75px; /* Ensures skeleton has space */
 }
 .analytics-item {
   background: var(--bg-dark);
@@ -454,7 +555,7 @@ form button[type="submit"]:hover:not(:disabled) {
   margin-top: 15px;
 }
 .refresh-button:hover {
-  background: #2a2a2a;
+  background: var(--hover-bg-dark);
   color: var(--text-primary);
 }
 
@@ -466,13 +567,19 @@ form button[type="submit"]:hover:not(:disabled) {
   width: 100%;
   padding: 14px;
   font-size: 1.1rem;
-  color: #000;
+  color: var(--button-text-primary);
   background-color: var(--primary-orange);
   border: none;
   margin-top: 10px;
+  /* --- 7. BUTTON "POP" (CUSTOMER) --- */
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
-.join-queue-button:hover {
+.join-queue-button:hover:not(:disabled) {
   background-color: var(--primary-orange-hover);
+  /* --- 7. BUTTON "POP" HOVER (CUSTOMER) --- */
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 .live-queue-view .queue-number-display {
@@ -487,7 +594,7 @@ form button[type="submit"]:hover:not(:disabled) {
 
 .queue-list.live li.my-position {
   border: 2px solid var(--primary-orange);
-  background: #3a2a00;
+  background: var(--my-position-bg);
   font-weight: 600;
 }
 .queue-list.live .queue-status {
@@ -512,7 +619,7 @@ form button[type="submit"]:hover:not(:disabled) {
   color: var(--text-secondary);
 }
 .leave-queue-button:hover, .chat-toggle-button:hover {
-  background: #2a2a2a;
+  background: var(--hover-bg-dark);
   color: var(--text-primary);
 }
 .leave-queue-button {
@@ -542,6 +649,8 @@ form button[type="submit"]:hover:not(:disabled) {
   background: var(--bg-dark);
   padding: 10px;
   border-radius: 8px;
+  /* --- 8. SET MIN-HEIGHT FOR SKELETON --- */
+  min-height: 40px; 
 }
 .ewt-item {
   display: flex;
@@ -597,7 +706,7 @@ form button[type="submit"]:hover:not(:disabled) {
   width: 100%;
   padding: 12px;
   font-size: 1rem;
-  color: #000;
+  color: var(--button-text-primary);
   background-color: var(--primary-orange);
   border: none;
   margin-top: 10px;
@@ -615,10 +724,21 @@ form button[type="submit"]:hover:not(:disabled) {
   padding: 10px;
 }
 
-/* This is the style for messages you RECEIVE (the orange one) */
+/* NEW CHAT STYLES (Variables) */
+.my-message {
+  background: var(--my-message-bg);
+  color: var(--my-message-text);
+  padding: 8px 12px;
+  border-radius: 18px 18px 5px 18px; /* Bubble on the right */
+  margin-bottom: 8px;
+  align-self: flex-end; /* Aligns to the right */
+  max-width: 70%;
+  word-wrap: break-word;
+}
+
 .other-message {
-  background-color: #ff9500; /* This is an orange color */
-  color: white;
+  background: var(--other-message-bg);
+  color: var(--other-message-text);
   padding: 8px 12px;
   border-radius: 18px 18px 18px 5px; /* Bubble on the left */
   margin-bottom: 8px;
@@ -627,29 +747,6 @@ form button[type="submit"]:hover:not(:disabled) {
   word-wrap: break-word;
 }
 
-/* This is the NEW style for messages YOU SEND */
-.my-message {
-  background-color: #333; /* This is a dark grey */
-  color: white;
-  padding: 8px 12px;
-  border-radius: 18px 18px 5px 18px; /* Bubble on the right */
-  margin-bottom: 8px;
-  align-self: flex-end; /* Aligns to the right */
-  max-width: 70%;
-  word-wrap: break-word;
-}
-.my-message {
-  background: var(--primary-orange);
-  color: #000;
-  margin-left: auto;
-  border-bottom-right-radius: 4px;
-}
-.other-message {
-  background: #333;
-  color: var(--text-primary);
-  margin-right: auto;
-  border-bottom-left-radius: 4px;
-}
 .message-input-form {
   display: flex;
   border-top: 1px solid var(--border-color);
@@ -677,7 +774,7 @@ form button[type="submit"]:hover:not(:disabled) {
 }
 
 /* ===================================================================
-   NEW FEEDBACK FEATURE STYLES (BLACK & ORANGE)
+   NEW FEEDBACK FEATURE STYLES (Variables)
    =================================================================== */
 
 .feedback-list-container {
@@ -796,7 +893,7 @@ form button[type="submit"]:hover:not(:disabled) {
   width: 100%;
   padding: 12px;
   background-color: var(--primary-orange);
-  color: #000;
+  color: var(--button-text-primary);
   border: none;
   border-radius: 6px;
   font-weight: 600;
@@ -840,8 +937,8 @@ form button[type="submit"]:hover:not(:disabled) {
 .message.success {
   color: var(--success-color);
 }
-/* Add this to App.css */
 
+/* Password Toggle (Variables) */
 .password-group {
   position: relative;
 }
@@ -850,9 +947,9 @@ form button[type="submit"]:hover:not(:disabled) {
   position: absolute;
   right: 10px;
   top: 40px; /* Adjust this to vertically center the button */
-  background: #555;
+  background: var(--toggle-password-bg);
   border: none;
-  color: white;
+  color: var(--button-text-light);
   padding: 3px 6px;
   font-size: 12px;
   border-radius: 4px;
@@ -860,10 +957,10 @@ form button[type="submit"]:hover:not(:disabled) {
 }
 
 .toggle-password:hover {
-  background: #777;
+  background: var(--toggle-password-hover-bg);
 }
-/* Add this to App.css */
 
+/* Forgot Password Link (Variables) */
 .forgot-password-link {
   text-align: right;
   margin-top: -10px;
@@ -874,7 +971,7 @@ form button[type="submit"]:hover:not(:disabled) {
   background: none;
   border: none;
   padding: 0;
-  color: #007aff;
+  color: var(--link-color);
   cursor: pointer;
   font-size: 14px;
 }
@@ -882,35 +979,32 @@ form button[type="submit"]:hover:not(:disabled) {
 .forgot-password-link button:hover {
   text-decoration: underline;
 }
-/* --- VIP Toggle Styling (For Segmented Control Look) --- */
 
+/* VIP Toggle Styling (Variables) */
 .priority-toggle-control {
     display: flex;
     width: 100%;
     margin-top: 5px;
-    border: 1px solid #ccc; /* Light border around the whole control */
-    border-radius: 8px; /* Rounded corners for the container */
-    overflow: hidden; /* Important for clean edges */
+    border: 1px solid var(--priority-border);
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .priority-option {
-    flex: 1; /* Make both buttons take up equal space */
+    flex: 1;
     padding: 12px 10px;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
     transition: background-color 0.2s, color 0.2s;
-    border: none; /* Remove individual button borders */
-    background-color: #333; /* Default background (like the "Barber" side of your image) */
-    color: #fff; /* Default text color */
+    border: none;
+    background-color: var(--priority-bg);
+    color: var(--priority-text);
 }
 
 .priority-option.active {
-    background-color: #ff9500; /* Orange color for the active state (like the "Customer" side) */
-    color: #fff;
-    /* Optional: Slight border separation */
-    /* border-right: 1px solid #ff9500; 
-    border-left: 1px solid #ff9500; */
+    background-color: var(--priority-active-bg);
+    color: var(--priority-active-text);
 }
 
 .priority-option:disabled {
@@ -918,27 +1012,25 @@ form button[type="submit"]:hover:not(:disabled) {
     opacity: 0.8;
 }
 
-/* Optional hover state for better UX */
 .priority-option:not(.active):hover {
-    background-color: #444; 
+    background-color: var(--priority-hover-bg); 
 }
 
 /* ===================================================================
    NEW VIP BANNER STYLES (FIXED LAYOUT)
    =================================================================== */
 
-/* This is your animation, unchanged */
 @keyframes vip-gradient-animation {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
 
-/* This is the main rule for the VIP list item */
 .queue-list li.vip-entry {
     font-weight: 600;
     border: 1px solid transparent;
     background-size: 200% 200%;
+    /* Gradient is dark-mode specific, looks fine in light mode too */
     background-image: linear-gradient(
         -45deg, 
         #2a2a2a, 
@@ -951,12 +1043,22 @@ form button[type="submit"]:hover:not(:disabled) {
     position: relative;
     overflow: hidden; 
     
-    /* --- THIS IS THE LAYOUT FIX --- */
-    justify-content: flex-start; /* Aligns items to the left */
-    gap: 10px; /* Adds space between the tag and the name */
+    justify-content: flex-start;
+    gap: 10px;
+}
+/* Light mode override for VIP background */
+body.light-mode .queue-list li.vip-entry {
+  background-image: linear-gradient(
+        -45deg, 
+        #fff8e6, 
+        #fffbeb, 
+        #fff8e6,
+        #ffeecf
+    );
+  border: 1px solid #FFD68A;
 }
 
-/* This is the glow effect on the left, unchanged */
+
 .queue-list li.vip-entry::before {
     content: '';
     position: absolute;
@@ -968,33 +1070,151 @@ form button[type="submit"]:hover:not(:disabled) {
     box-shadow: 0 0 8px var(--primary-orange), 0 0 12px var(--primary-orange-hover);
 }
 
-/* This is the new "VIP" tag, unchanged */
 .queue-list li.vip-entry::after {
   content: 'VIP';
-  order: -1; /* This makes the tag the first item */
-  
-  /* Modern Font & Tag Styling */
+  order: -1; 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   font-weight: 700;
   font-size: 0.7rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   
-  /* Tag Colors (using your palette) */
   background-color: var(--primary-orange);
-  color: var(--bg-dark); /* Dark text on orange background */
+  /* Uses bg-dark, which will be black or light gray based on theme */
+  color: var(--button-text-primary); 
   
-  /* Tag Shape */
   padding: 3px 7px;
   border-radius: 4px;
   line-height: 1;
 }
 
-/* *** THIS IS THE MAGIC FIX ***
-  This rule targets the *last* item in the list 
-  (the status text or the button group)
-  and pushes it all the way to the right.
-*/
 .queue-list li.vip-entry > *:last-child {
   margin-left: auto;
+}
+
+
+/* ===================================================================
+   NEW MODERN MODAL STYLES (For Barber)
+   =================================================================== */
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal-content .modal-cancel-button,
+.modal-content .modal-confirm-button {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  margin-top: 0; /* Override default */
+}
+
+.modal-content .modal-cancel-button {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.modal-content .modal-cancel-button:hover {
+  background-color: var(--hover-bg-dark);
+  color: var(--text-primary);
+}
+
+.modal-content .modal-confirm-button.danger {
+  background-color: var(--error-color);
+  color: var(--button-text-light);
+}
+.modal-content .modal-confirm-button.danger:hover {
+  background-color: #d13025;
+}
+
+/* For modals with only one button */
+.modal-actions.single-action {
+  grid-template-columns: 1fr;
+}
+.modal-actions .modal-confirm-button {
+  grid-column: 1 / -1; /* Span full width */
+}
+
+/* For Tip Prompt Modal */
+.modal-content.modal-form {
+  text-align: left;
+}
+.modal-form-details {
+  background: var(--bg-dark);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+.modal-form-details strong {
+  color: var(--text-primary);
+}
+
+
+/* ===================================================================
+   NEW SPINNER (Variables)
+   =================================================================== */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--spinner-base);
+  border-top-color: var(--spinner-highlight);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin: -3px 0; /* Center it */
+}
+
+/* Spinner for light buttons (e.g., logout) */
+.logout-button .spinner,
+.refresh-button .spinner,
+.leave-queue-button .spinner {
+  border-color: var(--spinner-light-base);
+  border-top-color: var(--spinner-light-highlight);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ===================================================================
+   NEW SKELETON LOADER (Variables)
+   =================================================================== */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton-loader {
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(
+    to right,
+    var(--skeleton-base) 0%,
+    var(--skeleton-highlight) 20%,
+    var(--skeleton-base) 40%,
+    var(--skeleton-base) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 800px 104px;
+  display: inline-block;
+  position: relative;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: 6px;
+  width: 100%;
+  height: 100%;
+  line-height: 1; /* Fix for text height */
+}
+
+/* Make skeletons in lists match list items */
+.queue-list li .skeleton-loader {
+  margin: 6px 0; /* approx half of padding */
+  border-radius: 4px;
 }

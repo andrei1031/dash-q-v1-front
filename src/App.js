@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
@@ -50,6 +50,57 @@ if (supabaseUrl && supabaseAnonKey) {
     };
 }
 
+// ##############################################
+// ##          THEME CONTEXT & PROVIDER        ##
+// ##############################################
+
+// 1. Create the context
+const ThemeContext = createContext();
+
+// 2. Create the Provider component
+export const ThemeProvider = ({ children }) => {
+    const [theme, setTheme] = useState(() => {
+        // Get theme from local storage or default to 'dark'
+        return localStorage.getItem('theme') || 'dark';
+    });
+
+    useEffect(() => {
+        // Apply theme to body
+        if (theme === 'light') {
+            document.body.classList.add('light-mode');
+        } else {
+            document.body.classList.remove('light-mode');
+        }
+        // Save theme to local storage
+        localStorage.setItem('theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+    };
+
+    return (
+        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+            {children}
+        </ThemeContext.Provider>
+    );
+};
+
+// 3. Create a hook to use the context
+export const useTheme = () => useContext(ThemeContext);
+
+// 4. Create the Toggle Button component
+const ThemeToggleButton = () => {
+    const { theme, toggleTheme } = useTheme();
+
+    return (
+        <button onClick={toggleTheme} className="theme-toggle-button" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+            {theme === 'light' ? '🌙' : '☀️'}
+        </button>
+    );
+};
+
+
 // --- Helper Function: Calculate Distance ---
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
@@ -89,6 +140,33 @@ function stopBlinking() {
 function isIOsDevice() {
     return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 }
+
+// ##############################################
+// ##           MODERN UI COMPONENTS           ##
+// ##############################################
+
+/**
+ * A reusable spinner component for loading buttons.
+ */
+const Spinner = () => <div className="spinner"></div>;
+
+/**
+ * A reusable skeleton loader component.
+ */
+function SkeletonLoader({ height, width, className = '' }) {
+    const style = {
+        height: height || '1em', // Default to one line of text
+        width: width || '100%',
+    };
+
+    return (
+        <div className={`skeleton-loader ${className}`} style={style}>
+            {/* The content is just an empty space for ARIA */}
+            <span style={{ visibility: 'hidden' }}>Loading...</span>
+        </div>
+    );
+}
+
 
 // ##############################################
 // ##           CHAT COMPONENT               ##
@@ -138,9 +216,6 @@ function ChatWindow({ currentUser_id, otherUser_id, messages = [], onSendMessage
 // ##############################################
 // ##       LOGIN/SIGNUP COMPONENTS          ##
 // ##############################################
-// ##############################################
-// ##       LOGIN/SIGNUP COMPONENTS          ##
-// ##############################################
 function AuthForm() {
     const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(true);
     const [username, setUsername] = useState('');
@@ -150,7 +225,6 @@ function AuthForm() {
     const [barberCode, setBarberCode] = useState('');
     const [pin, setPin] = useState('');
 
-    // <<< --- 1. REPLACE 'isLogin' STATE WITH 'authView' --- >>>
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
 
     const [loading, setLoading] = useState(false);
@@ -161,7 +235,6 @@ function AuthForm() {
     const handleAuth = async (e) => {
         e.preventDefault(); setLoading(true); setMessage('');
         try {
-            // <<< --- 2. CHECK THE 'authView' STATE --- >>>
             if (authView === 'login') {
                 if (!username || !password) throw new Error("Username/password required.");
                 if (selectedRole === 'barber' && !pin) throw new Error("Barber PIN required.");
@@ -175,14 +248,13 @@ function AuthForm() {
                 if (selectedRole === 'barber' && !barberCode.trim()) throw new Error("Barber Code required.");
                 const response = await axios.post(`${API_URL}/signup/username`, { username: username.trim(), email: email.trim(), password, fullName: fullName.trim(), role: selectedRole, barberCode: selectedRole === 'barber' ? barberCode.trim() : undefined });
                 setMessage(response.data.message || 'Account created! You can now log in.');
-                setAuthView('login'); // <<< --- 3. GO BACK TO LOGIN VIEW --- >>>
+                setAuthView('login');
                 setUsername(''); setEmail(''); setPassword(''); setFullName(''); setBarberCode(''); setPin(''); setSelectedRole('customer');
             }
         } catch (error) { console.error('Auth error:', error); setMessage(`Authentication failed: ${error.response?.data?.error || error.message || 'Unexpected error.'}`); }
         finally { setLoading(false); }
     };
 
-    // <<< --- 4. ADD NEW HANDLER FOR FORGOT PASSWORD --- >>>
     const handleForgotPassword = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -190,26 +262,20 @@ function AuthForm() {
         try {
             if (!email) throw new Error("Email is required.");
 
-            // --- NEW STEP: Check if email exists first ---
             console.log(`Checking if email ${email} exists...`);
             const checkResponse = await axios.post(`${API_URL}/check-email`, { email });
 
             if (!checkResponse.data.found) {
                 console.log("Email not found, but showing generic message.");
-                // We show a generic success message for security.
-                // This prevents attackers from guessing registered emails.
                 setMessage('If an account exists for this email, a reset link has been sent.');
                 setLoading(false);
                 return;
             }
-            // --- END NEW STEP ---
 
-            // If we get here, the email *does* exist. Proceed to send the reset link.
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin, // Redirects back to your main app page
+                redirectTo: window.location.origin,
             });
             if (error) {
-                // Handle Supabase's rate limit error specifically
                 if (error.message.includes('rate limit')) {
                     throw new Error('Email rate limit exceeded. Please wait a moment.');
                 }
@@ -217,10 +283,9 @@ function AuthForm() {
             }
 
             setMessage('Password reset link sent! Please check your email.');
-            // Go back to login view so they can't spam the button
             setTimeout(() => {
                 setAuthView('login');
-                setEmail(''); // Clear email field
+                setEmail('');
                 setMessage('');
             }, 3000);
 
@@ -231,15 +296,13 @@ function AuthForm() {
             setLoading(false);
         }
     };
-    // <<< --- END OF NEW HANDLER --- >>>
-
 
     return (
         <div className="card auth-card">
             {/* --- Welcome Modal (Only shows on Sign Up) --- */}
             <div
                 className="modal-overlay"
-                style={{ display: (isWelcomeModalOpen && authView === 'signup') ? 'flex' : 'none' }} // <<< 5. UPDATE THIS CHECK
+                style={{ display: (isWelcomeModalOpen && authView === 'signup') ? 'flex' : 'none' }}
             >
                 <div className="modal-content">
                     <h2>Welcome to Dash-Q!</h2>
@@ -256,11 +319,12 @@ function AuthForm() {
                 </div>
             </div>
 
-            {/* <<< --- 6. NEW CONDITIONAL RENDERING --- >>> */}
-
             {authView === 'forgotPassword' ? (
                 <>
-                    <h2>Reset Password</h2>
+                    <div className="auth-header">
+                        <h2>Reset Password</h2>
+                        <ThemeToggleButton />
+                    </div>
                     <form onSubmit={handleForgotPassword}>
                         <p>Enter your email. We will send you a link to reset your password.</p>
                         <div className="form-group">
@@ -274,7 +338,8 @@ function AuthForm() {
                             />
                         </div>
                         <button type="submit" disabled={loading}>
-                            {loading ? '...' : 'Send Reset Link'}
+                            {/* --- MODERN SPINNER --- */}
+                            {loading ? <Spinner /> : 'Send Reset Link'}
                         </button>
                     </form>
                     <button type="button" onClick={() => { setAuthView('login'); setMessage(''); }} className="toggle-auth-button">
@@ -283,7 +348,10 @@ function AuthForm() {
                 </>
             ) : (
                 <>
-                    <h2>{authView === 'login' ? 'Login' : 'Sign Up'}</h2>
+                    <div className="auth-header">
+                        <h2>{authView === 'login' ? 'Login' : 'Sign Up'}</h2>
+                        <ThemeToggleButton />
+                    </div>
                     <form onSubmit={handleAuth}>
                         <div className="form-group"><label>Username:</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength="3" autoComplete="username" /></div>
 
@@ -310,7 +378,6 @@ function AuthForm() {
                             <>
                                 <div className="login-role-select"><label>Login As:</label><div className="role-toggle"><button type="button" className={selectedRole === 'customer' ? 'active' : ''} onClick={() => setSelectedRole('customer')}>Customer</button><button type="button" className={selectedRole === 'barber' ? 'active' : ''} onClick={() => setSelectedRole('barber')}>Barber</button></div>{selectedRole === 'barber' && (<div className="form-group pin-input"><label>Barber PIN:</label><input type="password" value={pin} onChange={(e) => setPin(e.target.value)} required={selectedRole === 'barber'} autoComplete="off" /></div>)}</div>
 
-                                {/* <<< --- 7. ADD FORGOT PASSWORD BUTTON --- >>> */}
                                 <div className="forgot-password-link">
                                     <button type="button" onClick={() => { setAuthView('forgotPassword'); setMessage(''); setEmail(''); }}>
                                         Forgot Password?
@@ -327,15 +394,17 @@ function AuthForm() {
                                 {selectedRole === 'barber' && (<div className="form-group"><label>Barber Code:</label><input type="text" value={barberCode} placeholder="Secret code" onChange={(e) => setBarberCode(e.target.value)} required={selectedRole === 'barber'} /><small>Required.</small></div>)}
                             </>
                         )}
-
-                        <button type="submit" disabled={loading}>{loading ? '...' : (authView === 'login' ? 'Login' : 'Sign Up')}</button>
+                        
+                        {/* --- MODERN SPINNER --- */}
+                        <button type="submit" disabled={loading}>
+                            {loading ? <Spinner /> : (authView === 'login' ? 'Login' : 'Sign Up')}
+                        </button>
                     </form>
                 </>
             )}
 
             {message && <p className={`message ${message.includes('successful') || message.includes('created') || message.includes('can now log in') || message.includes('sent') ? 'success' : 'error'}`}>{message}</p>}
 
-            {/* <<< --- 8. UPDATE THIS BUTTON LOGIC --- >>> */}
             {authView !== 'forgotPassword' && (
                 <button type="button" onClick={() => { setAuthView(authView === 'login' ? 'signup' : 'login'); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); }} className="toggle-auth-button">
                     {authView === 'login' ? 'Need account? Sign Up' : 'Have account? Login'}
@@ -365,12 +434,10 @@ function UpdatePasswordForm({ onPasswordUpdated }) {
         }
 
         try {
-            // Supabase client automatically reads the token from the URL
             const { error } = await supabase.auth.updateUser({ password: password });
             if (error) throw error;
 
             setMessage('Password updated successfully! You can now log in.');
-            // Wait 2 seconds, then go back to the login screen
             setTimeout(() => {
                 onPasswordUpdated();
             }, 2000);
@@ -385,7 +452,10 @@ function UpdatePasswordForm({ onPasswordUpdated }) {
 
     return (
         <div className="card auth-card">
-            <h2>Set Your New Password</h2>
+            <div className="auth-header">
+                <h2>Set Your New Password</h2>
+                <ThemeToggleButton />
+            </div>
             <p>You have been verified. Please enter a new password.</p>
             <form onSubmit={handlePasswordReset}>
                 <div className="form-group password-group">
@@ -399,7 +469,8 @@ function UpdatePasswordForm({ onPasswordUpdated }) {
                     />
                 </div>
                 <button type="submit" disabled={loading}>
-                    {loading ? '...' : 'Set New Password'}
+                    {/* --- MODERN SPINNER --- */}
+                    {loading ? <Spinner /> : 'Set New Password'}
                 </button>
             </form>
             {message && (
@@ -430,7 +501,10 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
         } catch (err) { console.error("Failed toggle availability:", err); setError(err.response?.data?.error || "Could not update."); }
         finally { setLoading(false); }
     };
-    return (<div className="availability-toggle"><p>Status: <strong>{isAvailable ? 'Available' : 'Offline'}</strong></p><button onClick={handleToggle} disabled={loading} className={isAvailable ? 'go-offline-button' : 'go-online-button'}>{loading ? '...' : (isAvailable ? 'Go Offline' : 'Go Online')}</button>{error && <p className="error-message small">{error}</p>}</div>);
+    return (<div className="availability-toggle"><p>Status: <strong>{isAvailable ? 'Available' : 'Offline'}</strong></p><button onClick={handleToggle} disabled={loading} className={isAvailable ? 'go-offline-button' : 'go-online-button'}>
+        {/* --- MODERN SPINNER --- */}
+        {loading ? <Spinner /> : (isAvailable ? 'Go Offline' : 'Go Online')}
+    </button>{error && <p className="error-message small">{error}</p>}</div>);
 }
 
 // --- AnalyticsDashboard (Displays Barber Stats) ---
@@ -439,10 +513,25 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
     const [error, setError] = useState('');
     const [showEarnings, setShowEarnings] = useState(true);
     const [feedback, setFeedback] = useState([]);
+    
+    // --- SKELETON LOADER STATE ---
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    const fetchAnalytics = useCallback(async () => {
+    // Access theme from context
+    const { theme } = useTheme();
+
+    const fetchAnalytics = useCallback(async (isRefreshClick = false) => {
         if (!barberId) return;
         setError('');
+
+        // --- SKELETON LOADER STATE ---
+        if (isRefreshClick) {
+            setIsRefreshing(true);
+        } else {
+            setIsLoading(true);
+        }
+
         try {
             const response = await axios.get(`${API_URL}/analytics/${barberId}`);
             setAnalytics({ dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, ...response.data });
@@ -455,20 +544,67 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
             console.error('Failed fetch analytics/feedback:', err);
             setError('Could not load dashboard data.');
             setAnalytics({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0 });
+        } finally {
+            // --- SKELETON LOADER STATE ---
+            setIsLoading(false);
+            setIsRefreshing(false);
         }
     }, [barberId]);
 
     useEffect(() => {
-        fetchAnalytics();
+        fetchAnalytics(false); // Initial load
     }, [refreshSignal, barberId, fetchAnalytics]);
 
     const avgPriceToday = (analytics.totalCutsToday ?? 0) > 0 ? ((analytics.totalEarningsToday ?? 0) / analytics.totalCutsToday).toFixed(2) : '0.00';
     const avgPriceWeek = (analytics.totalCutsWeek ?? 0) > 0 ? ((analytics.totalEarningsWeek ?? 0) / analytics.totalCutsWeek).toFixed(2) : '0.00';
-    const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Earnings per Day (Last 7 Days)' } }, scales: { y: { beginAtZero: true } } };
+    
+    // Define chart colors based on theme
+    const chartTextColor = theme === 'light' ? '#18181B' : '#FFFFFF';
+    const chartGridColor = theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
+
+    const chartOptions = { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        plugins: { 
+            legend: { position: 'top', labels: { color: chartTextColor } }, 
+            title: { display: true, text: 'Earnings per Day (Last 7 Days)', color: chartTextColor } 
+        }, 
+        scales: { 
+            y: { 
+                beginAtZero: true,
+                ticks: { color: chartTextColor },
+                grid: { color: chartGridColor }
+            },
+            x: {
+                ticks: { color: chartTextColor },
+                grid: { color: chartGridColor }
+            }
+        } 
+    };
+    
     const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : [];
     const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] };
     const carbonSavedToday = 5;
     const carbonSavedWeekly = (dailyDataSafe.length) * 5;
+
+    // --- SKELETON LOADER RENDER ---
+    const renderSkeletons = () => (
+        <>
+            <div className="analytics-grid">
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+            </div>
+            <h3 className="analytics-subtitle">Last 7 Days</h3>
+            <div className="analytics-grid">
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+                <SkeletonLoader height="75px" />
+            </div>
+        </>
+    );
 
     return (<div className="card analytics-card">
         <div className="dashboard-header">
@@ -479,19 +615,26 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
         </div>
         {error && <p className="error-message">{error}</p>}
         <h3 className="analytics-subtitle">Today</h3>
-        <div className="analytics-grid">
-            {showEarnings && <div className="analytics-item"><span className="analytics-label">Earnings</span><span className="analytics-value">₱{analytics.totalEarningsToday ?? 0}</span></div>}
-            <div className="analytics-item"><span className="analytics-label">Cuts</span><span className="analytics-value">{analytics.totalCutsToday ?? 0}</span></div>
-            {showEarnings && <div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceToday}</span></div>}
-            <div className="analytics-item"><span className="analytics-label">Queue Size</span><span className="analytics-value small">{analytics.currentQueueSize ?? 0}</span></div>
-        </div>
-        <h3 className="analytics-subtitle">Last 7 Days</h3>
-        <div className="analytics-grid">
-            {showEarnings && <div className="analytics-item"><span className="analytics-label">Total Earnings</span><span className="analytics-value">₱{analytics.totalEarningsWeek ?? 0}</span></div>}
-            <div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{analytics.totalCutsWeek ?? 0}</span></div>
-            {showEarnings && <div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceWeek}</span></div>}
-            <div className="analytics-item"><span className="analytics-label">Busiest Day</span><span className="analytics-value small">{analytics.busiestDay?.name ?? 'N/A'} {showEarnings && `(₱${analytics.busiestDay?.earnings ?? 0})`}</span></div>
-        </div>
+        
+        {/* --- SKELETON LOADER CONDITIONAL --- */}
+        {isLoading ? renderSkeletons() : (
+            <>
+                <div className="analytics-grid">
+                    {showEarnings && <div className="analytics-item"><span className="analytics-label">Earnings</span><span className="analytics-value">₱{analytics.totalEarningsToday ?? 0}</span></div>}
+                    <div className="analytics-item"><span className="analytics-label">Cuts</span><span className="analytics-value">{analytics.totalCutsToday ?? 0}</span></div>
+                    {showEarnings && <div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceToday}</span></div>}
+                    <div className="analytics-item"><span className="analytics-label">Queue Size</span><span className="analytics-value small">{analytics.currentQueueSize ?? 0}</span></div>
+                </div>
+                <h3 className="analytics-subtitle">Last 7 Days</h3>
+                <div className="analytics-grid">
+                    {showEarnings && <div className="analytics-item"><span className="analytics-label">Total Earnings</span><span className="analytics-value">₱{analytics.totalEarningsWeek ?? 0}</span></div>}
+                    <div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{analytics.totalCutsWeek ?? 0}</span></div>
+                    {showEarnings && <div className="analytics-item"><span className="analytics-label">Avg Price</span><span className="analytics-value small">₱{avgPriceWeek}</span></div>}
+                    <div className="analytics-item"><span className="analytics-label">Busiest Day</span><span className="analytics-value small">{analytics.busiestDay?.name ?? 'N/A'} {showEarnings && `(₱${analytics.busiestDay?.earnings ?? 0})`}</span></div>
+                </div>
+            </>
+        )}
+        
         <div className="carbon-footprint-section">
             <h3 className="analytics-subtitle">Carbon Footprint Reduced</h3>
             <div className="analytics-grid carbon-grid">
@@ -504,7 +647,11 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
                 {dailyDataSafe.length > 0 ? (<div style={{ height: '250px' }}><Bar options={chartOptions} data={chartData} /></div>) : (<p className='empty-text'>No chart data yet.</p>)}
             </div>
         )}
-        <button onClick={fetchAnalytics} className="refresh-button">Refresh Stats</button>
+        
+        {/* --- SPINNER ON REFRESH BUTTON --- */}
+        <button onClick={() => fetchAnalytics(true)} className="refresh-button" disabled={isRefreshing}>
+            {isRefreshing ? <Spinner /> : 'Refresh Stats'}
+        </button>
 
         <div className="feedback-list-container">
             <h3 className="analytics-subtitle">Recent Feedback</h3>
@@ -544,6 +691,19 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         const saved = localStorage.getItem('barberUnreadMessages');
         return saved ? JSON.parse(saved) : {};
     });
+
+    // ===================================================================
+    // === NEW MODERN MODAL STATE
+    // ===================================================================
+    // Replaces all window.alert, window.confirm, and window.prompt
+    const [modalState, setModalState] = useState({ type: null, data: null });
+    // `type` can be: 'alert', 'confirmCancel', 'tipPrompt'
+    // `data` holds the message for 'alert', the customer for 'confirmCancel',
+    // or the queue entry for 'tipPrompt'
+
+    const [tipInput, setTipInput] = useState('');
+    const [modalError, setModalError] = useState('');
+    // ===================================================================
 
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
@@ -646,49 +806,64 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     }, []); // Empty dependency array, runs once on mount
 
     // --- Handlers ---
+
+    // ===================================================================
+    // === REFACTORED HANDLERS (USING MODALS)
+    // ===================================================================
+
+    const closeModal = () => {
+        setModalState({ type: null, data: null });
+        setTipInput('');
+        setModalError('');
+    };
+
     const handleNextCustomer = async () => {
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
-        if (!next) { alert('Queue empty!'); return; }
-        if (queueDetails.inProgress) { alert(`Complete ${queueDetails.inProgress.customer_name} first.`); return; }
+        if (!next) {
+            setModalState({ type: 'alert', data: { title: 'Queue Empty', message: 'There are no customers waiting to be called.' } });
+            return;
+        }
+        if (queueDetails.inProgress) {
+            setModalState({ type: 'alert', data: { title: 'Action Required', message: `Please complete ${queueDetails.inProgress.customer_name} first before calling the next customer.` } });
+            return;
+        }
         setError('');
         try { await axios.put(`${API_URL}/queue/next`, { queue_id: next.id, barber_id: barberId }); }
         catch (err) { console.error('Failed next customer:', err); setError(err.response?.data?.error || 'Failed call next.'); }
     };
+
     const handleCompleteCut = async () => {
         if (!queueDetails.inProgress) return;
+        // Just open the modal. The logic is moved to handleSubmitTipForm.
+        setModalState({ type: 'tipPrompt', data: queueDetails.inProgress });
+        setModalError('');
+        setTipInput('');
+    };
+    
+    const handleSubmitTipForm = async (e) => {
+        e.preventDefault();
+        const entry = modalState.data;
+        if (!entry) return;
 
-        const queueId = queueDetails.inProgress.id;
+        const queueId = entry.id;
 
-        // --- Step 1: Retrieve necessary data from state ---
-        const serviceName = queueDetails.inProgress.services?.name || 'Service';
-        const servicePrice = parseFloat(queueDetails.inProgress.services?.price_php) || 0; // 1000.00
-        const isVIP = queueDetails.inProgress.is_vip === true;
+        // --- Logic moved from handleCompleteCut ---
+        const servicePrice = parseFloat(entry.services?.price_php) || 0;
+        const isVIP = entry.is_vip === true;
+        const vipCharge = isVIP ? 149 : 0;
+        const subtotalDue = servicePrice + vipCharge;
 
-        // --- Step 2: Calculate VIP fee and total amount due (before tip) ---
-        const vipCharge = isVIP ? 149 : 0; // 100
-        const subtotalDue = servicePrice + vipCharge; // 1000 + 100 = 1100
-
-        // --- Step 3: Prompt the barber for tip amount ---
-        const tipAmountInput = window.prompt(
-            // The prompt confirms the subtotal (1100.00)
-            `Service: ${serviceName} (₱${servicePrice.toFixed(2)})${isVIP ? ' + VIP Fee (₱149.00)' : ''}. \n\nTotal Due: ₱${subtotalDue.toFixed(2)}.\n\nPlease enter TIP amount (e.g., 50):`
-        );
-
-        if (tipAmountInput === null) return;
-        const parsedTip = parseInt(tipAmountInput); // 0 (if no input)
+        const parsedTip = parseInt(tipInput || '0');
 
         if (isNaN(parsedTip) || parsedTip < 0) {
-            window.alert('Invalid tip. Please enter 0 or more.');
+            setModalError('Invalid tip. Please enter 0 or more.');
             return;
         }
 
-        // --- Step 4: Calculate the final profit for the alert ---
-        const finalLoggedProfit = subtotalDue + parsedTip; // 1100 + 0 = 1100
-
+        const finalLoggedProfit = subtotalDue + parsedTip;
         setError('');
+        
         try {
-            // --- Step 5: Send ALL charges to the server ---
-            // The server will calculate: 1000 + 0 + 100 = 1100 (Correct)
             await axios.post(`${API_URL}/queue/complete`, {
                 queue_id: queueId,
                 barber_id: barberId,
@@ -698,17 +873,32 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
 
             onCutComplete();
 
-            // --- Step 6: Display the correct final logged profit (1100.00) ---
-            window.alert(`Cut completed! Total logged profit: ₱${finalLoggedProfit.toFixed(2)}`);
+            // Close tip modal and show success alert modal
+            setModalState({ 
+                type: 'alert', 
+                data: { 
+                    title: 'Cut Completed!', 
+                    message: `Total logged profit: ₱${finalLoggedProfit.toFixed(2)}` 
+                } 
+            });
+
         } catch (err) {
             console.error('Failed complete cut:', err);
             setError(err.response?.data?.error || 'Failed to complete cut.');
+            closeModal(); // Close modal on failure
         }
     };
+
     const handleCancel = async (customerToCancel) => {
         if (!customerToCancel) return;
-        const confirmCancel = window.confirm(`Are you sure you want to mark Customer #${customerToCancel.id} (${customerToCancel.customer_name}) as Cancelled/No-Show? This will not log earnings.`);
-        if (!confirmCancel) return;
+        // Open the confirmation modal
+        setModalState({ type: 'confirmCancel', data: customerToCancel });
+    };
+
+    const handleConfirmCancel = async () => {
+        const customerToCancel = modalState.data;
+        if (!customerToCancel) return;
+
         console.log("[handleCancel] Sending PUT request to /api/queue/cancel", { queue_id: customerToCancel.id, barber_id: barberId });
         setError('');
         try {
@@ -719,8 +909,15 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         } catch (err) {
             console.error('[handleCancel] Failed to cancel customer:', err.response?.data || err.message);
             setError(err.response?.data?.error || 'Failed to mark as cancelled.');
+        } finally {
+            closeModal(); // Close modal regardless of outcome
         }
     };
+
+    // ===================================================================
+    // === END REFACTORED HANDLERS
+    // ===================================================================
+
 
     // --- Message Sender (Sends queueId for persistence) ---
     const sendBarberMessage = (recipientId, messageText) => {
@@ -803,7 +1000,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                             <button onClick={handleNextCustomer} className="next-button">Call: #{queueDetails.upNext.id} - {queueDetails.upNext.customer_name}</button>
                         ) : queueDetails.waiting.length > 0 ? (
                             <button onClick={handleNextCustomer} className="next-button">Call: #{queueDetails.waiting[0].id} - {queueDetails.waiting[0].customer_name}</button>
-                        ) : (<button className="next-button disabled" disabled>Queue Empty</button>)}
+                        ) : (<button onClick={handleNextCustomer} className="next-button">Call Next Customer</button>)}
                     </div>
 
                     <h3 className="queue-subtitle">In Chair</h3>
@@ -853,6 +1050,93 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                     <button onClick={fetchQueueDetails} className="refresh-button small">Refresh Queue</button>
                 </>
             )}
+
+            {/* =================================================================== */}
+            {/* === NEW MODERN MODAL RENDER BLOCK === */}
+            {/* =================================================================== */}
+
+            {/* --- 1. Alert Modal --- */}
+            {modalState.type === 'alert' && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h2>{modalState.data?.title || 'Alert'}</h2>
+                        <p>{modalState.data?.message || 'An error occurred.'}</p>
+                        <div className="modal-actions single-action">
+                            <button onClick={closeModal} className="modal-confirm-button">
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- 2. Confirmation Modal (for Cancel) --- */}
+            {modalState.type === 'confirmCancel' && modalState.data && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h2>Confirm Cancellation</h2>
+                        <p>Are you sure you want to mark Customer #{modalState.data.id} ({modalState.data.customer_name}) as Cancelled/No-Show? This will not log earnings.</p>
+                        <div className="modal-actions">
+                            <button onClick={closeModal} className="modal-cancel-button">
+                                Back
+                            </button>
+                            <button onClick={handleConfirmCancel} className="modal-confirm-button danger">
+                                Yes, Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- 3. Tip Prompt Modal --- */}
+            {modalState.type === 'tipPrompt' && modalState.data && (
+                <div className="modal-overlay">
+                    <div className="modal-content modal-form">
+                        <h2>Complete Cut</h2>
+                        <p className="modal-form-details">
+                            <strong>Customer:</strong> {modalState.data.customer_name} (#{modalState.data.id})<br/>
+                            <strong>Service:</strong> {modalState.data.services?.name || 'Service'} (₱{parseFloat(modalState.data.services?.price_php || 0).toFixed(2)})<br/>
+                            {modalState.data.is_vip && (
+                                <>
+                                    <strong>VIP Fee:</strong> ₱149.00<br/>
+                                </>
+                            )}
+                            <strong>Subtotal: ₱{(
+                                (parseFloat(modalState.data.services?.price_php || 0)) + 
+                                (modalState.data.is_vip ? 149 : 0)
+                            ).toFixed(2)}</strong>
+                        </p>
+                        
+                        <form onSubmit={handleSubmitTipForm}>
+                            <div className="form-group">
+                                <label htmlFor="tipAmount">Enter TIP Amount (Optional):</label>
+                                <input
+                                    type="number"
+                                    id="tipAmount"
+                                    value={tipInput}
+                                    onChange={(e) => setTipInput(e.target.value)}
+                                    placeholder="e.g., 50"
+                                    autoFocus
+                                />
+                            </div>
+                            
+                            {modalError && <p className="message error">{modalError}</p>}
+                            
+                            {/* This button inherits the `form button[type="submit"]` style */}
+                            <button type="submit">
+                                Complete & Log Profit
+                            </button>
+                        </form>
+                        <button onClick={closeModal} className="toggle-auth-button">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+            {/* =================================================================== */}
+            {/* === END NEW MODAL BLOCK === */}
+            {/* =================================================================== */}
+
         </div>
     );
 }
@@ -931,7 +1215,6 @@ function CustomerView({ session }) {
     const currentBarberName = targetBarber?.full_name || `Barber #${joinedBarberId}`;
     const currentChatTargetBarberUserId = targetBarber?.user_id;
 
-    // FIX for no-undef errors: Define calculated state variables at the top of the component
     const myQueueEntry = liveQueue.find(e => e.id.toString() === myQueueEntryId);
     const isQueueUpdateAllowed = myQueueEntry && (myQueueEntry.status === 'Waiting' || myQueueEntry.status === 'Up Next');
 
@@ -959,12 +1242,7 @@ function CustomerView({ session }) {
 
         if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
             const messageData = { senderId: session.user.id, recipientId, message: messageText, queueId };
-
-            // 1. Send live message to server (server logs and pushes notification)
             socketRef.current.emit('chat message', messageData);
-
-
-            // 2. Immediately update local state to show message
             setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
         } else { console.warn("[Customer] Cannot send message (socket disconnected or missing IDs)."); setMessage("Chat disconnected."); }
     };
@@ -983,14 +1261,11 @@ function CustomerView({ session }) {
             setLiveQueue(() => queueData);
             liveQueueRef.current = queueData;
 
-            // <<< --- NEW "MISSED EVENT" CATCHER for In Progress/Up Next --- >>>
             const currentQueueId = localStorage.getItem('myQueueEntryId');
             if (currentQueueId) {
                 const myEntry = queueData.find(e => e.id.toString() === currentQueueId);
 
                 if (myEntry && (myEntry.status === 'In Progress' || myEntry.status === 'Up Next')) {
-                    // We are in the queue and our turn is now, but we might have missed the modal.
-                    // Check if the sticky flag is already set. If not, set it and show the modal.
                     const modalFlag = localStorage.getItem('stickyModal');
 
                     if (modalFlag !== 'yourTurn') {
@@ -1010,8 +1285,6 @@ function CustomerView({ session }) {
                     }
                 }
             }
-            // <<< --- END OF NEW CATCHER --- >>>
-
         } catch (error) {
             console.error("Failed fetch public queue:", error);
             setLiveQueue(() => []);
@@ -1020,7 +1293,6 @@ function CustomerView({ session }) {
         } finally {
             setIsQueueLoading(() => false);
 
-            // --- THIS IS THE "MISSED EVENT" LOGIC (For Done/Cancelled) ---
             const currentQueueId = localStorage.getItem('myQueueEntryId');
 
             if (currentQueueId) {
@@ -1072,9 +1344,8 @@ function CustomerView({ session }) {
                     return isDoneOpen;
                 });
             }
-            // --- END "DONE/CANCELLED" LOGIC ---
         }
-    }, [session, setIsQueueLoading, setLiveQueue, setQueueMessage, setIsServiceCompleteModalOpen, setIsCancelledModalOpen]); // <-- Dependencies are correct
+    }, [session, setIsQueueLoading, setLiveQueue, setQueueMessage, setIsServiceCompleteModalOpen, setIsCancelledModalOpen]);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -1093,7 +1364,6 @@ function CustomerView({ session }) {
             const fileExtension = selectedFile.name.split('.').pop();
             const filePath = `${session.user.id}/${targetQueueId || 'new'}-${Date.now()}.${fileExtension}`;
 
-            // 1. Upload to Supabase Storage
             const { error: uploadError } = await supabase.storage
                 .from('haircut_references')
                 .upload(filePath, selectedFile, {
@@ -1102,7 +1372,6 @@ function CustomerView({ session }) {
                 });
             if (uploadError) throw uploadError;
 
-            // 2. Get public URL
             const { data: publicUrlData } = supabase.storage
                 .from('haircut_references')
                 .getPublicUrl(filePath);
@@ -1111,13 +1380,10 @@ function CustomerView({ session }) {
 
             const imageUrl = publicUrlData.publicUrl;
 
-            // 3. Update the queue entry with the new URL (Applies to Join or Update)
             if (!myQueueEntryId) {
-                // Only set state for initial join form
                 setReferenceImageUrl(imageUrl);
                 setMessage('Photo uploaded. Ready to join queue.');
             } else {
-                // Update existing queue entry
                 const updateResponse = await axios.put(`${API_URL}/queue/photo`, {
                     queueId: targetQueueId,
                     barberId: joinedBarberId,
@@ -1127,7 +1393,6 @@ function CustomerView({ session }) {
                 if (updateResponse.status !== 200) throw new Error("Failed to update queue entry.");
                 setReferenceImageUrl(imageUrl);
                 setMessage('Photo successfully updated!');
-                // Force a queue refresh to get the updated URL in the liveQueue
                 fetchPublicQueue(joinedBarberId);
             }
 
@@ -1142,29 +1407,22 @@ function CustomerView({ session }) {
         }
     };
 
-    // --- NEW VIP HANDLER: Opens the confirmation modal ---
     const handleVIPToggle = (e) => {
-        // Check for both native checkbox event (e.target.checked) 
-        // and our simulated button click event (e.target.checked)
         const isChecked = e.target.checked;
-
         if (isChecked) {
-            // If turning ON, open modal for confirmation
             setIsVIPModalOpen(true);
         } else {
-            // If turning OFF, just update the state
             setIsVIPToggled(false);
         }
     };
 
-    // --- NEW VIP MODAL HANDLER: Confirms VIP status ---
     const confirmVIP = () => {
         setIsVIPToggled(true);
         setIsVIPModalOpen(false);
     };
 
     const cancelVIP = () => {
-        setIsVIPToggled(false); // Ensure the toggle is visually unchecked
+        setIsVIPToggled(false);
         setIsVIPModalOpen(false);
     };
 
@@ -1196,7 +1454,7 @@ function CustomerView({ session }) {
                 setSelectedBarberId(''); setSelectedServiceId('');
                 setReferenceImageUrl(newEntry.reference_image_url || '');
                 fetchPublicQueue(newEntry.barber_id.toString());
-                setIsVIPToggled(false); // Reset VIP flag after join
+                setIsVIPToggled(false);
             } else { throw new Error("Invalid response from server."); }
         } catch (error) {
             console.error('Failed to join queue:', error);
@@ -1210,12 +1468,9 @@ function CustomerView({ session }) {
         if (userInitiated && myQueueEntryId) {
             setIsLoading(true);
             try {
-                // --- THIS IS THE CHANGE ---
-                // We must send our user ID to prove who we are
                 await axios.delete(`${API_URL}/queue/${myQueueEntryId}`, {
                     data: { userId: session.user.id }
                 });
-                // --- END CHANGE ---
                 setMessage("You left the queue.");
             }
             catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
@@ -1241,7 +1496,7 @@ function CustomerView({ session }) {
     };
 
     const handleModalClose = () => {
-        setIsYourTurnModalOpen(false); // <<< --- ADD THIS
+        setIsYourTurnModalOpen(false);
         stopBlinking();
     };
 
@@ -1260,7 +1515,7 @@ function CustomerView({ session }) {
                 if (distance > DISTANCE_THRESHOLD_METERS) {
                     if (!isTooFarModalOpen && !isOnCooldown) {
                         console.log('Customer is too far! Triggering modal.');
-                        localStorage.setItem('stickyModal', 'tooFar'); // <<< --- ADD THIS
+                        localStorage.setItem('stickyModal', 'tooFar');
                         setIsTooFarModalOpen(true);
                         setIsOnCooldown(true);
                     }
@@ -1316,18 +1571,14 @@ function CustomerView({ session }) {
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
                 stopBlinking();
-
-                // --- ADD THIS ---
-                // Re-sync unread status from storage when tab becomes visible
                 const hasUnread = localStorage.getItem('hasUnreadFromBarber') === 'true';
                 setHasUnreadFromBarber(hasUnread);
-                // --- END ADDED LOGIC ---
             }
         };
         window.addEventListener("focus", handleFocus);
         document.addEventListener("visibilitychange", handleVisibility);
         return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
-    }, []); // <-- We are adding to an existing hook, so the dependency array is still []
+    }, []);
 
     useEffect(() => { // Realtime Subscription & Notifications
         if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
@@ -1346,7 +1597,7 @@ function CustomerView({ session }) {
                             playSound(queueNotificationSound);
                             startBlinking();
                             setIsYourTurnModalOpen(true);
-                            localStorage.setItem('stickyModal', 'yourTurn'); // <<< --- ADD THIS
+                            localStorage.setItem('stickyModal', 'yourTurn');
                             if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                         }
                         else if (newStatus === 'In Progress') {
@@ -1354,7 +1605,7 @@ function CustomerView({ session }) {
                             playSound(queueNotificationSound);
                             startBlinking();
                             setIsYourTurnModalOpen(true);
-                            localStorage.setItem('stickyModal', 'yourTurn'); // <<< --- ADD THIS
+                            localStorage.setItem('stickyModal', 'yourTurn');
                             if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                         }
                         else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); }
@@ -1375,8 +1626,7 @@ function CustomerView({ session }) {
         };
     }, [joinedBarberId, myQueueEntryId, fetchPublicQueue]);
 
-    // --- NEW useEffect: Fetch feedback when barber is selected ---
-    useEffect(() => {
+    useEffect(() => { // Fetch feedback when barber is selected
         if (selectedBarberId) {
             console.log(`Fetching feedback for barber ${selectedBarberId}`);
             setBarberFeedback([]);
@@ -1394,8 +1644,7 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]);
 
-    // --- UseEffect for WebSocket Connection and History Fetch ---
-    useEffect(() => {
+    useEffect(() => { // WebSocket Connection and History Fetch
         if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
 
             fetchChatHistory(myQueueEntryId);
@@ -1420,7 +1669,7 @@ function CustomerView({ session }) {
                         setIsChatOpen(currentIsOpen => {
                             if (!currentIsOpen) { 
                                 setHasUnreadFromBarber(true); 
-                                localStorage.setItem('hasUnreadFromBarber', 'true'); // <-- ADD THIS
+                                localStorage.setItem('hasUnreadFromBarber', 'true');
                             }
                             return currentIsOpen;
                         });
@@ -1446,17 +1695,16 @@ function CustomerView({ session }) {
         };
     }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
 
-    useEffect(() => {
+    useEffect(() => { // EWT Preview
         if (selectedBarberId) {
-            // A barber is selected, fetch their queue for EWT
             console.log(`[EWT Preview] Fetching queue for barber ${selectedBarberId}`);
             fetchPublicQueue(selectedBarberId);
         } else {
-            // No barber selected, clear the live queue
             setLiveQueue([]);
             liveQueueRef.current = [];
+            setIsQueueLoading(false); // Stop loading if no barber is selected
         }
-    }, [selectedBarberId, fetchPublicQueue]); // <-- Dependencies
+    }, [selectedBarberId, fetchPublicQueue]);
 
     useEffect(() => { // Smart EWT Calculation
         const calculateWaitTime = () => {
@@ -1496,42 +1744,33 @@ function CustomerView({ session }) {
         return () => clearInterval(timerId);
     }, [myQueueEntryId]);
 
-    useEffect(() => {
+    useEffect(() => { // Modal Button Countdown
         let timerId = null;
         let countdownInterval = null;
 
-        // This now checks if ANY of the 4 modals are open
         if (isYourTurnModalOpen || isServiceCompleteModalOpen || isCancelledModalOpen || isTooFarModalOpen) {
-
-            // 1. Disable the button and reset the countdown
             setIsModalButtonDisabled(true);
-            setModalCountdown(5); // <-- 5
+            setModalCountdown(5);
             
-
-            // 2. Start the 10-second timer to re-enable the button
             timerId = setTimeout(() => {
                 setIsModalButtonDisabled(false);
-            }, 5000); // <-- (5 seconds)
+            }, 5000);
 
-            // 3. Start a 1-second interval to update the countdown text
             countdownInterval = setInterval(() => {
                 setModalCountdown(prevCount => {
                     if (prevCount <= 1) {
-                        clearInterval(countdownInterval); // Stop the interval
+                        clearInterval(countdownInterval);
                         return 0;
                     }
-                    return prevCount - 1; // Decrement
+                    return prevCount - 1;
                 });
-            }, 1000); // 1 second
+            }, 1000);
         }
-
-        // This is a cleanup function to prevent memory leaks
         return () => {
             if (timerId) clearTimeout(timerId);
             if (countdownInterval) clearInterval(countdownInterval);
         };
-    }, [isYourTurnModalOpen, isServiceCompleteModalOpen, isCancelledModalOpen, isTooFarModalOpen]); // <-- All 4 modals are now in the array
-    // <<< --- END MODIFIED BLOCK --- >>>
+    }, [isYourTurnModalOpen, isServiceCompleteModalOpen, isCancelledModalOpen, isTooFarModalOpen]);
 
     console.log("RENDERING CustomerView:", { myQueueEntryId, joinedBarberId, liveQueue_length: liveQueue.length, nowServing: nowServing?.id, upNext: upNext?.id, peopleWaiting, estimatedWait, displayWait, isQueueLoading, queueMessage });
 
@@ -1543,8 +1782,6 @@ function CustomerView({ session }) {
                 <div className="modal-content">
                     <h2>{modalAlert.title}</h2>
                     <p>{modalAlert.text}</p>
-
-                    {/* <<< --- THIS BUTTON IS NOW MODIFIED --- >>> */}
                     <button
                         id="close-modal-btn"
                         onClick={handleModalClose}
@@ -1552,17 +1789,14 @@ function CustomerView({ session }) {
                     >
                         {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay!'}
                     </button>
-
                 </div>
             </div>
             <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
                 <div className="modal-content">
-
                     {!feedbackSubmitted ? (
                         <>
                             <h2>Service Complete!</h2>
                             <p>Thank you! How was your experience with {currentBarberName}?</p>
-
                             <form className="feedback-form" onSubmit={async (e) => {
                                 e.preventDefault();
                                 if (!feedbackText.trim()) {
@@ -1603,9 +1837,8 @@ function CustomerView({ session }) {
                                 onClick={() => {
                                     handleReturnToJoin(false);
                                 }}
-                                disabled={isModalButtonDisabled} // <-- Add This
+                                disabled={isModalButtonDisabled}
                             >
-                                {/* vvv Change This vvv */}
                                 {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
                             </button>
                         </>
@@ -1620,9 +1853,8 @@ function CustomerView({ session }) {
                     <button
                         id="close-cancel-modal-btn"
                         onClick={() => handleReturnToJoin(false)}
-                        disabled={isModalButtonDisabled} // <-- Add This
+                        disabled={isModalButtonDisabled}
                     >
-                        {/* vvv Change This vvv */}
                         {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
                     </button>
                 </div>
@@ -1633,12 +1865,11 @@ function CustomerView({ session }) {
                     <p>Hey, please don’t wander off too far...</p>
                     <button id="close-too-far-modal-btn" onClick={() => {
                         setIsTooFarModalOpen(false);
-                        localStorage.removeItem('stickyModal'); // <<< --- ADD THIS
+                        localStorage.removeItem('stickyModal');
                         console.log("Cooldown started.");
                         setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000);
                     }}
                     >
-                        {/* vvv Change This vvv */}
                         {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : "Okay, I'll stay close"}
                     </button>
                 </div>
@@ -1652,13 +1883,10 @@ function CustomerView({ session }) {
                         <div className="form-group"><label>Your Phone (Optional):</label><input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g., 09171234567" /></div>
                         <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
                         <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
-                        {/* --- NEW VIP TOGGLE --- */}
                         {selectedServiceId && (
                             <div className="form-group vip-toggle-group">
                                 <label>Service Priority:</label>
                                 <div className="priority-toggle-control">
-
-                                    {/* NO PRIORITY Button */}
                                     <button
                                         type="button"
                                         className={`priority-option ${!isVIPToggled ? 'active' : ''}`}
@@ -1666,17 +1894,14 @@ function CustomerView({ session }) {
                                     >
                                         No Priority
                                     </button>
-
-                                    {/* VIP PRIORITY Button - Triggers the modal if clicked */}
                                     <button
                                         type="button"
                                         className={`priority-option ${isVIPToggled ? 'active vip' : ''}`}
-                                        onClick={() => handleVIPToggle({ target: { checked: true } })} // Simulate check event
-                                        disabled={isVIPToggled} // Disable if already toggled on (to prevent multiple modal opens)
+                                        onClick={() => handleVIPToggle({ target: { checked: true } })}
+                                        disabled={isVIPToggled}
                                     >
                                         VIP Priority (+₱149)
                                     </button>
-
                                 </div>
                                 {isVIPToggled && (
                                     <p className="success-message small">
@@ -1685,12 +1910,12 @@ function CustomerView({ session }) {
                                 )}
                             </div>
                         )}
-                        {/* --- END NEW VIP TOGGLE --- */}
                         <div className="form-group photo-upload-group">
                             <label>Desired Haircut Photo (Optional):</label>
                             <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} />
                             <button type="button" onClick={() => handleUploadPhoto(null)} disabled={!selectedFile || isUploading || referenceImageUrl} className="upload-button">
-                                {isUploading ? 'Uploading...' : (referenceImageUrl ? 'Photo Attached' : 'Upload Photo')}
+                                {/* --- SPINNER FOR UPLOAD --- */}
+                                {isUploading ? <Spinner /> : (referenceImageUrl ? 'Photo Attached' : 'Upload Photo')}
                             </button>
                             {referenceImageUrl && <p className="success-message small">Photo ready. <a href={referenceImageUrl} target="_blank" rel="noopener noreferrer">View Photo</a></p>}
                         </div>
@@ -1722,7 +1947,19 @@ function CustomerView({ session }) {
                             </div>
                         )}
 
-                        {selectedBarberId && (<div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>)}
+                        {/* --- SKELETON LOADER FOR EWT PREVIEW --- */}
+                        {isQueueLoading && selectedBarberId ? (
+                            <div className="ewt-container skeleton-ewt">
+                                <SkeletonLoader height="40px" />
+                            </div>
+                        ) : (
+                            selectedBarberId && (
+                                <div className="ewt-container">
+                                    <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
+                                    <div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div>
+                                </div>
+                            )
+                        )}
 
                         {isIOsDevice() && (
                             <p className="message warning small">
@@ -1731,7 +1968,10 @@ function CustomerView({ session }) {
                             </p>
                         )}
 
-                        <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0 || isUploading} className="join-queue-button">{isLoading ? 'Joining...' : 'Join Queue'}</button>
+                        <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0 || isUploading} className="join-queue-button">
+                            {/* --- SPINNER FOR JOIN --- */}
+                            {isLoading ? <Spinner /> : 'Join Queue'}
+                        </button>
                     </form>
                     {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
                 </>
@@ -1741,33 +1981,41 @@ function CustomerView({ session }) {
                     <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
                     <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
                     {queueMessage && <p className="message error">{queueMessage}</p>}
-                    {isQueueLoading && !queueMessage && <p className="loading-text">Loading queue...</p>}
+                    
                     <div className="ewt-container"><div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div><div className="ewt-item"><span>Estimated wait</span><strong>~ {displayWait} min</strong></div></div>
+                    
+                    {/* --- SKELETON LOADER FOR LIVE QUEUE --- */}
                     <ul className="queue-list live">
-                        {!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (
-                            <li className="empty-text">Queue is empty.</li>
+                        {isQueueLoading ? (
+                            <>
+                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
+                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
+                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
+                            </>
                         ) : (
-                            liveQueue.map((entry, index) => (
-                                <li 
-                                    key={entry.id} 
-                                    className={`
-                                        ${entry.id.toString() === myQueueEntryId ? 'my-position' : ''}
-                                        ${entry.status === 'Up Next' ? 'up-next-public' : ''}
-                                        ${entry.status === 'In Progress' ? 'in-progress-public' : ''}
-                                        ${entry.is_vip ? 'vip-entry' : ''}
-                                    `}
-                                >
-                                    {/* --- THIS IS THE FIX --- */}
-                                    <span>{index + 1}. </span>
-                                    {entry.id.toString() === myQueueEntryId ? (
-                                        <strong>You ({entry.customer_name})</strong>
-                                    ) : (
-                                        <span>{entry.customer_name}</span>
-                                    )}
-                                    <span className="public-queue-status">{entry.status}</span>
-                                    {/* --- END OF FIX --- */}
-                                </li>
-                            ))
+                            !isQueueLoading && liveQueue.length === 0 && !queueMessage ? (
+                                <li className="empty-text">Queue is empty.</li>
+                            ) : (
+                                liveQueue.map((entry, index) => (
+                                    <li 
+                                        key={entry.id} 
+                                        className={`
+                                            ${entry.id.toString() === myQueueEntryId ? 'my-position' : ''}
+                                            ${entry.status === 'Up Next' ? 'up-next-public' : ''}
+                                            ${entry.status === 'In Progress' ? 'in-progress-public' : ''}
+                                            ${entry.is_vip ? 'vip-entry' : ''}
+                                        `}
+                                    >
+                                        <span>{index + 1}. </span>
+                                        {entry.id.toString() === myQueueEntryId ? (
+                                            <strong>You ({entry.customer_name})</strong>
+                                        ) : (
+                                            <span>{entry.customer_name}</span>
+                                        )}
+                                        <span className="public-queue-status">{entry.status}</span>
+                                    </li>
+                                ))
+                            )
                         )}
                     </ul>
 
@@ -1777,7 +2025,8 @@ function CustomerView({ session }) {
                             <label>Update Haircut Photo:</label>
                             <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} />
                             <button type="button" onClick={() => handleUploadPhoto(myQueueEntryId)} disabled={!selectedFile || isUploading} className="upload-button">
-                                {isUploading ? 'Uploading...' : 'Replace Photo'}
+                                {/* --- SPINNER FOR UPLOAD --- */}
+                                {isUploading ? <Spinner /> : 'Replace Photo'}
                             </button>
                             {myQueueEntry?.reference_image_url && <p className="success-message small">Current Photo: <a href={myQueueEntry.reference_image_url} target="_blank" rel="noopener noreferrer">View</a></p>}
                             {referenceImageUrl && referenceImageUrl !== myQueueEntry?.reference_image_url && <p className="success-message small">New photo uploaded. Refresh queue to confirm.</p>}
@@ -1787,10 +2036,9 @@ function CustomerView({ session }) {
                     {!isChatOpen && myQueueEntryId && (
                         <button onClick={() => {
                             if (currentChatTargetBarberUserId) {
-
                                 setIsChatOpen(true);
                                 setHasUnreadFromBarber(false);
-                                localStorage.removeItem('hasUnreadFromBarber'); // <-- ADD THIS
+                                localStorage.removeItem('hasUnreadFromBarber');
                             } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
                         }}
                             className="chat-toggle-button"
@@ -1810,7 +2058,10 @@ function CustomerView({ session }) {
                             isVisible={isChatOpen}
                         />
                     )}
-                    <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>{isLoading ? 'Leaving...' : 'Leave Queue / Join Another'}</button>
+                    <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='leave-queue-button'>
+                        {/* --- SPINNER FOR LEAVE --- */}
+                        {isLoading ? <Spinner /> : 'Leave Queue / Join Another'}
+                    </button>
                 </div>
             )}
 
@@ -1827,13 +2078,13 @@ function CustomerView({ session }) {
                         <button
                             onClick={confirmVIP}
                             disabled={!selectedServiceId}
-                            className="join-queue-button"
+                            className="modal-confirm-button" // Use new modal style
                         >
                             Confirm (+₱149)
                         </button>
                         <button
                             onClick={cancelVIP}
-                            className="cancel-button"
+                            className="modal-cancel-button" // Use new modal style
                         >
                             Cancel VIP
                         </button>
@@ -1842,7 +2093,6 @@ function CustomerView({ session }) {
                 </div>
             </div>
         </div>
-
     );
 }
 
@@ -1861,6 +2111,7 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
             <header className="App-header">
                 <h1>Welcome, {barberProfile.full_name}!</h1>
                 <div className="header-actions">
+                    <ThemeToggleButton />
                     <AvailabilityToggle
                         barberProfile={barberProfile}
                         session={session}
@@ -1898,7 +2149,10 @@ function CustomerAppLayout({ session }) {
         <div className="customer-app-layout">
             <header className="App-header">
                 <h1>Welcome, {session.user?.user_metadata?.full_name || 'Customer'}!</h1>
-                <button onClick={() => handleLogout(session.user.id)} className="logout-button">Logout</button>
+                <div className="header-actions">
+                    <ThemeToggleButton />
+                    <button onClick={() => handleLogout(session.user.id)} className="logout-button">Logout</button>
+                </div>
             </header>
             <div className="container">
                 <CustomerView session={session} />
@@ -1915,7 +2169,7 @@ function App() {
     const [userRole, setUserRole] = useState(null);
     const [barberProfile, setBarberProfile] = useState(null);
     const [loadingRole, setLoadingRole] = useState(true);
-    const [isUpdatingPassword, setIsUpdatingPassword] = useState(false); // <<< --- 1. ADD NEW STATE
+    const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
     // --- OneSignal Setup ---
     useEffect(() => {
@@ -1947,19 +2201,16 @@ function App() {
         setLoadingRole(true);
         try {
             const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
-            // If this succeeds, they are a barber
             console.log("Role check successful: This is a BARBER.");
             setUserRole('barber');
             setBarberProfile(response.data);
         } catch (error) {
             if (error.response && error.response.status === 404) {
-                // 404 is a clean "Not Found," meaning they are a customer
                 console.log("Role check: Not a barber (404), setting role to CUSTOMER.");
                 setUserRole('customer');
             } else {
-                // Any other error (500, etc.)
                 console.error("Error checking/fetching barber profile:", error);
-                setUserRole('customer'); // Default to customer on other errors
+                setUserRole('customer');
             }
             setBarberProfile(null);
         } finally {
@@ -1975,55 +2226,68 @@ function App() {
             return;
         }
 
-        // This ONE listener handles everything: page load, login, and logout.
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
             console.log("Auth State Change Detected:", _event, currentSession);
 
-            // <<< --- 2. ADD THIS LOGIC --- >>>
             if (_event === 'PASSWORD_RECOVERY') {
                 console.log("Password recovery event detected!");
-                setIsUpdatingPassword(true); // Show the update password form
+                setIsUpdatingPassword(true);
             }
-            // <<< --- END NEW LOGIC --- >>>
 
             setSession(currentSession);
 
             if (currentSession?.user) {
-                // We have a user. Check their role.
                 console.log("Valid user session found, checking role...");
                 checkUserRole(currentSession.user);
             } else {
-                // We have no user. They are logged out.
                 console.log("No user session. Setting role to customer.");
                 setUserRole('customer');
                 setBarberProfile(null);
                 setLoadingRole(false);
-                // <<< --- 3. ADD THIS LINE --- >>>
-                setIsUpdatingPassword(false); // Hide update form if user logs out
+                setIsUpdatingPassword(false);
             }
 
         });
 
         return () => subscription?.unsubscribe();
     }, [checkUserRole]);
-
+    
     // --- Render Logic ---
-    if (loadingRole) { return <div className="loading-fullscreen">Loading Application...</div>; }
+    // The main render logic is wrapped in the ThemeProvider
+    const renderAppContent = () => {
+        if (loadingRole) {
+            return (
+                <div className="loading-fullscreen">
+                    <Spinner /> Loading Application...
+                </div>
+            );
+        }
 
-    // <<< --- 4. ADD THIS RENDER BLOCK --- >>>
-    if (isUpdatingPassword) {
-        return (
-            <UpdatePasswordForm
-                onPasswordUpdated={() => setIsUpdatingPassword(false)}
-            />
-        );
+        if (isUpdatingPassword) {
+            return (
+                <UpdatePasswordForm
+                    onPasswordUpdated={() => setIsUpdatingPassword(false)}
+                />
+            );
+        }
+
+        if (!session) { return <AuthForm />; }
+        else if (userRole === null) {
+            return (
+                <div className="loading-fullscreen">
+                    <Spinner /> Verifying User Role...
+                </div>
+            );
+        }
+        else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
+        else { return <CustomerAppLayout session={session} />; }
     }
-    // <<< --- END NEW RENDER BLOCK --- >>>
 
-    if (!session) { return <AuthForm />; }
-    else if (userRole === null) { return <div className="loading-fullscreen">Verifying User Role...</div>; }
-    else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
-    else { return <CustomerAppLayout session={session} />; }
+    return (
+        <ThemeProvider>
+            {renderAppContent()}
+        </ThemeProvider>
+    );
 }
 
 export default App;
