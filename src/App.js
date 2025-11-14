@@ -625,6 +625,26 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         };
     }, [barberId, fetchQueueDetails]);
 
+    // --- ADD THIS ENTIRE NEW HOOK ---
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                // Re-sync unread messages from storage when tab becomes visible
+                console.log("Tab is visible, re-syncing unread messages...");
+                const saved = localStorage.getItem('barberUnreadMessages');
+                const unread = saved ? JSON.parse(saved) : {};
+                setUnreadMessages(unread);
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibility);
+
+        // Clean up the listener when the component unmounts
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibility);
+        };
+    }, []); // Empty dependency array, runs once on mount
+
     // --- Handlers ---
     const handleNextCustomer = async () => {
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
@@ -1293,11 +1313,21 @@ function CustomerView({ session }) {
 
     useEffect(() => { // Blinking Tab Listeners
         const handleFocus = () => stopBlinking();
-        const handleVisibility = () => { if (document.visibilityState === 'visible') stopBlinking(); };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                stopBlinking();
+
+                // --- ADD THIS ---
+                // Re-sync unread status from storage when tab becomes visible
+                const hasUnread = localStorage.getItem('hasUnreadFromBarber') === 'true';
+                setHasUnreadFromBarber(hasUnread);
+                // --- END ADDED LOGIC ---
+            }
+        };
         window.addEventListener("focus", handleFocus);
         document.addEventListener("visibilitychange", handleVisibility);
         return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
-    }, []);
+    }, []); // <-- We are adding to an existing hook, so the dependency array is still []
 
     useEffect(() => { // Realtime Subscription & Notifications
         if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
