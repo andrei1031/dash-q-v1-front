@@ -789,40 +789,68 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     }, [barberId]);
 
     // --- WebSocket Connection Effect for Barber ---
+    // --- WebSocket Connection Effect for Barber (NEW) ---
     useEffect(() => {
         if (!session?.user?.id) return;
+
+        // Step 1: Connect the socket if it's not already connected.
         if (!socketRef.current) {
             console.log("[Barber] Connecting WebSocket...");
             socketRef.current = io(SOCKET_URL);
             const socket = socketRef.current;
             const barberUserId = session.user.id;
+            
             socket.emit('register', barberUserId);
             socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
-
-            const messageListener = (incomingMessage) => {
-                playSound(messageNotificationSound);
-                const customerId = incomingMessage.senderId;
-                setChatMessages(prev => {
-                    const msgs = prev[customerId] || [];
-                    return { ...prev, [customerId]: [...msgs, incomingMessage] };
-                });
-               setOpenChatCustomerId(currentOpenChatId => {
-                if (customerId !== currentOpenChatId) {
-                    setUnreadMessages(prevUnread => {
-                        const newState = { ...prevUnread, [customerId]: true };
-                        localStorage.setItem('barberUnreadMessages', JSON.stringify(newState)); 
-                        return newState;
-                    });
-                }
-                return currentOpenChatId;
-            });
-            };
-            socket.on('chat message', messageListener);
             socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
-            socket.on('disconnect', (reason) => { console.log("[Barber] WebSocket disconnected:", reason); socketRef.current = null; });
+            socket.on('disconnect', (reason) => { 
+                console.log("[Barber] WebSocket disconnected:", reason); 
+                socketRef.current = null; 
+            });
         }
-        return () => { if (socketRef.current) { console.log("[Barber] Cleaning up WebSocket connection."); socketRef.current.disconnect(); socketRef.current = null; } };
-    }, [session]);
+
+        // Step 2: Define and attach the message listener.
+        // This part will re-run if openChatCustomerId changes.
+        const socket = socketRef.current;
+
+        const messageListener = (incomingMessage) => {
+            playSound(messageNotificationSound);
+            const customerId = incomingMessage.senderId;
+            
+            setChatMessages(prev => {
+                const msgs = prev[customerId] || [];
+                return { ...prev, [customerId]: [...msgs, incomingMessage] };
+            });
+
+            // This logic is now simpler and reads openChatCustomerId directly.
+            // It works because this listener is re-created when openChatCustomerId changes.
+            if (customerId !== openChatCustomerId) {
+                setUnreadMessages(prevUnread => {
+                    const newState = { ...prevUnread, [customerId]: true };
+                    localStorage.setItem('barberUnreadMessages', JSON.stringify(newState)); 
+                    return newState;
+                });
+            }
+        };
+
+        // Step 3: Clean up the *old* listener and attach the *new* one.
+        socket.off('chat message'); // Remove all previous 'chat message' listeners
+        socket.on('chat message', messageListener); // Add the new one
+
+    }, [session, openChatCustomerId, setChatMessages, setUnreadMessages]); // <-- NEW DEPENDENCIES
+
+
+    // This new useEffect handles the *main* socket cleanup
+    useEffect(() => {
+         // This runs only when the component unmounts
+        return () => {
+            if (socketRef.current) {
+                console.log("[Barber] Cleaning up WebSocket connection."); 
+                socketRef.current.disconnect(); 
+                socketRef.current = null;
+            }
+        };
+    }, []); // <-- Empty dependency array
 
     // UseEffect for initial load and realtime subscription
     useEffect(() => {
