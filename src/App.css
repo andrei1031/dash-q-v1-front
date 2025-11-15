@@ -113,21 +113,17 @@ body.light-mode {
   box-sizing: border-box;
 }
 
-/* ADD/REPLACE with this combined selector */
-html, body {
+body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-dark); /* Applies theme variable to both */
+  background-color: var(--bg-dark);
   color: var(--text-primary);
-  /* Keep the transition on both */
   transition: background-color 0.2s linear, color 0.2s linear;
-  min-height: 100%; /* Important for iOS viewport height */
 }
-
 
 /* Base link style */
 a {
