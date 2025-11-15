@@ -848,17 +848,28 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     useEffect(() => {
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
-                console.log("Tab is visible, re-syncing unread messages...");
+                console.log("Barber tab is visible, re-syncing unread messages...");
                 const saved = localStorage.getItem('barberUnreadMessages');
                 const unread = saved ? JSON.parse(saved) : {};
                 setUnreadMessages(unread);
             }
         };
+
+        const handleFocus = () => {
+            console.log("Barber tab is focused, re-syncing unread messages...");
+            const saved = localStorage.getItem('barberUnreadMessages');
+            const unread = saved ? JSON.parse(saved) : {};
+            setUnreadMessages(unread);
+        };
+
         document.addEventListener("visibilitychange", handleVisibility);
+        window.addEventListener("focus", handleFocus);
+
         return () => {
             document.removeEventListener("visibilitychange", handleVisibility);
+            window.removeEventListener("focus", handleFocus);
         };
-    }, []);
+    }, [setUnreadMessages]); // <-- Make sure to add setUnreadMessages here
 
     // --- Handlers ---
     const closeModal = () => {
@@ -1639,31 +1650,39 @@ function CustomerView({ session }) {
         return () => clearInterval(intervalId);
     }, []);
 
+    // Find this useEffect (around line 1073)
     useEffect(() => { // Blinking Tab Listeners
-        const handleFocus = () => stopBlinking();
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
-                // --- ADD THESE LINES ---
-                console.log("App is visible. Re-syncing queue status.");
+                console.log("Customer tab is visible. Re-syncing queue and unread status.");
                 if (joinedBarberId) {
                     fetchPublicQueue(joinedBarberId);
                 }
-                // --- END OF ADDED LINES ---
-
                 stopBlinking();
                 const hasUnread = localStorage.getItem('hasUnreadFromBarber') === 'true';
                 setHasUnreadFromBarber(hasUnread);
             }
         };
+        
+        const handleFocus = () => {
+            console.log("Customer tab is focused. Re-syncing queue and unread status.");
+            if (joinedBarberId) {
+                fetchPublicQueue(joinedBarberId);
+            }
+            stopBlinking();
+            const hasUnread = localStorage.getItem('hasUnreadFromBarber') === 'true';
+            setHasUnreadFromBarber(hasUnread);
+        };
+
         window.addEventListener("focus", handleFocus);
         document.addEventListener("visibilitychange", handleVisibility);
+        
         return () => { 
             window.removeEventListener("focus", handleFocus); 
             document.removeEventListener("visibilitychange", handleVisibility); 
             stopBlinking(); 
         };
-    // --- ALSO ADD DEPENDENCIES HERE ---
-    }, [fetchPublicQueue, joinedBarberId]);
+    }, [fetchPublicQueue, joinedBarberId, setHasUnreadFromBarber]);
 
     useEffect(() => { // Realtime Subscription & Notifications
         if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
