@@ -1320,10 +1320,18 @@ function CustomerView({ session }) {
                 const myEntry = queueData.find(e => e.id.toString() === currentQueueId);
 
                 if (myEntry && (myEntry.status === 'In Progress' || myEntry.status === 'Up Next')) {
-                    const modalFlag = localStorage.getItem('stickyModal');
+                    
+                    // My status is active. Check if the modal is *already open*.
+                    // We use the functional update to get the current state value.
+                    setIsYourTurnModalOpen(isModalCurrentlyOpen => {
 
-                    if (modalFlag !== 'yourTurn') {
-                        console.log(`[Catcher] Missed event! My status is ${myEntry.status}. Triggering modal.`);
+                        if (isModalCurrentlyOpen) {
+                            return true; // Modal is already open. Do nothing.
+                        }
+
+                        // Modal is NOT open, but it *should* be.
+                        // This will fire when the app re-focuses (from Part 1) or a Supabase event hits.
+                        console.log(`[Catcher] State sync. Status is ${myEntry.status}. Triggering modal.`);
 
                         if (myEntry.status === 'In Progress') {
                             setModalAlert({ title: "It's your turn!", text: "The barber is calling you now." });
@@ -1333,9 +1341,19 @@ function CustomerView({ session }) {
 
                         playSound(queueNotificationSound);
                         startBlinking();
-                        setIsYourTurnModalOpen(true);
-                        localStorage.setItem('stickyModal', 'yourTurn');
+                        localStorage.setItem('stickyModal', 'yourTurn'); // Keep using the flag
                         if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+                        
+                        return true; // Set state to OPEN the modal
+                    });
+                
+                } else if (myEntry && myEntry.status === 'Waiting') {
+                    // My status is just 'Waiting'. Ensure the modal is closed and the flag is cleared.
+                    // This handles edge cases where a user is demoted (e.g., by a new VIP)
+                    setIsYourTurnModalOpen(false);
+                    stopBlinking();
+                    if (localStorage.getItem('stickyModal') === 'yourTurn') {
+                         localStorage.removeItem('stickyModal');
                     }
                 }
             }
@@ -1399,6 +1417,7 @@ function CustomerView({ session }) {
                 });
             }
         }
+        
     }, [session, setIsQueueLoading, setLiveQueue, setQueueMessage, setIsServiceCompleteModalOpen, setIsCancelledModalOpen]);
 
     const handleFileChange = (e) => {
@@ -1624,6 +1643,13 @@ function CustomerView({ session }) {
         const handleFocus = () => stopBlinking();
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
+                // --- ADD THESE LINES ---
+                console.log("App is visible. Re-syncing queue status.");
+                if (joinedBarberId) {
+                    fetchPublicQueue(joinedBarberId);
+                }
+                // --- END OF ADDED LINES ---
+
                 stopBlinking();
                 const hasUnread = localStorage.getItem('hasUnreadFromBarber') === 'true';
                 setHasUnreadFromBarber(hasUnread);
@@ -1631,8 +1657,13 @@ function CustomerView({ session }) {
         };
         window.addEventListener("focus", handleFocus);
         document.addEventListener("visibilitychange", handleVisibility);
-        return () => { window.removeEventListener("focus", handleFocus); document.removeEventListener("visibilitychange", handleVisibility); stopBlinking(); };
-    }, []);
+        return () => { 
+            window.removeEventListener("focus", handleFocus); 
+            document.removeEventListener("visibilitychange", handleVisibility); 
+            stopBlinking(); 
+        };
+    // --- ALSO ADD DEPENDENCIES HERE ---
+    }, [fetchPublicQueue, joinedBarberId]);
 
     useEffect(() => { // Realtime Subscription & Notifications
         if (joinedBarberId) { fetchPublicQueue(joinedBarberId); } else { setLiveQueue([]); setIsQueueLoading(false); }
