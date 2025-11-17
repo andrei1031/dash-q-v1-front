@@ -1879,48 +1879,49 @@ function CustomerView({ session }) {
             const newQueue = liveQueue;
             const relevantEntries = newQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
             setPeopleWaiting(relevantEntries.length);
+
             const myIndexNew = newQueue.findIndex(e => e.id.toString() === myQueueEntryId);
             const peopleAheadNew = myIndexNew !== -1 ? newQueue.slice(0, myIndexNew) : newQueue;
+
             const newTotalWait = peopleAheadNew.reduce((sum, entry) => {
                 if (['Waiting', 'Up Next', 'In Progress'].includes(entry.status)) { return sum + (entry.services?.duration_minutes || 30); }
                 return sum;
             }, 0);
-            setEstimatedWait(newTotalWait);
-            setDisplayWait(currentDisplayWait => {
-                const leaver = oldQueue.find(oldEntry => !newQueue.some(newEntry => newEntry.id === oldEntry.id));
-                const myIndexOld = oldQueue.findIndex(e => e.id.toString() === myQueueEntryId);
-                const leaverIndexOld = leaver ? oldQueue.findIndex(e => e.id === leaver.id) : -1;
-                if (leaver && myIndexOld !== -1 && leaverIndexOld !== -1 && leaverIndexOld < myIndexOld) {
-                    const leaverDuration = leaver.services?.duration_minutes || 30;
-                    console.log(`Leaver detected in front: ${leaver.id}, duration: ${leaverDuration}`);
-                   const newCountdown = currentDisplayWait - leaverDuration;
-                    const finalTime = newCountdown > 0 ? newCountdown : 0;
-                    localStorage.setItem('displayWait', finalTime.toString()); // <-- ADD THIS
-                    return finalTime;
-                }
-                if (currentDisplayWait === 0 || newTotalWait < currentDisplayWait) {
+
+            // This is the new, simpler logic:
+            setDisplayWait(currentCountdown => {
+                // 'currentCountdown' is the value we loaded from storage (e.g., 14)
+
+                // If the timer is at 0 or the full calculation is somehow *less*
+                // than the countdown, reset the timer to the full amount.
+                if (currentCountdown === 0 || newTotalWait < currentCountdown) {
                     localStorage.setItem('displayWait', newTotalWait.toString());
                     return newTotalWait;
                 }
-                localStorage.setItem('displayWait', currentDisplayWait.toString());
-                return currentDisplayWait;
+
+                // Otherwise, RESPECT the current countdown (14) and let it continue.
+                // We don't save to localStorage here, the timer itself will do that.
+                return currentCountdown;
             });
+
+            // We set estimatedWait separately, this is not the display timer
+            setEstimatedWait(newTotalWait); 
         };
         calculateWaitTime();
-    }, [liveQueue, myQueueEntryId, estimatedWait]);
+    }, [liveQueue, myQueueEntryId]); // <-- Dependency array is now simpler
 
     useEffect(() => { // 1-Minute Countdown Timer
         if (!myQueueEntryId) return;
         const timerId = setInterval(() => { 
             setDisplayWait(prevTime => {
                 const newTime = (prevTime > 0 ? prevTime - 1 : 0);
-                // Save the new countdown time to storage
+                // This line is CRITICAL
                 localStorage.setItem('displayWait', newTime.toString()); 
                 return newTime;
             }); 
         }, 60000);
         return () => clearInterval(timerId);
-    }, [myQueueEntryId]);
+    }, [myQueueEntryId])
 
     useEffect(() => { // Modal Button Countdown
         let timerId = null;
