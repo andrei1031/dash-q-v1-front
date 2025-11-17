@@ -1653,7 +1653,7 @@ function CustomerView({ session }) {
                 const { latitude, longitude } = position.coords;
                 const distance = getDistanceInMeters(latitude, longitude, BARBERSHOP_LAT, BARBERSHOP_LON);
                 console.log(`Current distance: ${Math.round(distance)}m. Cooldown: ${isOnCooldown}`);
-                if (distance > DISTANCE_THRESHOLD_METERS) {
+                if (distance > DISTANCE_THRESHOLD_METERS && estimatedWait < 15) {
                     if (!isTooFarModalOpen && !isOnCooldown) {
                         console.log('Customer is too far! Triggering modal.');
                         localStorage.setItem('stickyModal', 'tooFar');
@@ -1668,7 +1668,7 @@ function CustomerView({ session }) {
             locationWatchId.current = navigator.geolocation.watchPosition(onPositionUpdate, onPositionError, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
         }
         return () => { if (locationWatchId.current) { navigator.geolocation.clearWatch(locationWatchId.current); console.log('Stopping geolocation watch.'); } };
-    }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown]);
+    }, [myQueueEntryId, isTooFarModalOpen, isOnCooldown, estimatedWait]);
 
     useEffect(() => { // First Time Instructions
         const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
