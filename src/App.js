@@ -1875,8 +1875,7 @@ function CustomerView({ session }) {
 
     useEffect(() => { // Smart EWT Calculation
         const calculateWaitTime = () => {
-            const oldQueue = liveQueueRef.current || [];
-            const newQueue = liveQueue;
+            const newQueue = liveQueue; // Get the freshly fetched queue
             const relevantEntries = newQueue.filter(e => e.status === 'Waiting' || e.status === 'Up Next');
             setPeopleWaiting(relevantEntries.length);
 
@@ -1888,40 +1887,57 @@ function CustomerView({ session }) {
                 return sum;
             }, 0);
 
-            // This is the new, simpler logic:
+            // This is the new, correct logic
             setDisplayWait(currentCountdown => {
-                // 'currentCountdown' is the value we loaded from storage (e.g., 14)
 
-                // If the timer is at 0 or the full calculation is somehow *less*
-                // than the countdown, reset the timer to the full amount.
-                if (currentCountdown === 0 || newTotalWait < currentCountdown) {
+                if (currentCountdown === 0) {
+                    // Case 1: Timer isn't running (e.g., new user).
+                    // Start the timer with the full calculated time.
                     localStorage.setItem('displayWait', newTotalWait.toString());
                     return newTotalWait;
                 }
 
-                // Otherwise, RESPECT the current countdown (14) and let it continue.
-                // We don't save to localStorage here, the timer itself will do that.
+                if (newTotalWait < currentCountdown) {
+                    // Case 2: Someone left the queue.
+                    // The new total time (10) is less than the countdown (14).
+                    // Update the timer to the new, shorter time.
+                    localStorage.setItem('displayWait', newTotalWait.toString());
+                    return newTotalWait;
+                }
+
+                // Case 3: Refresh (or no change).
+                // The new total time (20) is >= the countdown (14).
+                // DO NOTHING. Let the countdown timer continue from 14.
                 return currentCountdown;
             });
 
-            // We set estimatedWait separately, this is not the display timer
+            // Set this separately for the geofence logic
             setEstimatedWait(newTotalWait); 
         };
-        calculateWaitTime();
-    }, [liveQueue, myQueueEntryId]); // <-- Dependency array is now simpler
+
+        // Only run if the queue is loaded
+        if (liveQueue.length > 0 || !myQueueEntryId) {
+            calculateWaitTime();
+        }
+
+    }, [liveQueue, myQueueEntryId]);
 
     useEffect(() => { // 1-Minute Countdown Timer
-        if (!myQueueEntryId) return;
+        if (!myQueueEntryId) return; // Don't run if not in queue
+
         const timerId = setInterval(() => { 
             setDisplayWait(prevTime => {
                 const newTime = (prevTime > 0 ? prevTime - 1 : 0);
-                // This line is CRITICAL
+
+                // CRITICAL: Save the new time to storage
                 localStorage.setItem('displayWait', newTime.toString()); 
+
                 return newTime;
             }); 
-        }, 60000);
-        return () => clearInterval(timerId);
-    }, [myQueueEntryId])
+        }, 60000); // 60,000 milliseconds = 1 minute
+
+        return () => clearInterval(timerId); // Cleanup on component unmount
+    }, [myQueueEntryId]);
 
     useEffect(() => { // Modal Button Countdown
         let timerId = null;
