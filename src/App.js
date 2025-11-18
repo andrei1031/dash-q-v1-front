@@ -178,14 +178,15 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 // ##############################################
 let blinkInterval = null;
 let originalTitle = document.title;
-const alertTitle = "!! IT'S YOUR TURN !!";
+const NEXT_UP_TITLE = "!! YOU'RE UP NEXT !!"; 
+const TURN_TITLE = "!! IT'S YOUR TURN !!";
 
-function startBlinking() {
+function startBlinking(newTitle) { // <-- NOW ACCEPTS A TITLE
     if (blinkInterval) return;
     originalTitle = document.title;
     let isOriginalTitle = true;
     blinkInterval = setInterval(() => {
-        document.title = isOriginalTitle ? alertTitle : originalTitle;
+        document.title = isOriginalTitle ? newTitle : originalTitle; // <-- Uses newTitle
         isOriginalTitle = !isOriginalTitle;
     }, 1000);
 }
@@ -1450,7 +1451,11 @@ function CustomerView({ session }) {
                         console.log(`[Catcher] Missed event! My status is ${myEntry.status}. Triggering notification.`);
 
                         playSound(queueNotificationSound);
-                        startBlinking();
+                        if (myEntry.status === 'In Progress') {
+                            startBlinking(TURN_TITLE);
+                        } else if (myEntry.status === 'Up Next') {
+                            startBlinking(NEXT_UP_TITLE);
+                        }
                         localStorage.setItem('stickyModal', 'yourTurn');
                         if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                     }
@@ -1810,13 +1815,13 @@ function CustomerView({ session }) {
                         console.log(`My status updated to: ${newStatus}`);
                         if (newStatus === 'Up Next') {
                             playSound(queueNotificationSound);
-                            startBlinking();
+                            startBlinking(NEXT_UP_TITLE);
                             localStorage.setItem('stickyModal', 'yourTurn');
                             if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                         }
                         else if (newStatus === 'In Progress') { 
                             playSound(queueNotificationSound);
-                            startBlinking();
+                            startBlinking(TURN_TITLE);
                             localStorage.setItem('stickyModal', 'yourTurn');
                             if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                         }
