@@ -1366,6 +1366,7 @@ function CustomerView({ session }) {
     const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
     const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(() => localStorage.getItem('hasUnreadFromBarber') === 'true');
     const [chatMessagesFromBarber, setChatMessagesFromBarber] = useState([]);
+    const [optimisticMessage, setOptimisticMessage] = useState(null);
     const [displayWait, setDisplayWait] = useState(0);
     const [finishTime, setFinishTime] = useState(() => {
         const saved = localStorage.getItem('targetFinishTime');
@@ -2348,27 +2349,45 @@ function CustomerView({ session }) {
                         <div className={`status-banner up-next-banner ${myQueueEntry.is_confirmed ? 'confirmed-pulse' : ''}`}>
                             <h2><IconNext /> You're Up Next!</h2>
                             
-                            {!myQueueEntry.is_confirmed ? (
-                                <>
-                                    <p>Please confirm you are ready to take the chair.</p>
-                                    <button 
-                                        className="btn btn-primary btn-full-width"
-                                        style={{ marginTop: '10px' }}
-                                        onClick={async () => {
-                                            try {
-                                                await axios.put(`${API_URL}/queue/confirm`, { queueId: myQueueEntryId });
-                                                // Trigger a refresh to update UI immediately
-                                                fetchPublicQueue(joinedBarberId);
-                                            } catch (err) {
-                                                console.error("Confirm failed", err);
-                                            }
-                                        }}
-                                    >
-                                        I'm Coming! 🏃‍♂️
-                                    </button>
-                                </>
+                            {optimisticMessage ? ( // If we have a message, display it
+                                <p className="success-message small" style={{textAlign: 'center'}}>{optimisticMessage}</p>
                             ) : (
-                                <p><strong>✅ Confirmed!</strong> The barber knows you are coming. Please enter the shop now.</p>
+                                !myQueueEntry.is_confirmed ? ( // Otherwise, show the button
+                                    <>
+                                        <p>Please confirm you are ready to take the chair.</p>
+                                        <button 
+                                            className="btn btn-primary btn-full-width"
+                                            style={{ marginTop: '10px' }}
+                                            
+                                            // --- THIS IS WHERE THE LOGIC GOES ---
+                                            onClick={async () => {
+                                                setOptimisticMessage("Sending confirmation..."); // 1. Optimistic state change
+                                                
+                                                try {
+                                                    await axios.put(`${API_URL}/queue/confirm`, { queueId: myQueueEntryId });
+                                                    
+                                                    setOptimisticMessage("✅ Confirmation Sent! Head to the shop."); // 2. Final success feedback
+                                                    
+                                                    // 3. Wait a moment, then trigger the final re-fetch
+                                                    setTimeout(() => {
+                                                        fetchPublicQueue(joinedBarberId);
+                                                        setOptimisticMessage(null);
+                                                    }, 1500); // Wait 1.5 seconds
+
+                                                } catch (err) {
+                                                    setOptimisticMessage(null); // Clear the optimistic message
+                                                    console.error("Confirm failed", err);
+                                                    setMessage("Error: Could not confirm attendance. Please try again.");
+                                                }
+                                            }}
+                                            // --- END OF LOGIC ---
+                                        >
+                                            I'm Coming! 🏃‍♂️
+                                        </button>
+                                    </>
+                                ) : ( // Or show the final confirmed state
+                                    <p><strong>✅ Confirmed!</strong> The barber knows you are coming. Please enter the shop now.</p>
+                                )
                             )}
                         </div>
                     )}
