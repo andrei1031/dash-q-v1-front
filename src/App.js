@@ -1321,7 +1321,9 @@ function CustomerView({ session }) {
     const [isQueueLoading, setIsQueueLoading] = useState(true);
     const [services, setServices] = useState([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
-    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(() => {
+        return localStorage.getItem('myQueueEntryId') ? true : false;
+    });
     const [isServiceCompleteModalOpen, setIsServiceCompleteModalOpen] = useState(false);
     const [isCancelledModalOpen, setIsCancelledModalOpen] = useState(false);
     const [hasUnreadFromBarber, setHasUnreadFromBarber] = useState(() => localStorage.getItem('hasUnreadFromBarber') === 'true');
@@ -1589,6 +1591,7 @@ function CustomerView({ session }) {
                 localStorage.setItem('joinedBarberId', newEntry.barber_id.toString());
                 setMyQueueEntryId(newEntry.id.toString());
                 setJoinedBarberId(newEntry.barber_id.toString());
+                setIsChatOpen(true);
                 setSelectedBarberId(''); setSelectedServiceId('');
                 setReferenceImageUrl(newEntry.reference_image_url || '');
                 fetchPublicQueue(newEntry.barber_id.toString());
