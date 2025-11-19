@@ -1733,3 +1733,73 @@ body.light-mode .dist-red { background-color: #ffebeb; color: #c41e15; }
     animation: soft-pulse 2s infinite;
     border-color: #34C759;
 }
+/* History View Styles */
+.customer-view-tabs {
+    padding-bottom: 0 !important; /* Remove bottom padding on header */
+    border-bottom: none !important; /* Remove separator line */
+    justify-content: flex-start !important;
+}
+.customer-view-tabs button {
+    margin-right: 15px;
+    padding: 10px 15px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+}
+.customer-view-tabs button.active {
+    color: var(--primary-orange);
+    font-weight: 700;
+    border-bottom: 3px solid var(--primary-orange);
+}
+
+.history-list {
+    list-style: none;
+    padding: 0;
+}
+
+.history-item {
+    display: flex;
+    flex-direction: column;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background-color: var(--bg-dark);
+}
+
+.history-details, .history-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.history-details {
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.history-item .service {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.history-item.done .status-badge {
+    background: rgba(52, 199, 89, 0.2);
+    color: var(--success-color);
+}
+
+.history-item.cancelled .status-badge {
+    background: rgba(255, 59, 48, 0.2);
+    color: var(--error-color);
+}

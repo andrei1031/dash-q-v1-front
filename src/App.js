@@ -29,7 +29,7 @@ const playSound = (audioElement) => {
 // --- Global Constants ---
 const SOCKET_URL = 'https://dash-q-backend.onrender.com';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-const API_URL = 'https://dash-q-backend.onrender.com/api';
+const API_URL = 'https://dash-q-backend.onrender.com/api' || 'http://localhost:3001/api';
 
 // --- Supabase Client Setup ---
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -1389,6 +1389,8 @@ function CustomerView({ session }) {
     const [feedbackText, setFeedbackText] = useState('');
     const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
     const [barberFeedback, setBarberFeedback] = useState([]);
+    const [viewMode, setViewMode] = useState('join'); // 'join' or 'history'
+    const [loyaltyHistory, setLoyaltyHistory] = useState([]);
 
     const nowServing = liveQueue.find(entry => entry.status === 'In Progress');
     const upNext = liveQueue.find(entry => entry.status === 'Up Next');
@@ -1398,6 +1400,17 @@ function CustomerView({ session }) {
 
     const myQueueEntry = liveQueue.find(e => e.id.toString() === myQueueEntryId);
     const isQueueUpdateAllowed = myQueueEntry && (myQueueEntry.status === 'Waiting' || myQueueEntry.status === 'Up Next');
+
+
+    const fetchLoyaltyHistory = useCallback(async (userId) => {
+        if (!userId) return;
+        try {
+            const response = await axios.get(`${API_URL}/customer/history/${userId}`);
+            setLoyaltyHistory(response.data || []);
+        } catch (error) {
+            console.error('Failed to fetch loyalty history:', error);
+        }
+    }, []);
 
     const fetchChatHistory = useCallback(async (queueId) => {
         if (!queueId) return;
@@ -1685,6 +1698,11 @@ function CustomerView({ session }) {
     };
 
     // --- Effects ---
+    useEffect(() => {
+        if (viewMode === 'history' && session?.user?.id) {
+            fetchLoyaltyHistory(session.user.id);
+        }
+    }, [viewMode, session?.user?.id, fetchLoyaltyHistory]);
     useEffect(() => { // Geolocation Watcher + Uploader
         const BARBERSHOP_LAT = 16.414830431367967;
         const BARBERSHOP_LON = 120.59712292628716;
@@ -2042,482 +2060,312 @@ function CustomerView({ session }) {
         return () => clearInterval(timerId);
     }, [myQueueEntryId]);
     // --- Render Customer View ---
-    return (
-        <div className="card">
-            {/* --- MODALS --- */}
-            <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}>
-                <div className="modal-content instructions-modal">
-                    <div className="modal-body">
-                        <h2>How to Join</h2>
-                        <ol className="instructions-list">
-                            <li>Select your <strong>Service</strong>.</li>
-                            <li>Choose an <strong>Available Barber</strong>.</li>
-                            <li>Click <strong>"Join Queue"</strong> and wait!</li>
-                        </ol>
-                    </div>
-                    <div className="modal-footer">
-                        <button onClick={handleCloseInstructions} className="btn btn-primary">Got It!</button>
-                    </div>
+// App.js (Inside function CustomerView({ session }) { ... })
+
+return (
+    <div className="card">
+        {/* --- MODALS (Placed outside main flow) --- */}
+        
+        {/* Instructions Modal */}
+        <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content instructions-modal">
+                <div className="modal-body">
+                    <h2>How to Join</h2>
+                    <ol className="instructions-list">
+                        <li>Select your <strong>Service</strong>.</li>
+                        <li>Choose an <strong>Available Barber</strong>.</li>
+                        <li>Click <strong>"Join Queue"</strong> and wait!</li>
+                    </ol>
+                </div>
+                <div className="modal-footer">
+                    <button onClick={handleCloseInstructions} className="btn btn-primary">Got It!</button>
                 </div>
             </div>
-            
-            <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
-                <div className="modal-content">
-                    {!feedbackSubmitted ? (
-                        <form className="feedback-form" onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!feedbackText.trim()) {
-                                setFeedbackSubmitted(true);
-                                return;
-                            }
-                            try {
-                                await axios.post(`${API_URL}/feedback`, {
-                                    barber_id: joinedBarberId,
-                                    customer_name: customerName,
-                                    comments: feedbackText
-                                });
-                            } catch (err) {
-                                console.error("Failed to submit feedback", err);
-                            }
-                            setFeedbackSubmitted(true);
-                        }}>
-                            <div className="modal-body">
-                                <h2>Service Complete!</h2>
-                                <p>Thank you! How was your experience with {currentBarberName}?</p>
-                                <textarea
-                                    value={feedbackText}
-                                    onChange={(e) => setFeedbackText(e.target.value)}
-                                    placeholder="Leave optional feedback..."
-                                />
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => setFeedbackSubmitted(true)}
-                                >
-                                    Skip
-                                </button>
-                                <button type="submit" className="btn btn-primary">Submit Feedback</button>
-                            </div>
-                        </form>
-                    ) : (
-                        <>
-                            <div className="modal-body">
-                                <h2>Feedback Sent!</h2>
-                                <p>Thank you for visiting!</p>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    id="close-complete-modal-btn"
-                                    onClick={() => handleReturnToJoin(false)}
-                                    disabled={isModalButtonDisabled}
-                                    className="btn btn-primary"
-                                >
-                                    {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
-                                </button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-
-            <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}>
-                <div className="modal-content">
-                    <div className="modal-body">
-                        <h2>Appointment Cancelled</h2>
-                        <p>Your queue entry was cancelled.</p>
-                    </div>
-                    <div className="modal-footer">
-                        <button
-                            id="close-cancel-modal-btn"
-                            onClick={() => handleReturnToJoin(false)}
-                            disabled={isModalButtonDisabled}
-                            className="btn btn-primary"
-                        >
-                            {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}>
-                <div className="modal-content">
-                    <div className="modal-body">
-                        <h2>A Friendly Reminder!</h2>
-                        <p>Hey, please don’t wander off too far...</p>
-                    </div>
-                    <div className="modal-footer">
-                        <button id="close-too-far-modal-btn" onClick={() => {
-                            setIsTooFarModalOpen(false);
-                            localStorage.removeItem('stickyModal');
-                            console.log("Cooldown started.");
-                            setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000);
-                        }}
-                        className="btn btn-primary"
-                        >
-                            {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : "Okay, I'll stay close"}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="modal-overlay" style={{ display: isVIPModalOpen ? 'flex' : 'none' }}>
-                <div className="modal-content">
-                    <div className="modal-body">
-                        <h2>Priority Service Confirmation</h2>
-                        {selectedServiceId && services.find(s => s.id.toString() === selectedServiceId) ? (
-                            <p>You have selected <strong>{services.find(s => s.id.toString() === selectedServiceId).name}</strong>. This VIP priority service incurs an <strong>additional ₱100</strong> fee, guaranteeing you the next "Up Next" slot.</p>
-                        ) : (
-                            <p>VIP priority service incurs an <strong>additional ₱100</strong> fee, guaranteeing you the next "Up Next" slot. Please ensure you have selected a service.</p>
-                        )}
-                        {!selectedServiceId && <p className="error-message small">Please select a service first.</p>}
-                    </div>
-                    <div className="modal-footer">
-                         <button
-                            onClick={cancelVIP}
-                            className="btn btn-secondary"
-                        >
-                            Cancel VIP
-                        </button>
-                        <button
-                            onClick={confirmVIP}
-                            disabled={!selectedServiceId}
-                            className="btn btn-primary"
-                        >
-                            Confirm (+100)
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* --- VIEW TOGGLE --- */}
-            {!myQueueEntryId ? (
-                <>
-                    <div className="card-header">
-                        <h2>Join the Queue</h2>
-                    </div>
-                    <form onSubmit={handleJoinQueue} className="card-body">
-                        <div className="form-group"><label>Your Name:</label><input type="text" value={customerName} required readOnly className="prefilled-input" /></div>
-                        <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
-                        <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
-                        
-                        {selectedServiceId && (
-                            <div className="form-group vip-toggle-group">
-                                <label>Service Priority:</label>
-                                <div className="priority-toggle-control">
-                                    <button
-                                        type="button"
-                                        className={`priority-option ${!isVIPToggled ? 'active' : ''}`}
-                                        onClick={() => setIsVIPToggled(false)}
-                                    >
-                                        No Priority
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`priority-option ${isVIPToggled ? 'active vip' : ''}`}
-                                        onClick={() => handleVIPToggle({ target: { checked: true } })}
-                                        disabled={isVIPToggled}
-                                    >
-                                        VIP Priority (+₱100)
-                                    </button>
-                                </div>
-                                {isVIPToggled && (
-                                    <p className="success-message small">
-                                        VIP Priority is active. You will be placed Up Next.
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                        
-                        <div className="form-group photo-upload-group">
-                            <label>Desired Haircut Photo (Optional):</label>
-                            <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} id="file-upload" className="file-upload-input" />
-                            <label htmlFor="file-upload" className="btn btn-secondary btn-icon-label file-upload-label">
-                                <IconUpload />
-                                {selectedFile ? selectedFile.name : 'Choose a file...'}
-                            </label>
-                            
-                            <button type="button" onClick={() => handleUploadPhoto(null)} disabled={!selectedFile || isUploading || referenceImageUrl} className="btn btn-secondary btn-icon-label">
-                                {isUploading ? <Spinner /> : <IconUpload />}
-                                {isUploading ? 'Uploading...' : (referenceImageUrl ? 'Photo Attached' : 'Upload Photo')}
-                            </button>
-                            {referenceImageUrl && <p className="success-message small">Photo ready. <a href={referenceImageUrl} target="_blank" rel="noopener noreferrer">View Photo</a></p>}
-                        </div>
-
-                        <div className="form-group">
-                            <label>Select Available Barber:</label>
-                            {barbers.length > 0 ? (
-                                <div className="barber-selection-list">
-                                    {barbers.map((barber) => (
-                                        <button
-                                            type="button"
-                                            key={barber.id}
-                                            className={`barber-card ${selectedBarberId === barber.id.toString() ? 'selected' : ''}`}
-                                            onClick={() => setSelectedBarberId(barber.id.toString())}
-                                        >
-                                            {/* Image removed, just the name and stars */}
-                                            
-                                            <span className="barber-name">{barber.full_name}</span>
-                                            
-                                            <div className="barber-rating">
-                                                <span className="star-icon">⭐</span>
-                                                <span className="score-text">
-                                                    {parseFloat(barber.average_score).toFixed(1)}
-                                                </span>
-                                                <span className="review-count">
-                                                    ({barber.review_count})
-                                                </span>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="empty-text">No barbers are available right now.</p>
-                            )}
-                            {/* Keeps the form logic working */}
-                            <input type="hidden" value={selectedBarberId} required />
-                        </div>
-
-                        {selectedBarberId && (
-                            <div className="feedback-list-container customer-feedback">
-                                <h3 className="feedback-subtitle">Recent Feedback</h3>
-                                <ul className="feedback-list">
-                                    {barberFeedback.length > 0 ? (
-                                        barberFeedback.map((item, index) => (
-                                            <li key={index} className="feedback-item">
-                                                <div className="feedback-header">
-                                                    <span className="feedback-score">
-                                                        {item.score > 0 ? <IconHappy /> : item.score < 0 ? <IconSad /> : <IconNeutral />}
-                                                    </span>
-                                                    <span className="feedback-customer">
-                                                        {item.customer_name || 'Customer'}
-                                                    </span>
-                                                </div>
-                                                <p className="feedback-comment">"{item.comments}"</p>
-                                            </li>
-                                        ))
-                                    ) : (
-                                        <p className="empty-text">No feedback yet for this barber.</p>
-                                    )}
-                                </ul>
-                            </div>
-                        )}
-
-                        {isQueueLoading && selectedBarberId ? (
-                            <div className="ewt-container skeleton-ewt">
-                                <SkeletonLoader height="40px" />
-                            </div>
-                        ) : (
-                            selectedBarberId && (
-                                <div className="ewt-container">
-                                    <div className="ewt-item">
-                                        <span>Currently waiting</span>
-                                        <strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong>
-                                    </div>
-                                    <div className="ewt-item">
-                                        <span>Expected Time</span>
-                                        <strong>
-                                            {finishTime > 0 
-                                                ? new Date(finishTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) 
-                                                : 'Calculating...'}
-                                        </strong>
-                                    </div>
-                                </div>
-                            )
-                        )}
-
-                        {isIOsDevice() && (
-                            <p className="message warning small">
-                                <b>iPhone Users:</b> Push alerts and sounds are not supported.
-                                Please keep this tab open and watch your email for notifications!
-                            </p>
-                        )}
-
-                        <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0 || isUploading} className="btn btn-primary btn-full-width">
-                            {isLoading ? <Spinner /> : 'Join Queue'}
-                        </button>
-
-                        {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
-                    </form>
-                </>
-            ) : (
-                <div className="live-queue-view card-body">
-                    {/* --- ADD THIS NEW BANNER --- */}
-                    {myQueueEntry?.status === 'In Progress' && (
-                        <div className="status-banner in-progress-banner">
-                            <h2><IconCheck /> It's Your Turn!</h2>
-                            <p>The barber is calling you now.</p>
-                        </div>
-                    )}
-                    {myQueueEntry?.status === 'Up Next' && (
-                        <div className={`status-banner up-next-banner ${myQueueEntry.is_confirmed ? 'confirmed-pulse' : ''}`}>
-                            <h2><IconNext /> You're Up Next!</h2>
-                            
-                            {optimisticMessage ? ( // If we have a message, display it
-                                <p className="success-message small" style={{textAlign: 'center'}}>{optimisticMessage}</p>
-                            ) : (
-                                !myQueueEntry.is_confirmed ? ( // Otherwise, show the button
-                                    <>
-                                        <p>Please confirm you are ready to take the chair.</p>
-                                        <button 
-                                            className="btn btn-primary btn-full-width"
-                                            style={{ marginTop: '10px' }}
-                                            
-                                            // --- THIS IS WHERE THE LOGIC GOES ---
-                                            onClick={async () => {
-                                                setOptimisticMessage("Sending confirmation..."); // 1. Optimistic state change
-                                                
-                                                try {
-                                                    await axios.put(`${API_URL}/queue/confirm`, { queueId: myQueueEntryId });
-                                                    
-                                                    setOptimisticMessage("✅ Confirmation Sent! Head to the shop."); // 2. Final success feedback
-                                                    
-                                                    // 3. Wait a moment, then trigger the final re-fetch
-                                                    setTimeout(() => {
-                                                        fetchPublicQueue(joinedBarberId);
-                                                        setOptimisticMessage(null);
-                                                    }, 1500); // Wait 1.5 seconds
-
-                                                } catch (err) {
-                                                    setOptimisticMessage(null); // Clear the optimistic message
-                                                    console.error("Confirm failed", err);
-                                                    setMessage("Error: Could not confirm attendance. Please try again.");
-                                                }
-                                            }}
-                                            // --- END OF LOGIC ---
-                                        >
-                                            I'm Coming! 🏃‍♂️
-                                        </button>
-                                    </>
-                                ) : ( // Or show the final confirmed state
-                                    <p><strong>✅ Confirmed!</strong> The barber knows you are coming. Please enter the shop now.</p>
-                                )
-                            )}
-                        </div>
-                    )}
-                    {/* --- END NEW BANNER --- */}
-                    <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
-                    <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
-                    <div className="current-serving-display"><div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div><div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div></div>
-                    {queueMessage && <p className="message error">{queueMessage}</p>}
-                    
-                    <div className="ewt-container">
-                        <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
-                        <div className="ewt-item">
-                            <span>Expected Time</span>
-                            <strong>
-                                {finishTime > 0 
-                                    ? new Date(finishTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) 
-                                    : 'Calculating...'}
-                            </strong>
-                        </div>
-                    </div>
-                    <ul className="queue-list live">
-                        {isQueueLoading ? (
-                            <>
-                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
-                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
-                                <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
-                            </>
-                        ) : (
-                            !isQueueLoading && liveQueue.length === 0 && !queueMessage ? (
-                                <li className="empty-text">Queue is empty.</li>
-                            ) : (
-                                liveQueue.map((entry, index) => (
-                                    <li 
-                                        key={entry.id} 
-                                        className={`
-                                            ${entry.id.toString() === myQueueEntryId ? 'my-position' : ''}
-                                            ${entry.status === 'Up Next' ? 'up-next-public' : ''}
-                                            ${entry.status === 'In Progress' ? 'in-progress-public' : ''}
-                                            ${entry.is_vip ? 'vip-entry' : ''}
-                                        `}
-                                    >
-                                        <div className="queue-item-info">
-                                            <span>{index + 1}. </span>
-                                            {entry.id.toString() === myQueueEntryId ? (
-                                                <strong>You ({entry.customer_name})</strong>
-                                            ) : (
-                                                <span>{entry.customer_name}</span>
-                                            )}
-                                        </div>
-                                        <span className="public-queue-status">{entry.status}</span>
-                                    </li>
-                                ))
-                            )
-                        )}
-                    </ul>
-
-                    {/* --- Action Group --- */}
-                    <div className="live-queue-actions">
-                        {isQueueUpdateAllowed && (
-                            <div className="form-group photo-upload-group live-update-group">
-                                <label>Update Haircut Photo:</label>
-                                <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} id="file-upload-update" className="file-upload-input" />
-                                <label htmlFor="file-upload-update" className="btn btn-secondary btn-icon-label file-upload-label">
-                                    <IconUpload />
-                                    {selectedFile ? selectedFile.name : 'Choose a file...'}
-                                </label>
-
-                                <button type="button" onClick={() => handleUploadPhoto(myQueueEntryId)} disabled={!selectedFile || isUploading} className="btn btn-secondary btn-icon-label">
-                                    {isUploading ? <Spinner /> : <IconUpload />}
-                                    {isUploading ? 'Uploading...' : 'Replace Photo'}
-                                </button>
-                                {myQueueEntry?.reference_image_url && <p className="success-message small">Current Photo: <a href={myQueueEntry.reference_image_url} target="_blank" rel="noopener noreferrer">View</a></p>}
-                                {referenceImageUrl && referenceImageUrl !== myQueueEntry?.reference_image_url && <p className="success-message small">New photo uploaded.</p>}
-                            </div>
-                        )}
-
-                        {/* --- Chat Section --- */}
-                        <div className="chat-section">
-                            {!isChatOpen && myQueueEntryId && (
-                                <button onClick={() => {
-                                    if (currentChatTargetBarberUserId) {
-                                        setIsChatOpen(true);
-                                        setHasUnreadFromBarber(false);
-                                        localStorage.removeItem('hasUnreadFromBarber');
-                                    } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
-                                }}
-                                    className="btn btn-secondary btn-full-width btn-icon-label chat-toggle-button"
-                                >
-                                    <IconChat />
-                                    Chat with Barber
-                                    {hasUnreadFromBarber && (<span className="notification-badge"></span>)}
-                                </button>
-                            )}
-
-                            {isChatOpen && currentChatTargetBarberUserId && (
-                                <div className="chat-window-container">
-                                    <div className="chat-window-header">
-                                        <h4>Chat with {currentBarberName}</h4>
-                                        <button onClick={() => setIsChatOpen(false)} className="btn btn-icon btn-close-chat" title="Close Chat">
-                                            <IconX />
-                                        </button>
-                                    </div>
-                                    <ChatWindow
-                                        currentUser_id={session.user.id}
-                                        otherUser_id={currentChatTargetBarberUserId}
-                                        messages={chatMessagesFromBarber}
-                                        onSendMessage={sendCustomerMessage}
-                                        isVisible={isChatOpen}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* --- Danger Zone / Leave Queue --- */}
-                    <div className="danger-zone">
-                        <button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='btn btn-danger btn-full-width'>
-                            {isLoading ? <Spinner /> : 'Leave Queue / Join Another'}
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
-    );
+        
+        {/* Service Complete Modal */}
+        <div className="modal-overlay" style={{ display: isServiceCompleteModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content">
+                {!feedbackSubmitted ? (
+                    <form className="feedback-form" onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!feedbackText.trim()) { setFeedbackSubmitted(true); return; }
+                        try { await axios.post(`${API_URL}/feedback`, { barber_id: joinedBarberId, customer_name: customerName, comments: feedbackText }); } catch (err) { console.error("Failed to submit feedback", err); }
+                        setFeedbackSubmitted(true);
+                    }}>
+                        <div className="modal-body">
+                            <h2>Service Complete!</h2><p>Thank you! How was your experience with {currentBarberName}?</p>
+                            <textarea value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} placeholder="Leave optional feedback..."/>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setFeedbackSubmitted(true)}>Skip</button>
+                            <button type="submit" className="btn btn-primary">Submit Feedback</button>
+                        </div>
+                    </form>
+                ) : (
+                    <>
+                        <div className="modal-body"><h2>Feedback Sent!</h2><p>Thank you for visiting!</p></div>
+                        <div className="modal-footer">
+                            <button id="close-complete-modal-btn" onClick={() => handleReturnToJoin(false)} disabled={isModalButtonDisabled} className="btn btn-primary">
+                                {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+
+        {/* Cancelled Modal */}
+        <div className="modal-overlay" style={{ display: isCancelledModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content">
+                <div className="modal-body"><h2>Appointment Cancelled</h2><p>Your queue entry was cancelled.</p></div>
+                <div className="modal-footer">
+                    <button id="close-cancel-modal-btn" onClick={() => handleReturnToJoin(false)} disabled={isModalButtonDisabled} className="btn btn-primary">
+                        {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : 'Okay'}
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        {/* Too Far Modal */}
+        <div className="modal-overlay" style={{ display: isTooFarModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content">
+                <div className="modal-body"><h2>A Friendly Reminder!</h2><p>Hey, please don’t wander off too far...</p></div>
+                <div className="modal-footer">
+                    <button id="close-too-far-modal-btn" onClick={() => {
+                        setIsTooFarModalOpen(false);
+                        localStorage.removeItem('stickyModal');
+                        console.log("Cooldown started.");
+                        setTimeout(() => { console.log("Cooldown finished."); setIsOnCooldown(false); }, 300000);
+                    }}
+                    className="btn btn-primary"
+                    >
+                        {isModalButtonDisabled ? `Please wait (${modalCountdown})...` : "Okay, I'll stay close"}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {/* VIP Modal */}
+        <div className="modal-overlay" style={{ display: isVIPModalOpen ? 'flex' : 'none' }}>
+            <div className="modal-content">
+                <div className="modal-body">
+                    <h2>Priority Service Confirmation</h2>
+                    {selectedServiceId && services.find(s => s.id.toString() === selectedServiceId) ? (
+                        <p>You have selected <strong>{services.find(s => s.id.toString() === selectedServiceId).name}</strong>. This VIP priority service incurs an <strong>additional ₱100</strong> fee, guaranteeing you the next "Up Next" slot.</p>
+                    ) : (
+                        <p>VIP priority service incurs an <strong>additional ₱100</strong> fee, guaranteeing you the next "Up Next" slot. Please ensure you have selected a service.</p>
+                    )}
+                    {!selectedServiceId && <p className="error-message small">Please select a service first.</p>}
+                </div>
+                <div className="modal-footer">
+                     <button onClick={cancelVIP} className="btn btn-secondary">Cancel VIP</button>
+                    <button onClick={confirmVIP} disabled={!selectedServiceId} className="btn btn-primary">Confirm (+₱100)</button>
+                </div>
+            </div>
+        </div>
+        
+        {/* --- MAIN CONTENT START --- */}
+        
+        {/* 1. View Toggle Tabs */}
+        <div className="card-header customer-view-tabs">
+            <button className={viewMode === 'join' ? 'active' : ''} onClick={() => setViewMode('join')}>
+                Join Queue
+            </button>
+            <button className={viewMode === 'history' ? 'active' : ''} onClick={() => setViewMode('history')}>
+                My History
+            </button>
+        </div>
+
+        {/* A. JOIN FORM (SHOWS WHEN IN JOIN MODE AND NOT IN QUEUE) */}
+        {viewMode === 'join' && !myQueueEntryId && (
+            <form onSubmit={handleJoinQueue} className="card-body">
+                <div className="form-group"><label>Your Name:</label><input type="text" value={customerName} required readOnly className="prefilled-input" /></div>
+                <div className="form-group"><label>Your Email:</label><input type="email" value={customerEmail} readOnly className="prefilled-input" /></div>
+                <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
+                
+                {selectedServiceId && (
+                    <div className="form-group vip-toggle-group">
+                        <label>Service Priority:</label>
+                        <div className="priority-toggle-control">
+                            <button type="button" className={`priority-option ${!isVIPToggled ? 'active' : ''}`} onClick={() => setIsVIPToggled(false)}>No Priority</button>
+                            <button type="button" className={`priority-option ${isVIPToggled ? 'active vip' : ''}`} onClick={() => handleVIPToggle({ target: { checked: true } })} disabled={isVIPToggled}>VIP Priority (+₱100)</button>
+                        </div>
+                        {isVIPToggled && (<p className="success-message small">VIP Priority is active. You will be placed Up Next.</p>)}
+                    </div>
+                )}
+                
+                <div className="form-group photo-upload-group">
+                    <label>Desired Haircut Photo (Optional):</label>
+                    <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} id="file-upload" className="file-upload-input" />
+                    <label htmlFor="file-upload" className="btn btn-secondary btn-icon-label file-upload-label"><IconUpload />{selectedFile ? selectedFile.name : 'Choose a file...'}</label>
+                    <button type="button" onClick={() => handleUploadPhoto(null)} disabled={!selectedFile || isUploading || referenceImageUrl} className="btn btn-secondary btn-icon-label">
+                        {isUploading ? <Spinner /> : <IconUpload />}
+                        {isUploading ? 'Uploading...' : (referenceImageUrl ? 'Photo Attached' : 'Upload Photo')}
+                    </button>
+                    {referenceImageUrl && <p className="success-message small">Photo ready. <a href={referenceImageUrl} target="_blank" rel="noopener noreferrer">View Photo</a></p>}
+                </div>
+
+                <div className="form-group">
+                    <label>Select Available Barber:</label>
+                    {barbers.length > 0 ? (
+                        <div className="barber-selection-list">
+                            {barbers.map((barber) => (
+                                <button type="button" key={barber.id} className={`barber-card ${selectedBarberId === barber.id.toString() ? 'selected' : ''}`} onClick={() => setSelectedBarberId(barber.id.toString())}>
+                                    <span className="barber-name">{barber.full_name}</span>
+                                    <div className="barber-rating">
+                                        <span className="star-icon">⭐</span>
+                                        <span className="score-text">{parseFloat(barber.average_score).toFixed(1)}</span>
+                                        <span className="review-count">({barber.review_count})</span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (<p className="empty-text">No barbers are available right now.</p>)}
+                    <input type="hidden" value={selectedBarberId} required />
+                </div>
+
+                {selectedBarberId && (<div className="feedback-list-container customer-feedback">
+                    <h3 className="feedback-subtitle">Recent Feedback</h3>
+                    <ul className="feedback-list">
+                        {barberFeedback.length > 0 ? (barberFeedback.map((item, index) => (<li key={index} className="feedback-item">
+                            <div className="feedback-header"><span className="feedback-score">{item.score > 0 ? <IconHappy /> : item.score < 0 ? <IconSad /> : <IconNeutral />}</span><span className="feedback-customer">{item.customer_name || 'Customer'}</span></div>
+                            <p className="feedback-comment">"{item.comments}"</p></li>))) : (<p className="empty-text">No feedback yet for this barber.</p>)}</ul></div>)}
+
+                {isQueueLoading && selectedBarberId ? (<div className="ewt-container skeleton-ewt"><SkeletonLoader height="40px" /></div>) : (selectedBarberId && (<div className="ewt-container">
+                    <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
+                    <div className="ewt-item"><span>Expected Time</span><strong>{finishTime > 0 ? new Date(finishTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Calculating...'}</strong></div>
+                </div>))}
+
+                {isIOsDevice() && (<p className="message warning small"><b>iPhone Users:</b> Push alerts and sounds are not supported. Please keep this tab open and watch your email for notifications!</p>)}
+                <button type="submit" disabled={isLoading || !selectedBarberId || barbers.length === 0 || isUploading} className="btn btn-primary btn-full-width">
+                    {isLoading ? <Spinner /> : 'Join Queue'}
+                </button>
+                {message && <p className={`message ${message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : ''}`}>{message}</p>}
+            </form>
+        )}
+
+        {/* B. LIVE QUEUE VIEW (SHOWS WHEN IN JOIN MODE AND IN QUEUE) */}
+        {viewMode === 'join' && myQueueEntryId && (
+            <div className="live-queue-view card-body">
+                {/* --- YOUR LIVE QUEUE CONTENT GOES HERE --- */}
+                {myQueueEntry?.status === 'In Progress' && (<div className="status-banner in-progress-banner"><h2><IconCheck /> It's Your Turn!</h2><p>The barber is calling you now.</p></div>)}
+                {myQueueEntry?.status === 'Up Next' && (<div className={`status-banner up-next-banner ${myQueueEntry.is_confirmed ? 'confirmed-pulse' : ''}`}>
+                    <h2><IconNext /> You're Up Next!</h2>
+                    {optimisticMessage ? (<p className="success-message small" style={{textAlign: 'center'}}>{optimisticMessage}</p>) : (!myQueueEntry.is_confirmed ? (
+                        <>
+                            <p>Please confirm you are ready to take the chair.</p>
+                            <button className="btn btn-primary btn-full-width" style={{ marginTop: '10px' }} onClick={async () => {
+                                setOptimisticMessage("Sending confirmation...");
+                                try {
+                                    await axios.put(`${API_URL}/queue/confirm`, { queueId: myQueueEntryId });
+                                    setOptimisticMessage("✅ Confirmation Sent! Head to the shop.");
+                                    setTimeout(() => {
+                                        fetchPublicQueue(joinedBarberId);
+                                        setOptimisticMessage(null);
+                                    }, 1500);
+                                } catch (err) {
+                                    setOptimisticMessage(null);
+                                    console.error("Confirm failed", err);
+                                    setMessage("Error: Could not confirm attendance. Please try again.");
+                                }
+                            }}>I'm Coming! 🏃‍♂️</button>
+                        </>
+                    ) : (<p><strong>✅ Confirmed!</strong> The barber knows you are coming. Please enter the shop now.</p>))}
+                </div>)}
+                <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
+                <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
+                <div className="current-serving-display">
+                    <div className="serving-item now-serving"><span>Now Serving</span><strong>{nowServing ? `Customer #${nowServing.id}` : '---'}</strong></div>
+                    <div className="serving-item up-next"><span>Up Next</span><strong>{upNext ? `Customer #${upNext.id}` : '---'}</strong></div>
+                </div>
+                {queueMessage && <p className="message error">{queueMessage}</p>}
+                <div className="ewt-container">
+                    <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
+                    <div className="ewt-item"><span>Expected Time</span><strong>{finishTime > 0 ? new Date(finishTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Calculating...'}</strong></div>
+                </div>
+                <ul className="queue-list live">
+                    {isQueueLoading ? (<>
+                        <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
+                        <li className="skeleton-li"><SkeletonLoader height="25px" /></li>
+                        <li className="skeleton-li"><SkeletonLoader height="25px" /></li></>) : (!isQueueLoading && liveQueue.length === 0 && !queueMessage ? (<li className="empty-text">Queue is empty.</li>) : (liveQueue.map((entry, index) => (<li key={entry.id} className={`${entry.id.toString() === myQueueEntryId ? 'my-position' : ''} ${entry.status === 'Up Next' ? 'up-next-public' : ''} ${entry.status === 'In Progress' ? 'in-progress-public' : ''} ${entry.is_vip ? 'vip-entry' : ''}`}>
+                        <div className="queue-item-info"><span>{index + 1}. </span>{entry.id.toString() === myQueueEntryId ? (<strong>You ({entry.customer_name})</strong>) : (<span>{entry.customer_name}</span>)}</div>
+                        <span className="public-queue-status">{entry.status}</span></li>))))}</ul>
+                    <div className="live-queue-actions">
+                    {isQueueUpdateAllowed && (<div className="form-group photo-upload-group live-update-group">
+                        <label>Update Haircut Photo:</label>
+                        <input type="file" accept="image/*" onChange={handleFileChange} disabled={isUploading} id="file-upload-update" className="file-upload-input" />
+                        <label htmlFor="file-upload-update" className="btn btn-secondary btn-icon-label file-upload-label"><IconUpload />{selectedFile ? selectedFile.name : 'Choose a file...'}</label>
+                        <button type="button" onClick={() => handleUploadPhoto(myQueueEntryId)} disabled={!selectedFile || isUploading} className="btn btn-secondary btn-icon-label">
+                            {isUploading ? <Spinner /> : <IconUpload />}
+                            {isUploading ? 'Uploading...' : 'Replace Photo'}
+                        </button>
+                        {myQueueEntry?.reference_image_url && <p className="success-message small">Current Photo: <a href={myQueueEntry.reference_image_url} target="_blank" rel="noopener noreferrer">View</a></p>}
+                        {referenceImageUrl && referenceImageUrl !== myQueueEntry?.reference_image_url && <p className="success-message small">New photo uploaded.</p>}
+                    </div>)}
+                    <div className="chat-section">
+                        {!isChatOpen && myQueueEntryId && (<button onClick={() => {
+                            if (currentChatTargetBarberUserId) {
+                                setIsChatOpen(true);
+                                setHasUnreadFromBarber(false);
+                                localStorage.removeItem('hasUnreadFromBarber');
+                            } else { console.error("Barber user ID missing."); setMessage("Cannot initiate chat."); }
+                        }} className="btn btn-secondary btn-full-width btn-icon-label chat-toggle-button">
+                            <IconChat />Chat with Barber{hasUnreadFromBarber && (<span className="notification-badge"></span>)}</button>)}
+                        {isChatOpen && currentChatTargetBarberUserId && (<div className="chat-window-container">
+                            <div className="chat-window-header"><h4>Chat with {currentBarberName}</h4><button onClick={() => setIsChatOpen(false)} className="btn btn-icon btn-close-chat" title="Close Chat"><IconX /></button></div>
+                            <ChatWindow currentUser_id={session.user.id} otherUser_id={currentChatTargetBarberUserId} messages={chatMessagesFromBarber} onSendMessage={sendCustomerMessage} isVisible={isChatOpen} /></div>)}
+                    </div>
+                </div>
+                <div className="danger-zone"><button onClick={() => handleReturnToJoin(true)} disabled={isLoading} className='btn btn-danger btn-full-width'>{isLoading ? <Spinner /> : 'Leave Queue / Join Another'}</button></div>
+            </div>
+        )}
+
+        {/* C. HISTORY VIEW */}
+        {viewMode === 'history' && (
+            <div className="card-body history-view">
+                <h2 style={{marginTop: 0, marginBottom: '20px'}}>My Past Services</h2>
+                {loyaltyHistory.length === 0 ? (
+                    <p className="empty-text">No past services found. Book your first cut!</p>
+                ) : (
+                    <ul className="history-list">
+                        {loyaltyHistory.map((entry, index) => {
+                            const statusClass = entry.status === 'Done' ? 'done' : 'cancelled';
+                            const servicePrice = entry.services?.price_php || 'N/A';
+                            const barberName = entry.barber_profiles?.full_name || 'Unrecorded Barber';
+
+                            return (
+                                <li key={index} className={`history-item ${statusClass}`}>
+                                    <div className="history-details">
+                                        <span className="date">
+                                            {new Date(entry.created_at).toLocaleDateString()}
+                                        </span>
+                                        <span className="service">
+                                            {entry.services?.name || 'Unknown Service'}
+                                        </span>
+                                        <span className="status-badge">
+                                            {entry.status}
+                                        </span>
+                                    </div>
+                                    <div className="history-meta">
+                                        <span className="barber-name">
+                                            {barberName}
+                                        </span>
+                                        <span className="amount">
+                                            ₱{servicePrice}
+                                        </span>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
+        )}
+    </div>
+);
 }
+
 
 // ##############################################
 // ##           BARBER APP LAYOUT            ##
