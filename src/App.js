@@ -328,10 +328,8 @@ function AuthForm() {
             // 2. LOGIC SPLIT: If email is NOT found, throw a clean, display-ready error.
             if (!checkResponse.data.found) {
                 console.log("Email not found, throwing specific display error.");
-                // Throw a specific error object we can use in the catch block
-                const displayError = new Error(`Error: The email address "${trimmedEmail}" is not registered.`);
-                displayError.isUserError = true; // Flag this error for client display
-                throw displayError; 
+                // Throw an error that we can catch below
+                throw new Error(`The email address "${trimmedEmail}" is not registered.`); 
             }
 
             // 3. If found, proceed with the actual password reset link generation via Supabase.
@@ -348,6 +346,7 @@ function AuthForm() {
             }
 
             // 4. Show SUCCESS message 
+            // NOTE: The word 'sent' here triggers the success class in the JSX below.
             setMessage('Success! Check your email. The password reset link has been sent.');
             
             setTimeout(() => {
@@ -359,18 +358,17 @@ function AuthForm() {
         } catch (error) {
             console.error('Forgot password exception:', error);
             
-            // NEW LOGIC: Check if it's the custom user error or a generic failure.
+            // NEW LOGIC: Extract and display a clean message.
             let clientMessage = '';
-
-            if (error.isUserError || error.message.includes('not registered')) {
-                 // It's the expected user-facing error message
-                 clientMessage = error.message; 
+            
+            if (error.message.includes('not registered')) {
+                 // Custom user error: Display the clean message only
+                 clientMessage = `Error: ${error.message}`;
             } else {
-                 // It's an unexpected server or Supabase error
+                 // Generic failure: Prefix with Authentication failed
                  clientMessage = `Authentication failed: ${error.message}`;
             }
 
-            // Ensure the message starts cleanly (without "Authentication failed: Error:")
             setMessage(clientMessage);
             
         } finally {
