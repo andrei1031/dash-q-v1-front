@@ -325,12 +325,13 @@ function AuthForm() {
             // 1. SECURELY CHECK IF EMAIL EXISTS
             const checkResponse = await axios.post(`${API_URL}/check-email`, { email: trimmedEmail });
             
-            // 2. LOGIC SPLIT: If email is NOT found, set the specific error message and return.
+            // 2. LOGIC SPLIT: If email is NOT found, throw a clean, display-ready error.
             if (!checkResponse.data.found) {
-                console.log("Email not found, showing specific error message.");
-                // Set the specific error message directly, then return.
-                setMessage(`Authentication failed: Error: The email address "${trimmedEmail}" is not registered.`);
-                return; // <-- CRITICAL: Exit the function here
+                console.log("Email not found, throwing specific display error.");
+                // Throw a specific error object we can use in the catch block
+                const displayError = new Error(`Error: The email address "${trimmedEmail}" is not registered.`);
+                displayError.isUserError = true; // Flag this error for client display
+                throw displayError; 
             }
 
             // 3. If found, proceed with the actual password reset link generation via Supabase.
@@ -346,7 +347,7 @@ function AuthForm() {
                 throw resetError; 
             }
 
-            // 4. Show SUCCESS message (as requested)
+            // 4. Show SUCCESS message 
             setMessage('Success! Check your email. The password reset link has been sent.');
             
             setTimeout(() => {
@@ -358,10 +359,19 @@ function AuthForm() {
         } catch (error) {
             console.error('Forgot password exception:', error);
             
-            // If the error was not the "Email not registered" message above,
-            // check if it's a known error type and display a generic failure.
-            const clientErrorMessage = error.message.includes('not registered') ? error.message : 'Login failed due to an unexpected server issue or invalid credentials.';
-            setMessage(`Authentication failed: ${clientErrorMessage}`); 
+            // NEW LOGIC: Check if it's the custom user error or a generic failure.
+            let clientMessage = '';
+
+            if (error.isUserError || error.message.includes('not registered')) {
+                 // It's the expected user-facing error message
+                 clientMessage = error.message; 
+            } else {
+                 // It's an unexpected server or Supabase error
+                 clientMessage = `Authentication failed: ${error.message}`;
+            }
+
+            // Ensure the message starts cleanly (without "Authentication failed: Error:")
+            setMessage(clientMessage);
             
         } finally {
             setLoading(false);
@@ -500,7 +510,7 @@ function AuthForm() {
                         </button>
                     </form>
                     <div className="card-footer">
-                         {message && <p className={`message ${message.includes('successful') || message.includes('created') || message.includes('can now log in') || message.includes('sent') ? 'success' : 'error'}`}>{message}</p>}
+                        {message && <p className={`message ${message.includes('successful') || message.includes('created') || message.includes('can now log in') || message.includes('sent') ? 'success' : 'error'}`}>{message}</p>}
                         
                         <button type="button" onClick={() => { setAuthView(authView === 'login' ? 'signup' : 'login'); setMessage(''); setSelectedRole('customer'); setPin(''); setBarberCode(''); }} className="btn btn-link">
                             {authView === 'login' ? 'Need account? Sign Up' : 'Have account? Login'}
