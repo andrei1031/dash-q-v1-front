@@ -795,6 +795,40 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     const [tipInput, setTipInput] = useState('');
     const [modalError, setModalError] = useState('');
 
+
+    const handleLoyaltyCheck = async (customer) => {
+        if (!customer.customer_email) {
+            setModalState({ 
+                type: 'alert', 
+                data: { title: 'Loyalty Check Failed', message: `Customer ${customer.customer_name} joined as a guest (no email recorded).` } 
+            });
+            return;
+        }
+
+        setModalState({ type: 'loyaltyLoading', data: { name: customer.customer_name } });
+
+        try {
+            const response = await axios.get(`${API_URL}/barber/customer-loyalty/${customer.customer_email}`);
+
+            setModalState({ 
+                type: 'loyaltyResult', 
+                data: { 
+                    name: customer.customer_name,
+                    email: customer.customer_email,
+                    count: response.data.count,
+                    history: response.data.history
+                } 
+            });
+
+        } catch (err) {
+            console.error('Failed loyalty check:', err);
+            setModalState({ 
+                type: 'alert', 
+                data: { title: 'Loyalty Check Error', message: err.response?.data?.error || 'Failed to retrieve history from server.' } 
+            });
+        }
+    };
+
     const fetchQueueDetails = useCallback(async () => {
         console.log(`[BarberDashboard] Fetching queue details for barber ${barberId}...`);
         setFetchError('');
@@ -1146,6 +1180,14 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                                         <strong>#{queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>
                                         <DistanceBadge meters={queueDetails.inProgress.current_distance_meters} />
                                         <PhotoDisplay entry={queueDetails.inProgress} label="In Chair" />
+                                        <button 
+                                            onClick={() => handleLoyaltyCheck(queueDetails.inProgress)} 
+                                            className="btn btn-link-style" 
+                                            title="Check Customer Loyalty History"
+                                            style={{padding: '5px 0'}}
+                                        >
+                                            ⭐ Check Loyalty
+                                        </button>
                                     </div>
                                     <button onClick={() => openChat(queueDetails.inProgress)} className="btn btn-icon" title={queueDetails.inProgress.profiles?.id ? "Chat" : "Guest"} disabled={!queueDetails.inProgress.profiles?.id}>
                                         <IconChat />
@@ -1313,6 +1355,72 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                             onClick={() => setViewImageModalUrl(null)} 
                             className="btn btn-secondary"
                         >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- Loyalty Loading Modal --- */}
+        {modalState.type === 'loyaltyLoading' && (
+            <div className="modal-overlay">
+                <div className="modal-content">
+                    <div className="modal-body">
+                        <h2>Loyalty Check</h2>
+                        <p>Fetching history for {modalState.data?.name || 'Customer'}...</p>
+                        <Spinner />
+                    </div>
+                    <div className="modal-footer single-action">
+                        <button onClick={closeModal} className="btn btn-secondary">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- Loyalty Result Modal --- */}
+        {modalState.type === 'loyaltyResult' && modalState.data && (
+            <div className="modal-overlay">
+                <div className="modal-content">
+                    <div className="modal-body" style={{textAlign: 'left'}}>
+                        <h2>⭐ Loyalty Status</h2>
+                        <p>
+                            **Customer:** {modalState.data.name}<br/>
+                            **Email:** {modalState.data.email}
+                        </p>
+
+                        <h3 style={{color: modalState.data.count >= 10 ? 'var(--success-color)' : 'var(--primary-orange)', marginTop: '15px'}}>
+                            Completed Cuts: **{modalState.data.count}**
+                        </h3>
+
+                        {modalState.data.count >= 10 && (
+                            <p className="success-message">
+                                **Loyalty Achieved!** This customer qualifies for a discount.
+                            </p>
+                        )}
+
+                        <h4 className="queue-subtitle">Past Services:</h4>
+                        <ul className="history-list" style={{maxHeight: '200px', overflowY: 'auto'}}>
+                            {modalState.data.history.length > 0 ? (
+                                modalState.data.history.map((entry, index) => (
+                                    <li key={index} className={`history-item ${entry.status === 'Done' ? 'done' : 'cancelled'}`} style={{padding: '10px', marginBottom: '8px'}}>
+                                        <span className="service">
+                                            {entry.services?.name || 'Unknown Service'}
+                                        </span>
+                                        <span className="date" style={{marginLeft: 'auto'}}>
+                                            {new Date(entry.created_at).toLocaleDateString()}
+                                        </span>
+                                    </li>
+                                ))
+                            ) : (
+                                <p className="empty-text">No service history found.</p>
+                            )}
+                        </ul>
+                    </div>
+                    <div className="modal-footer single-action">
+                        <button onClick={closeModal} className="btn btn-primary">
                             Close
                         </button>
                     </div>
