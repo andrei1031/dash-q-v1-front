@@ -2692,6 +2692,7 @@ function AdminAppLayout({ session }) {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
+    // Use useCallback to prevent infinite loops
     const fetchServices = useCallback(async () => {
         try {
             const res = await axios.get(`${API_URL}/services`);
@@ -2825,6 +2826,7 @@ function App() {
     }, []);
 
    // --- Helper to Check Role (DEBUG VERSION) ---
+    // --- Helper to Check Role (UPDATED FOR ADMIN) ---
     const checkUserRole = useCallback(async (user) => {
         if (!user || !user.id) {
             setUserRole('customer');
@@ -2836,36 +2838,31 @@ function App() {
         console.log(`Checking role for user: ${user.id}`);
         setLoadingRole(true);
         try {
-            // STEP 1: Check profiles table
-            const { data: profileData, error } = await supabase
+            // STEP 1: Check the 'profiles' table for the explicit role
+            const { data: profileData } = await supabase
                 .from('profiles')
                 .select('role')
                 .eq('id', user.id)
                 .single();
-
-            // --- DEBUG LOGS ---
-            console.log("Supabase Profile Check Result:", profileData);
-            if (error) console.error("Supabase Profile Error:", error);
-            // ------------------
             
+            // If the database says 'admin', we stop here and set the role!
             if (profileData && profileData.role === 'admin') {
                 console.log("Role check: ADMIN confirmed.");
                 setUserRole('admin');
                 setBarberProfile(null);
                 setLoadingRole(false);
-                return;
+                return; 
             }
 
-            // STEP 2: Check Barber
-            console.log("Not admin. Checking if Barber...");
+            // STEP 2: If not admin, check if they are a barber
             const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
             console.log("Role check: BARBER confirmed.");
             setUserRole('barber');
             setBarberProfile(response.data);
 
         } catch (error) {
-            console.log("Role check: Not Admin/Barber (or error occurred). Defaulting to CUSTOMER.");
-            console.error("Catch block error:", error);
+            // STEP 3: Default to Customer
+            console.log("Role check: Not Admin/Barber. Defaulting to CUSTOMER.");
             setUserRole('customer');
             setBarberProfile(null);
         } finally {
@@ -2909,25 +2906,16 @@ function App() {
     
     // --- Render Logic ---
     const renderAppContent = () => {
-        if (loadingRole) {
-            return <div className="loading-fullscreen"><Spinner /><span>Loading...</span></div>;
-        }
+        if (loadingRole) return <div className="loading-fullscreen"><Spinner /><span>Loading...</span></div>;
+        if (isUpdatingPassword) return <UpdatePasswordForm onPasswordUpdated={() => setIsUpdatingPassword(false)} />;
+        if (!session) return <AuthForm />;
         
-        if (isUpdatingPassword) {
-             return <UpdatePasswordForm onPasswordUpdated={() => setIsUpdatingPassword(false)} />;
-        }
-
-        if (!session) { return <AuthForm />; }
-        else if (userRole === null) {
-             return <div className="loading-fullscreen"><Spinner /><span>Verifying User Role...</span></div>;
-        }
-        
-        else if (userRole === 'admin') { 
+        if (userRole === 'admin') {
             return <AdminAppLayout session={session} />;
         }
 
-        else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
-        else { return <CustomerAppLayout session={session} />; }
+        if (userRole === 'barber' && barberProfile) return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />;
+        return <CustomerAppLayout session={session} />;
     }
 
     return (
