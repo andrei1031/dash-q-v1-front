@@ -2824,7 +2824,8 @@ function App() {
         return () => { /* Cleanup if needed */ };
     }, []);
 
-   const checkUserRole = useCallback(async (user) => {
+   // --- Helper to Check Role (DEBUG VERSION) ---
+    const checkUserRole = useCallback(async (user) => {
         if (!user || !user.id) {
             setUserRole('customer');
             setBarberProfile(null);
@@ -2835,30 +2836,36 @@ function App() {
         console.log(`Checking role for user: ${user.id}`);
         setLoadingRole(true);
         try {
-            // STEP 1: Check the 'profiles' table for the explicit role
-            const { data: profileData } = await supabase
+            // STEP 1: Check profiles table
+            const { data: profileData, error } = await supabase
                 .from('profiles')
                 .select('role')
                 .eq('id', user.id)
                 .single();
+
+            // --- DEBUG LOGS ---
+            console.log("Supabase Profile Check Result:", profileData);
+            if (error) console.error("Supabase Profile Error:", error);
+            // ------------------
             
             if (profileData && profileData.role === 'admin') {
                 console.log("Role check: ADMIN confirmed.");
                 setUserRole('admin');
                 setBarberProfile(null);
                 setLoadingRole(false);
-                return; // Stop here, do not check for barber
+                return;
             }
 
-            // STEP 2: If not admin, check if they are a barber
+            // STEP 2: Check Barber
+            console.log("Not admin. Checking if Barber...");
             const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
             console.log("Role check: BARBER confirmed.");
             setUserRole('barber');
             setBarberProfile(response.data);
 
         } catch (error) {
-            // STEP 3: Default to Customer if neither Admin nor Barber
-            console.log("Role check: Not Admin/Barber. Defaulting to CUSTOMER.");
+            console.log("Role check: Not Admin/Barber (or error occurred). Defaulting to CUSTOMER.");
+            console.error("Catch block error:", error);
             setUserRole('customer');
             setBarberProfile(null);
         } finally {
