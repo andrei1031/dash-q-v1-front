@@ -1,8 +1,7 @@
 /* ===================================================================
    MODERN FONT IMPORT (Inter)
    =================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
 /* ===================================================================
    GLOBAL STYLES (Color Variables)
@@ -11,54 +10,54 @@
 /* Define our color palette (Dark Mode by default) */
 :root {
   --bg-dark: #121212;
-  --surface-color: #1E1E1E;
-  --text-primary: #FFFFFF;
-  --text-secondary: #AAAAAA;
+  --surface-color: #1e1e1e;
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
   --border-color: #333333;
   --card-border-color: #282828;
   --prefilled-bg: #333333;
   --hover-bg-dark: #2a2a2a;
-  
-  --primary-orange: #FF9500;
-  --primary-orange-hover: #E08400;
-  --success-color: #34C759;
+
+  --primary-orange: #ff9500;
+  --primary-orange-hover: #e08400;
+  --success-color: #34c759;
   --success-color-hover: #30a34c;
-  --error-color: #FF3B30;
+  --error-color: #ff3b30;
   --error-color-hover: #d13025;
   --link-color: #007aff;
 
   --button-text-primary: #000000; /* For orange buttons */
-  --button-text-light: #FFFFFF; /* For red/green/gray buttons */
+  --button-text-light: #ffffff; /* For red/green/gray buttons */
 
   --my-message-bg: var(--primary-orange);
   --my-message-text: #000000;
   --other-message-bg: #333333;
-  --other-message-text: #FFFFFF;
+  --other-message-text: #ffffff;
 
   --toggle-password-bg: #555555;
   --toggle-password-hover-bg: #777777;
-  
+
   --priority-border: #333333;
   --priority-bg: #333333;
-  --priority-text: #FFFFFF;
+  --priority-text: #ffffff;
   --priority-hover-bg: #444444;
   --priority-active-bg: var(--primary-orange);
   --priority-active-text: #000000;
   --my-position-bg: #3a2d00; /* Dark highlight for 'my position' */
 
   --spinner-base: rgba(255, 255, 255, 0.3);
-  --spinner-highlight: #FFFFFF;
+  --spinner-highlight: #ffffff;
   --spinner-light-base: rgba(0, 0, 0, 0.2);
-  --spinner-light-highlight: #18181B;
-  
+  --spinner-light-highlight: #18181b;
+
   --skeleton-base: #2a2a2a;
   --skeleton-highlight: #333333;
 
   --status-dot-online: var(--success-color);
   --status-dot-offline: var(--text-secondary);
-  
+
   /* NEW: Secondary color for data metrics (dark mode) */
-  --data-secondary: #AAAAAA; 
+  --data-secondary: #aaaaaa;
 }
 
 /* ===================================================================
@@ -66,49 +65,48 @@
    =================================================================== */
 /* FIX: Changed body.light-mode to :root.light-mode for theme switching fix */
 :root.light-mode {
-  --bg-dark: #F4F4F5; /* Light gray background */
-  --surface-color: #FFFFFF; /* White cards */
-  --text-primary: #18181B; /* Near-black text */
-  --text-secondary: #52525B; /* Gray text */
-  --border-color: #E4E4E7; /* Light gray border */
-  --card-border-color: #E4E4E7;
-  --prefilled-bg: #E4E4E7;
-  --hover-bg-dark: #F4F4F5;
+  --bg-dark: #f4f4f5; /* Light gray background */
+  --surface-color: #ffffff; /* White cards */
+  --text-primary: #18181b; /* Near-black text */
+  --text-secondary: #52525b; /* Gray text */
+  --border-color: #e4e4e7; /* Light gray border */
+  --card-border-color: #e4e4e7;
+  --prefilled-bg: #e4e4e7;
+  --hover-bg-dark: #f4f4f5;
 
   /* Button text colors stay the same */
 
   --my-message-bg: var(--primary-orange);
   --my-message-text: #000000;
-  --other-message-bg: #E4E4E7;
-  --other-message-text: #18181B;
-  
-  --toggle-password-bg: #A1A1AA;
-  --toggle-password-hover-bg: #71717A;
-  
-  --priority-border: #D4D4D8;
-  --priority-bg: #FAFAFA;
-  --priority-text: #18181B;
-  --priority-hover-bg: #F4F4F5;
+  --other-message-bg: #e4e4e7;
+  --other-message-text: #18181b;
+
+  --toggle-password-bg: #a1a1aa;
+  --toggle-password-hover-bg: #71717a;
+
+  --priority-border: #d4d4d8;
+  --priority-bg: #fafafa;
+  --priority-text: #18181b;
+  --priority-hover-bg: #f4f4f5;
   --priority-active-bg: var(--primary-orange);
   --priority-active-text: #000000;
   --my-position-bg: #fffbeb; /* Light highlight for 'my position' */
 
   /* Spinners are swapped for light mode */
   --spinner-base: rgba(0, 0, 0, 0.2);
-  --spinner-highlight: #18181B;
+  --spinner-highlight: #18181b;
   --spinner-light-base: rgba(255, 255, 255, 0.3);
-  --spinner-light-highlight: #FFFFFF;
+  --spinner-light-highlight: #ffffff;
 
-  --skeleton-base: #E4E4E7;
-  --skeleton-highlight: #F4F4F5;
+  --skeleton-base: #e4e4e7;
+  --skeleton-highlight: #f4f4f5;
 
   --status-dot-online: var(--success-color);
   --status-dot-offline: var(--text-secondary);
-  
-  /* NEW: Secondary color for data metrics (light mode) */
-  --data-secondary: #18181B; 
-}
 
+  /* NEW: Secondary color for data metrics (light mode) */
+  --data-secondary: #18181b;
+}
 
 /* ===================================================================
    GLOBAL RESETS & BASE STYLES
@@ -119,8 +117,8 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -176,7 +174,7 @@ a:hover {
 
 .container {
   /* FIX: Remove max-width for better responsiveness on larger screens */
-  /* max-width: 1200px; */ 
+  /* max-width: 1200px; */
   margin: 20px auto;
   padding: 0 20px;
   display: grid;
@@ -196,7 +194,6 @@ a:hover {
   max-width: 600px;
 }
 
-
 /* ===================================================================
    FULLSCREEN LOADER (App.js)
    =================================================================== */
@@ -214,7 +211,6 @@ a:hover {
   color: var(--text-secondary);
 }
 
-
 /* ===================================================================
    CARD STYLES (Used by all components)
    =================================================================== */
@@ -224,16 +220,15 @@ a:hover {
   border-radius: 12px;
   border: 1px solid var(--card-border-color);
   /* NEW: Add a subtle shadow to lift cards */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
 }
 
 /* NEW: Light Mode Shadow for depth */
 :root.light-mode .card {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-
 
 .card-header {
   padding: 20px 25px 15px 25px;
@@ -271,14 +266,13 @@ a:hover {
   width: calc(100% - 30px);
 }
 
-
 /* ===================================================================
    FORM STYLES (AuthForm.js, CustomerView.js, etc.)
    =================================================================== */
 
 .form-group {
   /* TIGHTER SPACING */
-  margin-bottom: 12px; 
+  margin-bottom: 12px;
 }
 
 .form-group label {
@@ -399,7 +393,6 @@ a:hover {
   margin-top: 15px;
 }
 
-
 /* ===================================================================
    BUTTON STYLES (Global)
    =================================================================== */
@@ -415,17 +408,17 @@ button {
   padding: 12px 16px; /* Slightly more padding for touch targets */
   font-size: 0.95rem;
   line-height: 1.3; /* Better spacing for multi-line text */
-  
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  
-  max-width: 100%;       /* Never wider than the screen */
-  white-space: normal;   /* Allow text to wrap to next line */
-  height: auto;          /* Allow button to grow taller if text wraps */
-  min-height: 44px;      /* Minimum touch target size for mobile */
-  text-align: center;    /* Center text if it wraps */
+
+  max-width: 100%; /* Never wider than the screen */
+  white-space: normal; /* Allow text to wrap to next line */
+  height: auto; /* Allow button to grow taller if text wraps */
+  min-height: 44px; /* Minimum touch target size for mobile */
+  text-align: center; /* Center text if it wraps */
 }
 
 button:disabled {
@@ -453,23 +446,22 @@ button:disabled {
   background-color: var(--surface-color);
   color: var(--text-secondary);
   /* NEW: Subtle lift on hover */
-  transition: all 0.2s ease; 
+  transition: all 0.2s ease;
 }
 .btn-secondary:hover:not(:disabled) {
   background-color: var(--bg-dark);
   color: var(--text-primary);
   /* NEW: Subtle lift on hover */
-  transform: translateY(-1px); 
+  transform: translateY(-1px);
 }
 /* FIX: Change selector to :root.light-mode */
 :root.light-mode .btn-secondary {
-   background-color: var(--bg-dark);
+  background-color: var(--bg-dark);
 }
 /* FIX: Change selector to :root.light-mode */
 :root.light-mode .btn-secondary:hover:not(:disabled) {
   background-color: #e4e4e7;
 }
-
 
 /* Success (Green) */
 .btn-success {
@@ -512,7 +504,6 @@ button:disabled {
   display: inline;
 }
 
-
 /* Icon-only Button (Theme Toggle, Logout, Chat) */
 .btn-icon {
   background: none;
@@ -521,8 +512,8 @@ button:disabled {
   padding: 6px;
   min-width: 36px;
   min-height: 36px;
-  
-  position: relative; 
+
+  position: relative;
   /* NEW: Subtle lift on hover */
   transition: all 0.2s ease;
 }
@@ -531,7 +522,7 @@ button:disabled {
   color: var(--text-primary);
   border-color: var(--border-color);
   /* NEW: Subtle lift on hover */
-  transform: translateY(-1px); 
+  transform: translateY(-1px);
 }
 .btn-icon .icon {
   width: 20px;
@@ -544,7 +535,6 @@ button:disabled {
   color: var(--text-primary);
 }
 
-
 /* ----- Button Modifiers ----- */
 .btn-full-width {
   width: 100%;
@@ -552,14 +542,12 @@ button:disabled {
 .btn-icon-label .icon {
   width: 16px; /* Smaller icon when next to text */
   height: 16px;
-   flex-shrink: 0; /* Prevent icon from getting squished */
+  flex-shrink: 0; /* Prevent icon from getting squished */
 }
 /* Fix for long text in action buttons */
 .btn-icon-label {
   flex-wrap: wrap; /* Allow icon and text to flow if needed */
 }
-
-
 
 /* ===================================================================
    SVG ICONS (Icons.js)
@@ -574,7 +562,6 @@ button:disabled {
   stroke-linejoin: round;
   vertical-align: middle;
 }
-
 
 /* ===================================================================
    BARBER: AVAILABILITY (AvailabilityToggle.js)
@@ -608,7 +595,6 @@ button:disabled {
   background-color: var(--status-dot-online);
   box-shadow: 0 0 5px var(--status-dot-online);
 }
-
 
 /* ===================================================================
    BARBER: DASHBOARD (BarberDashboard.js)
@@ -654,7 +640,7 @@ button:disabled {
 /* FIX: Two columns on medium/large screens */
 @media (min-width: 600px) {
   .action-buttons-container {
-    grid-template-columns: 1fr 1fr; 
+    grid-template-columns: 1fr 1fr;
   }
 }
 
@@ -680,7 +666,7 @@ button:disabled {
   border-radius: 6px;
   background: var(--bg-dark);
   /* TIGHTER SPACING */
-  margin-bottom: 8px; 
+  margin-bottom: 8px;
   font-weight: 500;
   border: 1px solid var(--bg-dark);
 }
@@ -697,7 +683,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   /* TIGHTER SPACING */
-  gap: 4px; 
+  gap: 4px;
   font-size: 1rem;
 }
 .queue-item-info span {
@@ -712,14 +698,14 @@ button:disabled {
 }
 .notification-badge {
   position: absolute;
-  top: 2px;    
-  right: 2px;  
-  width: 8px;  
+  top: 2px;
+  right: 2px;
+  width: 8px;
   height: 8px;
   border-radius: 50%;
   background-color: var(--error-color);
   border: 1px solid var(--surface-color);
-  pointer-events: none; 
+  pointer-events: none;
 }
 
 /* Barber Photo Display */
@@ -764,7 +750,6 @@ button:disabled {
   border-bottom: 1px solid var(--border-color);
 }
 
-
 /* ===================================================================
    BARBER: ANALYTICS (AnalyticsDashboard.js)
    =================================================================== */
@@ -774,13 +759,13 @@ button:disabled {
   font-weight: 600;
   color: var(--text-primary);
   /* TIGHTER SPACING */
-  margin: 15px 0 8px 0; 
+  margin: 15px 0 8px 0;
 }
 .analytics-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  min-height: 75px; 
+  min-height: 75px;
 }
 
 /* FIX: 4-column grid on larger screens */
@@ -811,7 +796,7 @@ button:disabled {
   font-size: 1.1rem;
   font-weight: 600;
   /* NEW: Use data-secondary for non-primary metrics */
-  color: var(--data-secondary); 
+  color: var(--data-secondary);
 }
 .analytics-value.carbon {
   color: var(--success-color);
@@ -825,7 +810,6 @@ button:disabled {
   padding-top: 20px;
   border-top: 1px solid var(--border-color);
 }
-
 
 /* ===================================================================
    CUSTOMER: VIEW (CustomerView.js)
@@ -848,18 +832,17 @@ button:disabled {
 
 /* NEW: Active pulse animation for my position */
 .queue-list.live li.my-position:not(.in-progress):not(.up-next) {
-    animation: pulse-border 2s infinite;
+  animation: pulse-border 2s infinite;
 }
 
 @keyframes pulse-border {
-    0% {
-        box-shadow: 0 0 0 0px rgba(255, 149, 0, 0.4);
-    }
-    100% {
-        box-shadow: 0 0 0 4px rgba(255, 149, 0, 0);
-    }
+  0% {
+    box-shadow: 0 0 0 0px rgba(255, 149, 0, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba(255, 149, 0, 0);
+  }
 }
-
 
 .queue-list.live .public-queue-status {
   font-size: 0.9rem;
@@ -894,7 +877,7 @@ button:disabled {
   background: var(--bg-dark);
   padding: 10px;
   border-radius: 8px;
-  min-height: 40px; 
+  min-height: 40px;
 }
 .ewt-item {
   display: flex;
@@ -931,7 +914,6 @@ button:disabled {
 .file-upload-label {
   width: 100%;
 }
-
 
 /* ===================================================================
    MODAL (All components)
@@ -990,10 +972,10 @@ button:disabled {
   .modal-footer {
     grid-template-columns: 1fr; /* Stack them: 1 column only */
   }
-  
+
   /* Make the secondary button (Cancel/Back) order last so it's at the bottom */
   .modal-footer button.btn-secondary {
-    order: 2; 
+    order: 2;
   }
   .modal-footer button.btn-primary,
   .modal-footer button.btn-danger {
@@ -1033,7 +1015,6 @@ button:disabled {
 .modal-form-details strong {
   color: var(--text-primary);
 }
-
 
 /* ===================================================================
    CHAT STYLES (ChatWindow.js)
@@ -1211,7 +1192,6 @@ button:disabled {
   padding-bottom: 15px;
 }
 
-
 /* ===================================================================
    UTILITY CLASSES (Error, Success, etc.)
    =================================================================== */
@@ -1259,7 +1239,6 @@ button:disabled {
   text-align: left;
 }
 
-
 /* ===================================================================
    VIP STYLES (CustomerView.js, BarberDashboard.js)
    =================================================================== */
@@ -1269,105 +1248,99 @@ button:disabled {
   margin-top: 20px;
 }
 .priority-toggle-control {
-    display: flex;
-    width: 100%;
-    margin-top: 5px;
-    border: 1px solid var(--priority-border);
-    border-radius: 8px;
-    overflow: hidden;
+  display: flex;
+  width: 100%;
+  margin-top: 5px;
+  border: 1px solid var(--priority-border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .priority-option {
-    flex: 1;
-    padding: 12px 10px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    background-color: var(--priority-bg);
-    color: var(--priority-text);
+  flex: 1;
+  padding: 12px 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background-color: var(--priority-bg);
+  color: var(--priority-text);
 }
 
 .priority-option.active {
-    background-color: var(--priority-active-bg);
-    color: var(--priority-active-text);
+  background-color: var(--priority-active-bg);
+  color: var(--priority-active-text);
 }
 
 .priority-option:disabled {
-    cursor: not-allowed;
-    opacity: 0.8;
+  cursor: not-allowed;
+  opacity: 0.8;
 }
 
 .priority-option:not(.active):hover:not(:disabled) {
-    background-color: var(--priority-hover-bg); 
+  background-color: var(--priority-hover-bg);
 }
 .priority-option.vip.active {
   box-shadow: 0 0 10px var(--primary-orange);
 }
 
-
 /* VIP Banner in Queue */
 @keyframes vip-gradient-animation {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .queue-list li.vip-entry {
-    font-weight: 600;
-    border: 1px solid transparent;
-    background-size: 200% 200%;
-    background-image: linear-gradient(
-        -45deg, 
-        #2a2a2a, 
-        #3a3a3a, 
-        #2a2a2a,
-        #4a3a00
-    );
-    animation: vip-gradient-animation 8s ease infinite;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    position: relative;
-    overflow: hidden; 
-    
-    justify-content: flex-start;
-    gap: 10px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background-size: 200% 200%;
+  background-image: linear-gradient(-45deg, #2a2a2a, #3a3a3a, #2a2a2a, #4a3a00);
+  animation: vip-gradient-animation 8s ease infinite;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+
+  justify-content: flex-start;
+  gap: 10px;
 }
 /* FIX: Change selector to :root.light-mode */
 :root.light-mode .queue-list li.vip-entry {
   /* This is to override the dark mode gradient */
-    background-image: linear-gradient(
-        -45deg, 
-        #fffbeb, 
-        #fff9e6, 
-        #fffbeb,
-        #f5f5f5
-    );
+  background-image: linear-gradient(-45deg, #fffbeb, #fff9e6, #fffbeb, #f5f5f5);
 }
 
-
 .queue-list li.vip-entry::before {
-    content: '';
-    position: absolute;
-    left: -5px;
-    top: 0;
-    height: 100%;
-    width: 5px;
-    background-color: var(--primary-orange);
-    box-shadow: 0 0 8px var(--primary-orange), 0 0 12px var(--primary-orange-hover);
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  background-color: var(--primary-orange);
+  box-shadow: 0 0 8px var(--primary-orange),
+    0 0 12px var(--primary-orange-hover);
 }
 
 .queue-list li.vip-entry::after {
-  content: 'VIP';
-  order: -1; 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  content: "VIP";
+  order: -1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
   font-weight: 700;
   font-size: 0.7rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  
+
   background-color: var(--primary-orange);
-  color: var(--button-text-primary); 
-  
+  color: var(--button-text-primary);
+
   padding: 3px 7px;
   border-radius: 4px;
   line-height: 1;
@@ -1376,7 +1349,6 @@ button:disabled {
 .queue-list li.vip-entry > *:last-child {
   margin-left: auto;
 }
-
 
 /* ===================================================================
    SPINNER (Spinner.js)
@@ -1414,11 +1386,11 @@ button .spinner {
   border-top-color: #000000;
 }
 
-
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
-
 
 /* ===================================================================
    SKELETON LOADER (SkeletonLoader.js)
@@ -1524,7 +1496,6 @@ button .spinner {
   background: transparent;
 }
 
-
 .danger-zone {
   margin-top: 20px;
   padding-top: 20px;
@@ -1536,339 +1507,377 @@ button .spinner {
 
 /* This style makes our new <button> look like the old <a> link */
 .btn-link-style {
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--link-color);
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: inherit;
-    font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--link-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-weight: 500;
 }
 .btn-link-style .icon {
-    width: 14px;
-    height: 14px;
+  width: 14px;
+  height: 14px;
 }
 .btn-link-style:hover {
-    text-decoration: none;
-    color: var(--primary-orange);
+  text-decoration: none;
+  color: var(--primary-orange);
 }
-
 
 /* New styles for the image modal content */
 .image-modal-content {
-    max-width: 90vw; /* Max 90% of viewport width */
-    width: auto; /* Let the image define the width */
-    padding: 0;
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    /* Remove padding from the modal body if it exists */
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
-    overflow: hidden; /* Ensures image corners are rounded */
+  max-width: 90vw; /* Max 90% of viewport width */
+  width: auto; /* Let the image define the width */
+  padding: 0;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  /* Remove padding from the modal body if it exists */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  overflow: hidden; /* Ensures image corners are rounded */
 }
 
 /* This is the most important part for responsiveness */
 .image-modal-img {
-    display: block;
-    width: 100%; /* Make the image fill its container */
-    max-width: 90vw; /* Ensure it never exceeds screen width */
-    max-height: 80vh; /* Ensure it never exceeds 80% of screen height */
-    object-fit: contain; /* This scales the image down to fit, maintaining aspect ratio */
+  display: block;
+  width: 100%; /* Make the image fill its container */
+  max-width: 90vw; /* Ensure it never exceeds screen width */
+  max-height: 80vh; /* Ensure it never exceeds 80% of screen height */
+  object-fit: contain; /* This scales the image down to fit, maintaining aspect ratio */
 }
 
 .image-modal-content .modal-footer {
-    border-radius: 0;
+  border-radius: 0;
 }
 /* ===================================================================
    CUSTOMER: STATUS BANNER (NEW)
    =================================================================== */
 
 .status-banner {
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border: 1px solid;
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid;
 }
 
 .status-banner h2 {
-    margin: 0 0 5px 0;
-    font-size: 1.3rem;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  margin: 0 0 5px 0;
+  font-size: 1.3rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .status-banner .icon {
-    width: 20px;
-    height: 20px;
+  width: 20px;
+  height: 20px;
 }
 
 .status-banner p {
-    margin: 0;
-    font-size: 0.95rem;
-    color: var(--text-secondary);
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
 }
 
 .status-banner.in-progress-banner {
-    background: rgba(52, 199, 89, 0.1);
-    border-color: var(--success-color);
+  background: rgba(52, 199, 89, 0.1);
+  border-color: var(--success-color);
 }
 .status-banner.in-progress-banner h2 {
-    color: var(--success-color);
+  color: var(--success-color);
 }
 
 .status-banner.up-next-banner {
-    background: rgba(255, 149, 0, 0.1);
-    border-color: var(--primary-orange);
+  background: rgba(255, 149, 0, 0.1);
+  border-color: var(--primary-orange);
 }
 .status-banner.up-next-banner h2 {
-    color: var(--primary-orange);
+  color: var(--primary-orange);
 }
 
 /* FIX: Change selector to :root.light-mode */
 :root.light-mode .status-banner.in-progress-banner {
-    color: #1e5c2d;
+  color: #1e5c2d;
 }
 :root.light-mode .status-banner.in-progress-banner h2 {
-    color: #1e5c2d;
+  color: #1e5c2d;
 }
 :root.light-mode .status-banner.in-progress-banner p {
-    color: #277a3b;
+  color: #277a3b;
 }
 
 /* FIX: Change selector to :root.light-mode */
 :root.light-mode .status-banner.up-next-banner {
-    color: #855300;
+  color: #855300;
 }
 :root.light-mode .status-banner.up-next-banner h2 {
-    color: #855300;
+  color: #855300;
 }
 :root.light-mode .status-banner.up-next-banner p {
-    color: #b97400;
+  color: #b97400;
 }
 /* App.css */
 
 /* Wrapper for the rating row */
 .barber-rating {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-    margin-top: 4px;
-    font-size: 0.85rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.85rem;
 }
 
 /* The gold star */
 .star-icon {
-    color: #FFD700; /* Gold */
-    font-size: 0.9rem;
+  color: #ffd700; /* Gold */
+  font-size: 0.9rem;
 }
 
 /* The number (e.g., 4.8) */
 .score-text {
-    font-weight: 700;
-    color: var(--text-primary);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* The count (e.g., (12)) */
 .review-count {
-    color: var(--text-secondary);
-    font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
 /* Adjust the card padding slightly to fit the extra text */
 .barber-card {
-    padding: 12px 5px;
+  padding: 12px 5px;
 }
 /* ===================================================================
    BARBER SELECTION (TEXT ONLY VERSION)
    =================================================================== */
 
 .barber-selection-list {
-    display: grid;
-    /* FIX: More responsive grid for smaller screens */
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
-    gap: 10px;
-    margin-top: 5px;
+  display: grid;
+  /* FIX: More responsive grid for smaller screens */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 5px;
 }
 
 .barber-card {
-    background-color: var(--bg-dark);
-    border: 2px solid var(--border-color);
-    border-radius: 8px;
-    padding: 15px 10px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 80px;
+  background-color: var(--bg-dark);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  padding: 15px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
 }
 
 .barber-card:hover {
-    border-color: var(--primary-orange-hover);
-    transform: translateY(-2px);
+  border-color: var(--primary-orange-hover);
+  transform: translateY(-2px);
 }
 
 .barber-card.selected {
-    border-color: var(--primary-orange);
-    background-color: var(--my-position-bg);
-    box-shadow: 0 0 10px rgba(255, 149, 0, 0.4);
+  border-color: var(--primary-orange);
+  background-color: var(--my-position-bg);
+  box-shadow: 0 0 10px rgba(255, 149, 0, 0.4);
 }
 
 .barber-name {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 5px;
-    line-height: 1.2;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 5px;
+  line-height: 1.2;
 }
 
 /* Rating Styles */
 .barber-rating {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.9rem;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 4px 8px;
-    border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 12px;
 }
 
-.star-icon { color: #FFD700; }
-.score-text { font-weight: 700; color: var(--text-primary); }
-.review-count { color: var(--text-secondary); font-size: 0.8rem; }
+.star-icon {
+  color: #ffd700;
+}
+.score-text {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.review-count {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
 
 /* FIX: Change selector to :root.light-mode */
-:root.light-mode .barber-card { background-color: #F4F4F5; }
-:root.light-mode .barber-card.selected { background-color: var(--my-position-bg); }
-:root.light-mode .barber-rating { background: rgba(0, 0, 0, 0.05); }
+:root.light-mode .barber-card {
+  background-color: #f4f4f5;
+}
+:root.light-mode .barber-card.selected {
+  background-color: var(--my-position-bg);
+}
+:root.light-mode .barber-rating {
+  background: rgba(0, 0, 0, 0.05);
+}
 /* Barber X-Ray Badges */
 .distance-badge {
-    font-size: 0.75rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 8px;
-    font-weight: 600;
-    display: inline-block;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 600;
+  display: inline-block;
 }
-.dist-green { background-color: rgba(52, 199, 89, 0.2); color: #34C759; }
-.dist-orange { background-color: rgba(255, 149, 0, 0.2); color: #FF9500; }
-.dist-red { background-color: rgba(255, 59, 48, 0.2); color: #FF3B30; }
+.dist-green {
+  background-color: rgba(52, 199, 89, 0.2);
+  color: #34c759;
+}
+.dist-orange {
+  background-color: rgba(255, 149, 0, 0.2);
+  color: #ff9500;
+}
+.dist-red {
+  background-color: rgba(255, 59, 48, 0.2);
+  color: #ff3b30;
+}
 
 /* FIX: Change selector to :root.light-mode */
-:root.light-mode .dist-green { background-color: #e6f9e9; color: #1e5c2d; }
-:root.light-mode .dist-orange { background-color: #fff8e6; color: #b97400; }
-:root.light-mode .dist-red { background-color: #ffebeb; color: #c41e15; }
+:root.light-mode .dist-green {
+  background-color: #e6f9e9;
+  color: #1e5c2d;
+}
+:root.light-mode .dist-orange {
+  background-color: #fff8e6;
+  color: #b97400;
+}
+:root.light-mode .dist-red {
+  background-color: #ffebeb;
+  color: #c41e15;
+}
 /* Confirmation Badges */
 .badge-confirmed {
-    display: inline-block;
-    background-color: rgba(52, 199, 89, 0.2);
-    color: #34C759;
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 8px;
-    border: 1px solid #34C759;
+  display: inline-block;
+  background-color: rgba(52, 199, 89, 0.2);
+  color: #34c759;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  border: 1px solid #34c759;
 }
 
 .badge-waiting {
-    display: inline-block;
-    background-color: rgba(255, 149, 0, 0.1);
-    color: #FF9500;
-    font-size: 0.75rem;
-    font-style: italic;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 8px;
+  display: inline-block;
+  background-color: rgba(255, 149, 0, 0.1);
+  color: #ff9500;
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
 }
 
 /* Visual Pulse for Customer when they confirm */
 @keyframes soft-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(52, 199, 89, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(52, 199, 89, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 199, 89, 0);
+  }
 }
 
 .confirmed-pulse {
-    animation: soft-pulse 2s infinite;
-    border-color: #34C759;
+  animation: soft-pulse 2s infinite;
+  border-color: #34c759;
 }
 /* History View Styles */
 .customer-view-tabs {
-    padding-bottom: 0 !important; /* Remove bottom padding on header */
-    border-bottom: none !important; /* Remove separator line */
-    justify-content: flex-start !important;
+  padding-bottom: 0 !important; /* Remove bottom padding on header */
+  border-bottom: none !important; /* Remove separator line */
+  justify-content: flex-start !important;
 }
 .customer-view-tabs button {
-    margin-right: 15px;
-    padding: 10px 15px;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-weight: 500;
-    border-bottom: 3px solid transparent;
+  margin-right: 15px;
+  padding: 10px 15px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
 }
 .customer-view-tabs button.active {
-    color: var(--primary-orange);
-    font-weight: 700;
-    border-bottom: 3px solid var(--primary-orange);
+  color: var(--primary-orange);
+  font-weight: 700;
+  border-bottom: 3px solid var(--primary-orange);
 }
 
 .history-list {
-    list-style: none;
-    padding: 0;
+  list-style: none;
+  padding: 0;
 }
 
 .history-item {
-    display: flex;
-    flex-direction: column;
-    padding: 15px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-    background-color: var(--bg-dark);
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  background-color: var(--bg-dark);
 }
 
-.history-details, .history-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.9rem;
+.history-details,
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
 }
 
 .history-details {
-    margin-bottom: 5px;
-    font-weight: 600;
+  margin-bottom: 5px;
+  font-weight: 600;
 }
 
 .history-item .service {
-    color: var(--text-primary);
-    font-size: 1rem;
-    font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .status-badge {
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 0.75rem;
-    text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
 }
 
 .history-item.done .status-badge {
-    background: rgba(52, 199, 89, 0.2);
-    color: var(--success-color);
+  background: rgba(52, 199, 89, 0.2);
+  color: var(--success-color);
 }
 
 .history-item.cancelled .status-badge {
-    background: rgba(255, 59, 48, 0.2);
-    color: var(--error-color);
+  background: rgba(255, 59, 48, 0.2);
+  color: var(--error-color);
 }
