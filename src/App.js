@@ -2448,10 +2448,11 @@ return (
                                     {/* NEW: Display Stars based on item.score (which is now the rating) */}
                                     <span className="feedback-score" style={{fontSize: '1.2rem', lineHeight: '1'}}>
                                         <span style={{color: '#FFD700'}}>
-                                            {'★'.repeat(Math.round(Math.max(0, Math.min(5, item.score || 0))))}
+                                            {/* FIX: Use 'entry.score' instead of 'item.score' */}
+                                            {'★'.repeat(Math.round(Math.max(0, Math.min(5, entry.score || 0))))}
                                         </span>
                                         <span style={{color: 'var(--text-secondary)'}}>
-                                            {'☆'.repeat(5 - Math.round(Math.max(0, Math.min(5, item.score || 0))))}
+                                            {'☆'.repeat(5 - Math.round(Math.max(0, Math.min(5, entry.score || 0))))}
                                         </span>
                                     </span>
                                     {/* END NEW */}
@@ -2681,6 +2682,95 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
 }
 
 // ##############################################
+// ##           ADMIN APP LAYOUT             ##
+// ##############################################
+function AdminAppLayout({ session }) {
+    const [services, setServices] = useState([]);
+    const [newName, setNewName] = useState('');
+    const [newDuration, setNewDuration] = useState('');
+    const [newPrice, setNewPrice] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+
+    const fetchServices = useCallback(async () => {
+        try {
+            const res = await axios.get(`${API_URL}/services`);
+            setServices(res.data || []);
+        } catch (err) { console.error("Failed to load services"); }
+    }, []);
+
+    useEffect(() => { fetchServices(); }, [fetchServices]);
+
+    const handleAddService = async (e) => {
+        e.preventDefault();
+        setLoading(true); setMessage('');
+        try {
+            await axios.post(`${API_URL}/admin/services`, {
+                userId: session.user.id,
+                name: newName,
+                duration_minutes: newDuration,
+                price_php: newPrice
+            });
+            setMessage('Service added successfully!');
+            setNewName(''); setNewDuration(''); setNewPrice('');
+            fetchServices();
+        } catch (error) {
+            setMessage('Error: ' + (error.response?.data?.error || error.message));
+        } finally { setLoading(false); }
+    };
+
+    const handleDeleteService = async (id) => {
+        if(!window.confirm("Delete this service?")) return;
+        try {
+            await axios.delete(`${API_URL}/admin/services/${id}`, {
+                data: { userId: session.user.id } 
+            });
+            fetchServices();
+        } catch (error) { alert("Failed to delete."); }
+    };
+
+    return (
+        <div className="app-layout admin-layout">
+            <header className="app-header" style={{ borderBottom: '2px solid #7c4dff' }}>
+                <h1>Admin Dashboard</h1>
+                <div className="header-actions">
+                    <ThemeToggleButton />
+                    <button onClick={() => handleLogout(session.user.id)} className="btn btn-icon"><IconLogout /></button>
+                </div>
+            </header>
+            <main className="main-content">
+                <div className="container">
+                    <div className="card">
+                        <div className="card-header"><h2>Manage Services</h2></div>
+                        <div className="card-body">
+                            <form onSubmit={handleAddService} style={{marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)'}}>
+                                <h3>Add New Service</h3>
+                                <div className="form-group"><label>Service Name</label><input value={newName} onChange={e=>setNewName(e.target.value)} required placeholder="e.g. Buzz Cut" /></div>
+                                <div className="form-group"><label>Duration (mins)</label><input type="number" value={newDuration} onChange={e=>setNewDuration(e.target.value)} required placeholder="30" /></div>
+                                <div className="form-group"><label>Price (₱)</label><input type="number" value={newPrice} onChange={e=>setNewPrice(e.target.value)} required placeholder="250" /></div>
+                                <button type="submit" disabled={loading} className="btn btn-primary btn-full-width">{loading ? <Spinner/> : 'Add Service'}</button>
+                                {message && <p className="message success">{message}</p>}
+                            </form>
+
+                            <h3>Current Menu</h3>
+                            <ul className="queue-list">
+                                {services.map(s => (
+                                    <li key={s.id} style={{display:'flex', justifyContent:'space-between'}}>
+                                        <div><strong>{s.name}</strong> ({s.duration_minutes}m) - ₱{s.price_php}</div>
+                                        <button onClick={() => handleDeleteService(s.id)} className="btn btn-danger" style={{padding:'5px 10px', fontSize:'0.8rem'}}>Delete</button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
+
+
+// ##############################################
 // ##         CUSTOMER APP LAYOUT            ##
 // ##############################################
 function CustomerAppLayout({ session }) {
@@ -2734,10 +2824,8 @@ function App() {
         return () => { /* Cleanup if needed */ };
     }, []);
 
-    // --- Helper to Check Role (FIXED TO PREVENT RACE CONDITION) ---
-    const checkUserRole = useCallback(async (user) => {
+   const checkUserRole = useCallback(async (user) => {
         if (!user || !user.id) {
-            console.warn("checkUserRole called with incomplete user, defaulting to customer.");
             setUserRole('customer');
             setBarberProfile(null);
             setLoadingRole(false);
@@ -2747,18 +2835,31 @@ function App() {
         console.log(`Checking role for user: ${user.id}`);
         setLoadingRole(true);
         try {
+            // STEP 1: Check the 'profiles' table for the explicit role
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single();
+            
+            if (profileData && profileData.role === 'admin') {
+                console.log("Role check: ADMIN confirmed.");
+                setUserRole('admin');
+                setBarberProfile(null);
+                setLoadingRole(false);
+                return; // Stop here, do not check for barber
+            }
+
+            // STEP 2: If not admin, check if they are a barber
             const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
-            console.log("Role check successful: This is a BARBER.");
+            console.log("Role check: BARBER confirmed.");
             setUserRole('barber');
             setBarberProfile(response.data);
+
         } catch (error) {
-            if (error.response && error.response.status === 404) {
-                console.log("Role check: Not a barber (404), setting role to CUSTOMER.");
-                setUserRole('customer');
-            } else {
-                console.error("Error checking/fetching barber profile:", error);
-                setUserRole('customer');
-            }
+            // STEP 3: Default to Customer if neither Admin nor Barber
+            console.log("Role check: Not Admin/Barber. Defaulting to CUSTOMER.");
+            setUserRole('customer');
             setBarberProfile(null);
         } finally {
             setLoadingRole(false);
@@ -2802,31 +2903,22 @@ function App() {
     // --- Render Logic ---
     const renderAppContent = () => {
         if (loadingRole) {
-            return (
-                <div className="loading-fullscreen">
-                    <Spinner /> 
-                    <span>Loading Application...</span>
-                </div>
-            );
+            return <div className="loading-fullscreen"><Spinner /><span>Loading...</span></div>;
         }
-
+        
         if (isUpdatingPassword) {
-            return (
-                <UpdatePasswordForm
-                    onPasswordUpdated={() => setIsUpdatingPassword(false)}
-                />
-            );
+             return <UpdatePasswordForm onPasswordUpdated={() => setIsUpdatingPassword(false)} />;
         }
 
         if (!session) { return <AuthForm />; }
         else if (userRole === null) {
-            return (
-                <div className="loading-fullscreen">
-                    <Spinner /> 
-                    <span>Verifying User Role...</span>
-                </div>
-            );
+             return <div className="loading-fullscreen"><Spinner /><span>Verifying User Role...</span></div>;
         }
+        
+        else if (userRole === 'admin') { 
+            return <AdminAppLayout session={session} />;
+        }
+
         else if (userRole === 'barber' && barberProfile) { return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />; }
         else { return <CustomerAppLayout session={session} />; }
     }
