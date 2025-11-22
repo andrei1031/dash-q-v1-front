@@ -883,51 +883,63 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     useEffect(() => {
         if (!session?.user?.id) return;
 
-        // Step 1: Connect the socket if it's not already connected.
         if (!socketRef.current) {
             console.log("[Barber] Connecting WebSocket...");
             socketRef.current = io(SOCKET_URL);
             const socket = socketRef.current;
-            const barberUserId = session.user.id;
             
-            socket.emit('register', barberUserId);
-            socket.on('connect', () => { console.log(`[Barber] WebSocket connected.`); });
-            socket.on('connect_error', (err) => { console.error("[Barber] WebSocket Connection Error:", err); });
+            socket.on('connect', () => { 
+                console.log(`[Barber] WebSocket connected.`);
+                // Re-register on connect/reconnect
+                socket.emit('register', session.user.id); 
+            });
+            
             socket.on('disconnect', (reason) => { 
                 console.log("[Barber] WebSocket disconnected:", reason); 
-                socketRef.current = null; 
             });
         }
 
-        // Step 2: Define and attach the message listener.
-        // This part will re-run if openChatCustomerId changes.
+        // Cleanup on unmount ONLY
+        return () => {
+            if (socketRef.current) {
+                console.log("[Barber] Unmounting & Disconnecting Socket.");
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
+    }, [session]);
+
+    // 2. LISTENER EFFECT (Runs when chat target changes)
+    useEffect(() => {
         const socket = socketRef.current;
+        if (!socket) return;
 
         const messageListener = (incomingMessage) => {
             playSound(messageNotificationSound);
-            const customerId = incomingMessage.senderId;
             
+            // Update chat history
             setChatMessages(prev => {
-                const msgs = prev[customerId] || [];
-                return { ...prev, [customerId]: [...msgs, incomingMessage] };
+                const senderId = incomingMessage.senderId;
+                const msgs = prev[senderId] || [];
+                return { ...prev, [senderId]: [...msgs, incomingMessage] };
             });
 
-            // This logic is now simpler and reads openChatCustomerId directly.
-            // It works because this listener is re-created when openChatCustomerId changes.
-            if (customerId !== openChatCustomerId) {
-                setUnreadMessages(prevUnread => {
-                    const newState = { ...prevUnread, [customerId]: true };
-                    localStorage.setItem('barberUnreadMessages', JSON.stringify(newState)); 
+            // Mark unread if chat is NOT open for this sender
+            if (incomingMessage.senderId !== openChatCustomerId) {
+                setUnreadMessages(prev => {
+                    const newState = { ...prev, [incomingMessage.senderId]: true };
+                    localStorage.setItem('barberUnreadMessages', JSON.stringify(newState));
                     return newState;
                 });
             }
         };
 
-        // Step 3: Clean up the *old* listener and attach the *new* one.
-        socket.off('chat message'); // Remove all previous 'chat message' listeners
-        socket.on('chat message', messageListener); // Add the new one
+        // Clean old listener to prevent duplicates, then add new one
+        socket.off('chat message');
+        socket.on('chat message', messageListener);
 
-    }, [session, openChatCustomerId, setChatMessages, setUnreadMessages]); // <-- NEW DEPENDENCIES
+        return () => { socket.off('chat message', messageListener); };
+    }, [openChatCustomerId]); // <-- NEW DEPENDENCIES
 
 
     // This new useEffect handles the *main* socket cleanup
