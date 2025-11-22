@@ -2917,8 +2917,11 @@ function AdminAppLayout({ session }) {
                             <h4 style={{fontSize:'0.8rem', color:'var(--text-secondary)', margin:'10px 0 5px 0'}}>Waiting ({waiting.length})</h4>
                             <ul className="queue-list" style={{maxHeight:'150px', overflowY:'auto'}}>
                                 {waiting.map(q => (
-                                    <li key={q.id} style={{display:'flex', justifyContent:'space-between', padding:'5px', fontSize:'0.85rem'}}>
-                                        <span>{q.customer_name}</span>
+                                    <li key={q.id} className={q.is_vip ? 'vip-entry' : ''} style={{display:'flex', justifyContent:'space-between', padding:'5px', fontSize:'0.85rem'}}>
+                                        <span style={{display:'flex', alignItems:'center', gap:'5px'}}>
+                                            {q.is_vip && <span style={{fontSize:'0.7rem'}}>👑</span>} 
+                                            {q.customer_name}
+                                        </span>
                                         <button onClick={() => setTransferMode({ queueId: q.id, currentBarberId: barber.id })} className="btn btn-secondary" style={{padding:'2px 5px', fontSize:'0.7rem'}}>➡ Move</button>
                                     </li>
                                 ))}
