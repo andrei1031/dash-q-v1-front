@@ -2741,7 +2741,14 @@ function AdminAppLayout({ session }) {
     }, []);
 
     const fetchUsers = useCallback(async () => {
-        try { const res = await axios.get(`${API_URL}/admin/users`); setUsers(res.data); } catch (e) {}
+        try { 
+            const res = await axios.get(`${API_URL}/admin/users`); 
+            setUsers(res.data); 
+        } catch (e) { 
+            console.error("Failed to fetch users:", e);
+            // Optional: Alert the admin so they know it failed
+            // alert("Could not load user list. Check console for details.");
+        }
     }, []);
 
     const fetchServices = useCallback(async () => {
