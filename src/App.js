@@ -29,7 +29,7 @@ const playSound = (audioElement) => {
 // --- Global Constants ---
 const SOCKET_URL = 'https://dash-q-backend.onrender.com';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-const API_URL = 'https://dash-q-backend.onrender.com/api' || 'http://localhost:3002/api';
+const API_URL = 'https://dash-q-backend.onrender.com/api' || 'http://localhost:3000';
 
 // --- Supabase Client Setup ---
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -1817,11 +1817,41 @@ function CustomerView({ session }) {
                 fetchPublicQueue(newEntry.barber_id.toString());
                 setIsVIPToggled(false);
             } else { throw new Error("Invalid response from server."); }
-        } catch (error) {
-            console.error('Failed to join queue:', error);
+       } catch (error) {
+        console.error('Failed to join queue:', error);
+        
+        // --- START: HANDLE 409 CONFLICT (AUTO-RECOVER) ---
+        if (error.response && error.response.status === 409) {
+            // The server sends back the existing entry in 'details'
+            const existing = error.response.data.details;
+            
+            setMessage(`⚠️ Found active booking! Recovering your spot (ID: #${existing.id})...`);
+            
+            // 1. Save to LocalStorage (So it persists on reload)
+            localStorage.setItem('myQueueEntryId', existing.id.toString());
+            localStorage.setItem('joinedBarberId', existing.barber_id.toString());
+
+            // 2. Update State immediately (Triggers the "Live Queue" view)
+            setMyQueueEntryId(existing.id.toString());
+            setJoinedBarberId(existing.barber_id.toString());
+            setIsChatOpen(true);
+            
+            // 3. Clear the "Join" form inputs
+            setSelectedBarberId('');
+            setSelectedServiceId('');
+            setReferenceImageUrl(existing.reference_image_url || '');
+
+            // 4. Fetch the queue data so the UI updates instantly
+            fetchPublicQueue(existing.barber_id.toString());
+        } 
+        // --- END: HANDLE 409 CONFLICT ---
+        else {
             const errorMessage = error.response?.data?.error || error.message;
             setMessage(errorMessage.includes('unavailable') ? errorMessage : 'Failed to join. Try again.');
-        } finally { setIsLoading(false); }
+        }
+    } finally { 
+        setIsLoading(false); 
+    }
     };
 
     const handleReturnToJoin = async (userInitiated = false) => {
@@ -2685,13 +2715,12 @@ function BarberAppLayout({ session, barberProfile, setBarberProfile }) {
 // ##           ADMIN APP LAYOUT             ##
 // ##############################################
 function AdminAppLayout({ session }) {
-    const [activeTab, setActiveTab] = useState('live'); // 'live', 'stats', 'users', 'menu', 'staff'
-    const [loading, setLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState('live'); // 'live', 'stats', 'users', 'menu'
     
     // --- Live Shop Data ---
     const [allQueues, setAllQueues] = useState([]);
     const [barbers, setBarbers] = useState([]);
-    const [transferMode, setTransferMode] = useState(null); // { queueId, currentBarberId }
+    const [transferMode, setTransferMode] = useState(null);
 
     // --- Analytics Data ---
     const [advancedStats, setAdvancedStats] = useState(null);
@@ -2699,10 +2728,11 @@ function AdminAppLayout({ session }) {
     // --- Users Data ---
     const [users, setUsers] = useState([]);
 
-    // --- Menu/Staff Data (Reused from previous) ---
+    // --- Service Menu Data (RESTORED) ---
     const [services, setServices] = useState([]);
+    const [isEditingService, setIsEditingService] = useState(null); // Track which service is being edited
 
-    // FETCHERS
+    // --- FETCHERS ---
     const fetchLiveShop = useCallback(async () => {
         try {
             const [qRes, bRes] = await Promise.all([
@@ -2722,16 +2752,20 @@ function AdminAppLayout({ session }) {
         try { const res = await axios.get(`${API_URL}/admin/users`); setUsers(res.data); } catch (e) {}
     }, []);
 
-    // Tab Effects
+    // NEW: Fetch Services
+    const fetchServices = useCallback(async () => {
+        try { const res = await axios.get(`${API_URL}/services`); setServices(res.data); } catch (e) { console.error(e); }
+    }, []);
+
+    // --- EFFECTS ---
     useEffect(() => {
         if (activeTab === 'live') { fetchLiveShop(); const interval = setInterval(fetchLiveShop, 5000); return () => clearInterval(interval); }
         if (activeTab === 'stats') fetchAdvancedStats();
         if (activeTab === 'users') fetchUsers();
-    }, [activeTab, fetchLiveShop, fetchAdvancedStats, fetchUsers]);
-
+        if (activeTab === 'menu') fetchServices(); // Fetch menu when tab is active
+    }, [activeTab, fetchLiveShop, fetchAdvancedStats, fetchUsers, fetchServices]);
 
     // --- ACTIONS ---
-
     const handleTransfer = async (targetBarberId) => {
         if (!transferMode) return;
         if (window.confirm(`Transfer this customer to Barber #${targetBarberId}?`)) {
@@ -2750,7 +2784,6 @@ function AdminAppLayout({ session }) {
     const handleDeleteUser = async (targetId) => {
         const confirmText = prompt("Type 'DELETE' to permanently ban/delete this user account.");
         if (confirmText !== 'DELETE') return;
-        
         try {
             await axios.delete(`${API_URL}/admin/users/${targetId}`, { data: { userId: session.user.id } });
             alert("User deleted.");
@@ -2758,16 +2791,57 @@ function AdminAppLayout({ session }) {
         } catch (e) { alert("Delete failed: " + e.response?.data?.error); }
     };
 
-    // --- SUB-COMPONENTS FOR ADMIN ---
-    
+    // --- NEW: SERVICE ACTIONS ---
+    const handleSaveService = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const name = form.serviceName.value;
+        const duration = form.serviceDuration.value;
+        const price = form.servicePrice.value;
+
+        try {
+            if (isEditingService) {
+                // EDIT MODE
+                await axios.put(`${API_URL}/admin/services/${isEditingService.id}`, {
+                    userId: session.user.id,
+                    name,
+                    duration_minutes: duration,
+                    price_php: price
+                });
+                alert("Service updated!");
+                setIsEditingService(null); // Exit edit mode
+            } else {
+                // ADD MODE
+                await axios.post(`${API_URL}/admin/services`, {
+                    userId: session.user.id,
+                    name,
+                    duration_minutes: duration,
+                    price_php: price
+                });
+                alert("Service added!");
+            }
+            form.reset();
+            fetchServices();
+        } catch (err) {
+            alert("Action failed: " + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleDeleteService = async (id) => {
+        if (!window.confirm("Delete this service permanently?")) return;
+        try {
+            await axios.delete(`${API_URL}/admin/services/${id}`, { data: { userId: session.user.id } });
+            fetchServices();
+        } catch (err) { alert("Delete failed."); }
+    };
+
+    // --- VIEWS ---
     const LiveShopView = () => (
         <div className="live-shop-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px'}}>
             {barbers.map(barber => {
                 const barberQueue = allQueues.filter(q => q.barber_id === barber.id);
                 const inChair = barberQueue.find(q => q.status === 'In Progress');
-                const upNext = barberQueue.find(q => q.status === 'Up Next');
                 const waiting = barberQueue.filter(q => q.status === 'Waiting');
-
                 return (
                     <div key={barber.id} className="card" style={{border: transferMode ? '2px dashed var(--primary-orange)' : '1px solid var(--border-color)'}}>
                         <div className="card-header" style={{padding:'10px'}}>
@@ -2778,8 +2852,6 @@ function AdminAppLayout({ session }) {
                         </div>
                         <div className="card-body" style={{padding:'10px'}}>
                             {inChair && <div style={{background:'rgba(52,199,89,0.1)', padding:'5px', borderRadius:'4px', marginBottom:'5px', fontSize:'0.9rem'}}>✂️ <strong>{inChair.customer_name}</strong></div>}
-                            {upNext && <div style={{background:'rgba(255,149,0,0.1)', padding:'5px', borderRadius:'4px', marginBottom:'5px', fontSize:'0.9rem'}}>⚠️ <strong>{upNext.customer_name}</strong></div>}
-                            
                             <h4 style={{fontSize:'0.8rem', color:'var(--text-secondary)', margin:'10px 0 5px 0'}}>Waiting ({waiting.length})</h4>
                             <ul className="queue-list" style={{maxHeight:'150px', overflowY:'auto'}}>
                                 {waiting.map(q => (
@@ -2797,62 +2869,20 @@ function AdminAppLayout({ session }) {
     );
 
     const StatsView = () => {
-        if (!advancedStats) return <Spinner />;
-        
+        if (!advancedStats) return <div className="loading-fullscreen"><Spinner /></div>;
         const chartData = {
             labels: advancedStats.dailyTrend.map(d => d.day),
-            datasets: [{
-                label: 'Revenue (₱)',
-                data: advancedStats.dailyTrend.map(d => d.daily_total),
-                backgroundColor: 'rgba(255, 149, 0, 0.5)',
-                borderColor: 'rgba(255, 149, 0, 1)',
-                borderWidth: 2,
-            }]
+            datasets: [{ label: 'Revenue (₱)', data: advancedStats.dailyTrend.map(d => d.daily_total), backgroundColor: 'rgba(255, 149, 0, 0.5)', borderColor: 'rgba(255, 149, 0, 1)', borderWidth: 2 }]
         };
-
         return (
             <div className="stats-container">
                 <div className="analytics-grid">
-                    <div className="analytics-item">
-                        <span className="analytics-label">Total Lifetime Revenue</span>
-                        <span className="analytics-value">₱{parseInt(advancedStats.totalRevenue).toLocaleString()}</span>
-                    </div>
-                    <div className="analytics-item">
-                        <span className="analytics-label">Total Lifetime Cuts</span>
-                        <span className="analytics-value">{advancedStats.totalCuts}</span>
-                    </div>
+                    <div className="analytics-item"><span className="analytics-label">Total Revenue</span><span className="analytics-value">₱{parseInt(advancedStats.totalRevenue).toLocaleString()}</span></div>
+                    <div className="analytics-item"><span className="analytics-label">Total Cuts</span><span className="analytics-value">{advancedStats.totalCuts}</span></div>
                 </div>
-
-                <div className="analytics-grid" style={{marginTop:'20px'}}>
-                     <div className="card" style={{padding:'15px'}}>
-                        <h3 style={{marginTop:0, fontSize:'1rem'}}>Top Earning Barbers</h3>
-                        <ul style={{listStyle:'none', padding:0}}>
-                            {advancedStats.barberStats.map((b, i) => (
-                                <li key={i} style={{display:'flex', justifyContent:'space-between', borderBottom:'1px solid var(--border-color)', padding:'8px 0'}}>
-                                    <span>{b.full_name}</span>
-                                    <strong>₱{b.total_earned.toLocaleString()}</strong>
-                                </li>
-                            ))}
-                        </ul>
-                     </div>
-                     <div className="card" style={{padding:'15px'}}>
-                        <h3 style={{marginTop:0, fontSize:'1rem'}}>Most Popular Services</h3>
-                        <ul style={{listStyle:'none', padding:0}}>
-                            {advancedStats.serviceStats.map((s, i) => (
-                                <li key={i} style={{display:'flex', justifyContent:'space-between', borderBottom:'1px solid var(--border-color)', padding:'8px 0'}}>
-                                    <span>{s.name}</span>
-                                    <strong>{s.usage_count} cuts</strong>
-                                </li>
-                            ))}
-                        </ul>
-                     </div>
-                </div>
-                
                 <div className="card" style={{marginTop:'20px', padding:'20px'}}>
                      <h3 style={{marginTop:0}}>Revenue Trend (7 Days)</h3>
-                     <div style={{height:'250px'}}>
-                        <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false }} />
-                     </div>
+                     <div style={{height:'250px'}}><Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
                 </div>
             </div>
         );
@@ -2864,27 +2894,71 @@ function AdminAppLayout({ session }) {
                 <table style={{width:'100%', borderCollapse:'collapse', color:'var(--text-primary)'}}>
                     <thead>
                         <tr style={{textAlign:'left', borderBottom:'1px solid var(--border-color)'}}>
-                            <th style={{padding:'10px'}}>Name</th>
-                            <th style={{padding:'10px'}}>Username</th>
-                            <th style={{padding:'10px'}}>Role</th>
-                            <th style={{padding:'10px'}}>Action</th>
+                            <th style={{padding:'10px'}}>Name</th><th style={{padding:'10px'}}>Role</th><th style={{padding:'10px'}}>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         {users.map(u => (
                             <tr key={u.id} style={{borderBottom:'1px solid var(--border-color)'}}>
-                                <td style={{padding:'10px'}}>{u.full_name}</td>
-                                <td style={{padding:'10px'}}>{u.username}</td>
-                                <td style={{padding:'10px'}}>{u.role}</td>
-                                <td style={{padding:'10px'}}>
-                                    {u.role !== 'admin' && (
-                                        <button onClick={() => handleDeleteUser(u.id)} className="btn btn-danger" style={{fontSize:'0.8rem', padding:'5px 10px'}}>Delete</button>
-                                    )}
-                                </td>
+                                <td style={{padding:'10px'}}>{u.full_name}</td><td style={{padding:'10px'}}>{u.role}</td>
+                                <td style={{padding:'10px'}}>{u.role !== 'admin' && <button onClick={() => handleDeleteUser(u.id)} className="btn btn-danger" style={{fontSize:'0.8rem'}}>Delete</button>}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    );
+
+    // --- NEW: MENU VIEW COMPONENT ---
+    const MenuView = () => (
+        <div className="card">
+            <div className="card-header">
+                <h2>{isEditingService ? 'Edit Service' : 'Add New Service'}</h2>
+            </div>
+            <div className="card-body">
+                {/* Add/Edit Form */}
+                <form onSubmit={handleSaveService} style={{display:'grid', gap:'10px', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', marginBottom:'20px', paddingBottom:'20px', borderBottom:'1px solid var(--border-color)'}}>
+                    <div className="form-group">
+                        <label>Service Name</label>
+                        <input name="serviceName" defaultValue={isEditingService?.name || ''} required placeholder="e.g. Haircut" />
+                    </div>
+                    <div className="form-group">
+                        <label>Duration (mins)</label>
+                        <input name="serviceDuration" type="number" defaultValue={isEditingService?.duration_minutes || 30} required />
+                    </div>
+                    <div className="form-group">
+                        <label>Price (₱)</label>
+                        <input name="servicePrice" type="number" defaultValue={isEditingService?.price_php || 150} required />
+                    </div>
+                    <div style={{display:'flex', alignItems:'end', gap:'10px'}}>
+                        <button type="submit" className="btn btn-primary btn-full-width">
+                            {isEditingService ? 'Update Service' : 'Add Service'}
+                        </button>
+                        {isEditingService && (
+                            <button type="button" onClick={() => setIsEditingService(null)} className="btn btn-secondary">
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                </form>
+
+                {/* Service List */}
+                <h3 style={{marginTop:0}}>Current Menu</h3>
+                <ul className="queue-list">
+                    {services.map(s => (
+                        <li key={s.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                            <div>
+                                <strong>{s.name}</strong> <span style={{color:'var(--text-secondary)'}}>({s.duration_minutes}m)</span>
+                                <div style={{fontWeight:'bold', color:'var(--primary-orange)'}}>₱{s.price_php}</div>
+                            </div>
+                            <div style={{display:'flex', gap:'10px'}}>
+                                <button onClick={() => setIsEditingService(s)} className="btn btn-secondary" style={{padding:'5px 10px'}}>Edit</button>
+                                <button onClick={() => handleDeleteService(s.id)} className="btn btn-danger" style={{padding:'5px 10px'}}>Delete</button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
             </div>
         </div>
     );
@@ -2906,11 +2980,11 @@ function AdminAppLayout({ session }) {
                 </div>
             )}
 
-            {/* --- TABS --- */}
             <div className="customer-view-tabs card-header" style={{ justifyContent: 'center', background: 'var(--surface-color)', marginTop: '10px', flexWrap: 'wrap' }}>
                 <button className={activeTab === 'live' ? 'active' : ''} onClick={() => setActiveTab('live')}>⚡ Live Shop</button>
                 <button className={activeTab === 'stats' ? 'active' : ''} onClick={() => setActiveTab('stats')}>📊 Analytics</button>
                 <button className={activeTab === 'users' ? 'active' : ''} onClick={() => setActiveTab('users')}>👥 Users</button>
+                <button className={activeTab === 'menu' ? 'active' : ''} onClick={() => setActiveTab('menu')}>✂️ Menu</button>
             </div>
 
             <main className="main-content">
@@ -2918,6 +2992,7 @@ function AdminAppLayout({ session }) {
                     {activeTab === 'live' && <LiveShopView />}
                     {activeTab === 'stats' && <StatsView />}
                     {activeTab === 'users' && <UsersView />}
+                    {activeTab === 'menu' && <MenuView />}
                 </div>
             </main>
         </div>
