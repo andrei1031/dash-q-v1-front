@@ -880,21 +880,21 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
 
     // --- WebSocket Connection Effect for Barber ---
     // --- WebSocket Connection Effect for Barber (NEW) ---
+    // 1. CONNECTION EFFECT (Run once on mount)
     useEffect(() => {
         if (!session?.user?.id) return;
 
+        // Connect only if not already connected
         if (!socketRef.current) {
             console.log("[Barber] Connecting WebSocket...");
             socketRef.current = io(SOCKET_URL);
-            const socket = socketRef.current;
             
-            socket.on('connect', () => { 
+            socketRef.current.on('connect', () => { 
                 console.log(`[Barber] WebSocket connected.`);
-                // Re-register on connect/reconnect
-                socket.emit('register', session.user.id); 
+                socketRef.current.emit('register', session.user.id); 
             });
             
-            socket.on('disconnect', (reason) => { 
+            socketRef.current.on('disconnect', (reason) => { 
                 console.log("[Barber] WebSocket disconnected:", reason); 
             });
         }
@@ -939,7 +939,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         socket.on('chat message', messageListener);
 
         return () => { socket.off('chat message', messageListener); };
-    }, [openChatCustomerId]); // <-- NEW DEPENDENCIES
+    }, [openChatCustomerId]);
 
 
     // This new useEffect handles the *main* socket cleanup
@@ -2779,8 +2779,20 @@ function AdminAppLayout({ session }) {
     }, []);
 
     const fetchServices = useCallback(async () => {
-        try { const res = await axios.get(`${API_URL}/services`); setServices(res.data); } catch (e) { console.error(e); }
+        try { 
+            // Use the ADMIN endpoint to get active AND archived services
+            const res = await axios.get(`${API_URL}/admin/services`); 
+            setServices(res.data); 
+        } catch (e) { console.error(e); }
     }, []);
+
+    const handleRestoreService = async (id) => {
+        try {
+            await axios.put(`${API_URL}/admin/services/${id}/restore`, { userId: session.user.id });
+            fetchServices();
+            alert("Service restored.");
+        } catch (e) { alert("Restore failed."); }
+    };
 
     // --- EFFECTS ---
     useEffect(() => {
@@ -2974,11 +2986,22 @@ function AdminAppLayout({ session }) {
                 <h3 style={{marginTop:0}}>Current Menu</h3>
                 <ul className="queue-list">
                     {services.map(s => (
-                        <li key={s.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                            <div><strong>{s.name}</strong> <span style={{color:'var(--text-secondary)'}}>({s.duration_minutes}m)</span><div style={{fontWeight:'bold', color:'var(--primary-orange)'}}>₱{s.price_php}</div></div>
+                        <li key={s.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', opacity: s.is_active ? 1 : 0.5}}>
+                            <div>
+                                <strong>{s.name}</strong> 
+                                <span style={{color:'var(--text-secondary)'}}> ({s.duration_minutes}m)</span>
+                                {!s.is_active && <span style={{marginLeft:'8px', color:'var(--error-color)', fontWeight:'bold', fontSize:'0.7rem'}}>ARCHIVED</span>}
+                                <div style={{fontWeight:'bold', color:'var(--primary-orange)'}}>₱{s.price_php}</div>
+                            </div>
                             <div style={{display:'flex', gap:'10px'}}>
-                                <button onClick={() => setIsEditingService(s)} className="btn btn-secondary" style={{padding:'5px 10px'}}>Edit</button>
-                                <button onClick={() => handleDeleteService(s.id)} className="btn btn-danger" style={{padding:'5px 10px'}}>Delete</button>
+                                {s.is_active ? (
+                                    <>
+                                        <button onClick={() => setIsEditingService(s)} className="btn btn-secondary" style={{padding:'5px 10px'}}>Edit</button>
+                                        <button onClick={() => handleDeleteService(s.id)} className="btn btn-danger" style={{padding:'5px 10px'}}>Delete</button>
+                                    </>
+                                ) : (
+                                    <button onClick={() => handleRestoreService(s.id)} className="btn btn-success" style={{padding:'5px 10px'}}>Restore</button>
+                                )}
                             </div>
                         </li>
                     ))}
