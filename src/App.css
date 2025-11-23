@@ -1881,3 +1881,144 @@ button .spinner {
   background: rgba(255, 59, 48, 0.2);
   color: var(--error-color);
 }
+/* --- TABLET & MOBILE (Max Width 768px) --- */
+@media (max-width: 768px) {
+  /* Layout Adjustments */
+  .container {
+    padding: 0 15px; /* Reduce side padding */
+    margin-top: 15px;
+  }
+
+  /* Header Optimization */
+  .app-header {
+    padding: 10px 15px;
+  }
+  .app-header h1 {
+    font-size: 1.1rem; /* Smaller title */
+  }
+  .header-actions {
+    gap: 10px;
+  }
+  .btn-icon {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 4px;
+  }
+
+  /* Landing Page scaling */
+  .hero-title {
+    font-size: 2.5rem;
+  }
+  .hero-subtitle {
+    font-size: 1rem;
+    padding: 0 10px;
+  }
+  .feature-card {
+    padding: 20px;
+  }
+
+  /* Queue List Items - Stack content if needed */
+  .queue-list li {
+    flex-wrap: wrap; 
+    gap: 10px;
+  }
+  .queue-list li > button {
+    margin-left: auto; /* Push action button to right */
+  }
+
+  /* Barber Dashboard Grids */
+  .current-serving-display {
+    gap: 10px;
+  }
+  .serving-item {
+    padding: 10px;
+  }
+  .serving-item strong {
+    font-size: 1.4rem;
+  }
+  
+  /* Analytics Grid - Force 2 columns max */
+  .analytics-grid, 
+  .analytics-grid:not(.carbon-grid) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* --- MOBILE PHONES (Max Width 480px) --- */
+@media (max-width: 480px) {
+  /* Typography */
+  body {
+    font-size: 14px; /* Slightly smaller base text */
+  }
+  h2 {
+    font-size: 1.3rem;
+  }
+
+  /* Hero Section */
+  .hero-title {
+    font-size: 2rem;
+  }
+  .hero-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+  .btn-hero {
+    width: 100%;
+  }
+
+  /* Cards & Modals */
+  .card-header, .card-body, .card-footer {
+    padding: 15px;
+  }
+  
+  .modal-content {
+    width: 95vw; /* Almost full width */
+    max-width: none; 
+  }
+  .modal-body {
+    padding: 20px;
+  }
+
+  /* Forms */
+  .form-group input, 
+  .form-group select {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    padding: 12px;
+  }
+
+  /* Barber Selection Grid - 2 columns on small screens */
+  .barber-selection-list {
+    grid-template-columns: 1fr 1fr; 
+  }
+  .barber-card {
+    min-height: 100px;
+    padding: 10px 5px;
+  }
+
+  /* EWT Container - Stack it */
+  .ewt-container {
+    grid-template-columns: 1fr; 
+    gap: 8px;
+  }
+
+  /* Action Buttons (Barber Dash) */
+  .action-buttons-container {
+    grid-template-columns: 1fr; /* Stack buttons vertically */
+  }
+
+  /* Chat Window */
+  .chat-window {
+    height: 300px; /* Shorter on mobile */
+  }
+  .message-bubble {
+    max-width: 85%;
+  }
+
+  /* Admin Tables - Horizontal Scroll */
+  .card-body {
+    overflow-x: auto; /* Allow tables to scroll horizontally */
+  }
+  table {
+    min-width: 500px; /* Force minimum width to trigger scroll */
+  }
+}
