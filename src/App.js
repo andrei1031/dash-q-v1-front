@@ -1627,6 +1627,7 @@ function CustomerView({ session }) {
     const [availableSlots, setAvailableSlots] = useState([]);
     const [selectedSlot, setSelectedSlot] = useState(null);
     const [isReportModalOpen, setReportModalOpen] = useState(false);
+    const [freeBarber, setFreeBarber] = useState(null);
 
 
     const fetchLoyaltyHistory = useCallback(async (userId) => {
@@ -2012,6 +2013,80 @@ function CustomerView({ session }) {
     };
 
     // --- Effects ---
+
+    useEffect(() => {
+    // Only run if we are already in a queue and waiting
+    if (!myQueueEntryId || !joinedBarberId) return;
+
+        const checkOpportunities = async () => {
+            try {
+                // 1. Fetch all public barber statuses
+                const res = await axios.get(`${API_URL}/barbers`); //
+                const allBarbers = res.data;
+
+                // 2. Find a barber who is Active, Available, AND has a Rating > 4.0 (optional quality filter)
+                // Note: You might need to fetch their specific queue length if your /api/barbers doesn't return it.
+                // For now, let's assume you add a small check or rely on 'is_available'
+                
+                const currentBarberIdStr = joinedBarberId.toString();
+                
+                // Find someone else who is available
+                const opportunity = allBarbers.find(b => 
+                    b.id.toString() !== currentBarberIdStr && // Not my current barber
+                    b.is_active && 
+                    b.is_available // They are marked Online
+                );
+
+                // If found, set them as an opportunity
+                if (opportunity) {
+                    setFreeBarber(opportunity);
+                } else {
+                    setFreeBarber(null);
+                }
+            } catch (e) {
+                console.error("Opportunity check failed", e);
+            }
+        };
+
+        const interval = setInterval(checkOpportunities, 10000); // Check every 10s
+        return () => clearInterval(interval);
+    }, [myQueueEntryId, joinedBarberId]);
+
+    // FUNCTION: Handle the switch
+    const handleSelfTransfer = async () => {
+        if (!freeBarber) return;
+        if (!window.confirm(`Switch to ${freeBarber.full_name}? You will lose your spot with your current barber.`)) return;
+
+        setIsLoading(true);
+        try {
+            // OPTION A: The Clean Way (Requires new endpoint in server.js)
+            // await axios.post(`${API_URL}/queue/self-transfer`, { queueId: myQueueEntryId, targetBarberId: freeBarber.id });
+            
+            // OPTION B: The "Hack" Way (Leave & Rejoin using existing endpoints)
+            // 1. Leave current queue
+            await axios.delete(`${API_URL}/queue/${myQueueEntryId}`, { data: { userId: session.user.id } }); //
+            
+            // 2. Join new barber (Re-using your join logic)
+            // Note: You'd need to refactor handleJoinQueue to accept params, or just manually call axios.post('/api/queue'...) here
+            await axios.post(`${API_URL}/queue`, {
+                customer_name: customerName,
+                customer_email: customerEmail,
+                barber_id: freeBarber.id,
+                service_id: selectedServiceId || 1, // You might need to save their service ID in localstorage to preserve it
+                user_id: session.user.id,
+                is_vip: false // Reset VIP on transfer?
+            });
+
+            // 3. Force Reload / Reset State
+            alert(`Switched to ${freeBarber.full_name}!`);
+            window.location.reload(); // Simplest way to reset state for now
+            
+        } catch (e) {
+            alert("Failed to switch.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
     // RECOVERY SYSTEM: Restore session if LocalStorage was wiped but DB entry exists
     useEffect(() => {
         const restoreSession = async () => {
@@ -2804,6 +2879,43 @@ return (
                         </>
                     ) : (<p><strong>✅ Confirmed!</strong> The barber knows you are coming. Please enter the shop now.</p>))}
                 </div>)}
+                {/* OPPORTUNITY BANNER */}
+                {freeBarber && (
+                    <div style={{
+                        background: 'linear-gradient(45deg, #ff9500, #ffcc00)',
+                        color: 'black',
+                        padding: '15px',
+                        borderRadius: '8px',
+                        marginBottom: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                        boxShadow: '0 4px 15px rgba(255, 149, 0, 0.3)',
+                        animation: 'pulse-border 2s infinite' // Reuse your existing animation
+                    }}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px'}}>
+                            <span style={{fontSize: '1.5rem'}}>⚡</span>
+                            <h3 style={{margin: 0, fontSize: '1.1rem', fontWeight: '800'}}>Faster Seat Available!</h3>
+                        </div>
+                        <p style={{margin: '0 0 10px 0', fontSize: '0.9rem'}}>
+                            <strong>{freeBarber.full_name}</strong> is free right now.
+                        </p>
+                        <button 
+                            onClick={handleSelfTransfer}
+                            className="btn"
+                            style={{
+                                background: 'black',
+                                color: '#ff9500',
+                                border: 'none',
+                                fontWeight: 'bold',
+                                width: '100%'
+                            }}
+                        >
+                            Switch to {freeBarber.full_name}
+                        </button>
+                    </div>
+                )}
                 <h2>Live Queue for {joinedBarberId ? currentBarberName : '...'}</h2>
                 <div className="queue-number-display">Your Queue Number is: <strong>#{myQueueEntryId}</strong></div>
                 <div className="current-serving-display">
@@ -2853,10 +2965,10 @@ return (
                                         <button 
                                             onClick={() => setReportModalOpen(true)} 
                                             className="btn btn-danger btn-icon" 
-                                            title="Report Barber"
+                                            title="Report Issue / Help"
                                             style={{padding: '2px', width: '24px', height: '24px'}} // Make it small
                                         >
-                                            ⚠️
+                                            ❓
                                         </button>
                                     </div>
 
