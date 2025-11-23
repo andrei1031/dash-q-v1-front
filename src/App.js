@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import io from 'socket.io-client';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,7 +26,6 @@ const playSound = (audioElement) => {
 
 
 // --- Global Constants ---
-const SOCKET_URL = 'https://dash-q-backend.onrender.com';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 const API_URL = 'https://dash-q-backend.onrender.com/api' || 'http://localhost:3000';
 
@@ -626,7 +624,7 @@ function AvailabilityToggle({ barberProfile, session, onAvailabilityChange }) {
 
 // --- AnalyticsDashboard (Displays Barber Stats) ---
 function AnalyticsDashboard({ barberId, refreshSignal }) {
-    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0, totalCutsAllTime: 0 });
+    const [analytics, setAnalytics] = useState({ totalEarningsToday: 0, totalCutsToday: 0, totalEarningsWeek: 0, totalCutsWeek: 0, dailyData: [], busiestDay: { name: 'N/A', earnings: 0 }, currentQueueSize: 0, totalCutsAllTime: 0, carbonSavedTotal: 0 });
     const [error, setError] = useState('');
     const [showEarnings, setShowEarnings] = useState(true);
     const [feedback, setFeedback] = useState([]);
@@ -696,9 +694,8 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
     
     const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : [];
     const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] };
-    const carbonSavedToday = 5;
-    const carbonSavedWeekly = (dailyDataSafe.length) * 5;
-
+    const carbonSavedTotal = analytics.carbonSavedTotal || 0;
+    const carbonSavedToday = analytics.totalCutsToday > 0 ? 5 : 0;  
     const renderSkeletons = () => (
         <>
             <div className="analytics-grid">
@@ -755,8 +752,18 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
             <div className="carbon-footprint-section">
                 <h3 className="analytics-subtitle">Carbon Footprint Reduced</h3>
                 <div className="analytics-grid carbon-grid">
-                    <div className="analytics-item"><span className="analytics-label">Today</span><span className="analytics-value carbon">{carbonSavedToday}g <span className="carbon-unit">(gCO2e)</span></span></div>
-                    <div className="analytics-item"><span className="analytics-label">Last 7 Days</span><span className="analytics-value carbon">{carbonSavedWeekly}g <span className="carbon-unit">(gCO2e)</span></span></div>
+                    <div className="analytics-item">
+                        <span className="analytics-label">Today</span>
+                        <span className="analytics-value carbon">
+                            {carbonSavedToday}g <span className="carbon-unit">(Active)</span>
+                        </span>
+                    </div>
+                    <div className="analytics-item">
+                        <span className="analytics-label">All Time</span>
+                        <span className="analytics-value carbon">
+                            {carbonSavedTotal}g <span className="carbon-unit">(Total)</span>
+                        </span>
+                    </div>
                 </div>
             </div>
             {showEarnings && (
@@ -813,7 +820,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     const [queueDetails, setQueueDetails] = useState({ waiting: [], inProgress: null, upNext: null });
     const [error, setError] = useState('');
     const [fetchError, setFetchError] = useState('');
-    const socketRef = useRef(null);
     const [chatMessages, setChatMessages] = useState({});
     const [openChatCustomerId, setOpenChatCustomerId] = useState(null);
     const [openChatQueueId, setOpenChatQueueId] = useState(null);
@@ -878,82 +884,63 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         }
     }, [barberId]);
 
-    // --- WebSocket Connection Effect for Barber ---
-    // --- WebSocket Connection Effect for Barber (NEW) ---
-    // 1. CONNECTION EFFECT (Run once on mount)
+    // --- REPLACED SOCKET.IO WITH SUPABASE REALTIME ---
     useEffect(() => {
-        if (!session?.user?.id) return;
+        if (!openChatQueueId) return;
 
-        // Connect only if not already connected
-        if (!socketRef.current) {
-            console.log("[Barber] Connecting WebSocket...");
-            socketRef.current = io(SOCKET_URL);
-            
-            socketRef.current.on('connect', () => { 
-                console.log(`[Barber] WebSocket connected.`);
-                socketRef.current.emit('register', session.user.id); 
+        console.log(`[Barber] Subscribing to chat for Queue #${openChatQueueId}`);
+        
+        const chatChannel = supabase.channel(`barber_chat_${openChatQueueId}`)
+            .on(
+                'postgres_changes', 
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'chat_messages', 
+                    filter: `queue_entry_id=eq.${openChatQueueId}` 
+                }, 
+                (payload) => {
+                    const newMsg = payload.new;
+                    // Update the specific customer's chat history
+                    setChatMessages(prev => {
+                        const customerId = openChatCustomerId; // Current open chat
+                        const msgs = prev[customerId] || [];
+                        return { ...prev, [customerId]: [...msgs, { senderId: newMsg.sender_id, message: newMsg.message }] };
+                    });
+
+                    if (newMsg.sender_id !== session.user.id) {
+                        playSound(messageNotificationSound);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(chatChannel);
+        };
+    }, [openChatQueueId, openChatCustomerId, session]); // Re-subscribes when you switch customers
+
+    // --- UPDATE SEND FUNCTION ---
+    const sendBarberMessage = async (recipientId, messageText) => {
+        if (!messageText.trim() || !openChatQueueId) return;
+
+        // Optimistic UI Update
+        setChatMessages(prev => {
+            const msgs = prev[recipientId] || [];
+            return { ...prev, [recipientId]: [...msgs, { senderId: session.user.id, message: messageText }] };
+        });
+
+        try {
+            await axios.post(`${API_URL}/chat/send`, {
+                senderId: session.user.id,
+                queueId: openChatQueueId,
+                message: messageText
             });
-            
-            socketRef.current.on('disconnect', (reason) => { 
-                console.log("[Barber] WebSocket disconnected:", reason); 
-            });
+        } catch (error) {
+            console.error("Failed to send:", error);
+            // Handle error (toast notification?)
         }
-
-        // Cleanup on unmount ONLY
-        return () => {
-            if (socketRef.current) {
-                console.log("[Barber] Unmounting & Disconnecting Socket.");
-                socketRef.current.disconnect();
-                socketRef.current = null;
-            }
-        };
-    }, [session]);
-
-    // 2. LISTENER EFFECT (Runs when chat target changes)
-    useEffect(() => {
-        const socket = socketRef.current;
-        if (!socket) return;
-
-        const messageListener = (incomingMessage) => {
-            playSound(messageNotificationSound);
-            
-            // Update chat history
-            setChatMessages(prev => {
-                const senderId = incomingMessage.senderId;
-                const msgs = prev[senderId] || [];
-                return { ...prev, [senderId]: [...msgs, incomingMessage] };
-            });
-
-            // Mark unread if chat is NOT open for this sender
-            if (incomingMessage.senderId !== openChatCustomerId) {
-                setUnreadMessages(prev => {
-                    const newState = { ...prev, [incomingMessage.senderId]: true };
-                    localStorage.setItem('barberUnreadMessages', JSON.stringify(newState));
-                    return newState;
-                });
-            }
-        };
-
-        // Clean old listener to prevent duplicates, then add new one
-        socket.off('chat message');
-        socket.on('chat message', messageListener);
-
-        return () => { socket.off('chat message', messageListener); };
-    }, [openChatCustomerId]);
-
-
-    // This new useEffect handles the *main* socket cleanup
-    useEffect(() => {
-         // This runs only when the component unmounts
-        return () => {
-            if (socketRef.current) {
-                console.log("[Barber] Cleaning up WebSocket connection."); 
-                socketRef.current.disconnect(); 
-                socketRef.current = null;
-            }
-        };
-    }, []); // <-- Empty dependency array
-
+    };
     // UseEffect for initial load and realtime subscription
     useEffect(() => {
         if (!barberId || !supabase?.channel) return;
@@ -1117,18 +1104,6 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         }
     };
 
-    const sendBarberMessage = (recipientId, messageText) => {
-        const queueId = openChatQueueId;
-        if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
-            const messageData = { senderId: session.user.id, recipientId, message: messageText, queueId };
-            socketRef.current.emit('chat message', messageData);
-            setChatMessages(prev => {
-                const customerId = recipientId;
-                const existingMessages = prev[customerId] || [];
-                return { ...prev, [customerId]: [...existingMessages, { senderId: session.user.id, message: messageText }] };
-            });
-        } else { console.warn("Cannot send barber msg, socket disconnected or queueId missing."); }
-    };
 
     const openChat = (customer) => {
         const customerUserId = customer?.profiles?.id;
@@ -1544,7 +1519,6 @@ function CustomerView({ session }) {
     const [isOnCooldown, setIsOnCooldown] = useState(false);
     const locationWatchId = useRef(null);
     const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
-    const socketRef = useRef(null);
     const liveQueueRef = useRef([]);
     const [selectedFile, setSelectedFile] = useState(null);
     const [referenceImageUrl, setReferenceImageUrl] = useState('');
@@ -1600,15 +1574,6 @@ function CustomerView({ session }) {
     const handleCloseInstructions = () => {
         localStorage.setItem('hasSeenInstructions_v1', 'true');
         setIsInstructionsModalOpen(false);
-    };
-    const sendCustomerMessage = (recipientId, messageText) => {
-        const queueId = myQueueEntryId;
-
-        if (messageText.trim() && socketRef.current?.connected && session?.user?.id && queueId) {
-            const messageData = { senderId: session.user.id, recipientId, message: messageText, queueId };
-            socketRef.current.emit('chat message', messageData);
-            setChatMessagesFromBarber(prev => [...prev, { senderId: session.user.id, message: messageText }]);
-        } else { console.warn("[Customer] Cannot send message (socket disconnected or missing IDs)."); setMessage("Chat disconnected."); }
     };
     const fetchPublicQueue = useCallback(async (barberId) => {
         if (!barberId) {
@@ -2144,57 +2109,77 @@ function CustomerView({ session }) {
         }
     }, [selectedBarberId]);
 
-    useEffect(() => { // WebSocket Connection and History Fetch
-        if (session?.user?.id && joinedBarberId && currentChatTargetBarberUserId && myQueueEntryId) {
+    // --- REPLACED SOCKET.IO WITH SUPABASE REALTIME ---
+    useEffect(() => { 
+        if (!session?.user?.id || !joinedBarberId || !myQueueEntryId) return;
 
-            fetchChatHistory(myQueueEntryId);
+        // 1. Initial Load
+        fetchChatHistory(myQueueEntryId);
 
-            if (!socketRef.current) {
-                console.log("[Customer] Connecting WebSocket...");
-                socketRef.current = io(SOCKET_URL);
-                const socket = socketRef.current;
-                const customerUserId = session.user.id;
+        // 2. Subscribe to NEW messages in the database
+        console.log("[Customer] Subscribing to Chat via Supabase...");
+        const chatChannel = supabase.channel(`chat_${myQueueEntryId}`)
+            .on(
+                'postgres_changes', 
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'chat_messages', 
+                    filter: `queue_entry_id=eq.${myQueueEntryId}` 
+                }, 
+                (payload) => {
+                    const newMsg = payload.new;
+                    console.log("[Customer] New message received:", newMsg);
+                    
+                    // Only add if it's NOT from me (to avoid duplicates, though React handles keys well)
+                    // OR add everything and let state management handle it.
+                    // Simple approach: Add everything.
+                    setChatMessagesFromBarber(prev => [...prev, { 
+                        senderId: newMsg.sender_id, 
+                        message: newMsg.message 
+                    }]);
 
-                socket.on('connect', () => {
-                    console.log(`[Customer] WebSocket connected.`);
-                    socket.emit('register', customerUserId);
-                    socket.emit('registerQueueEntry', myQueueEntryId);
-                });
-
-                const messageListener = (incomingMessage) => {
-                    if (incomingMessage.senderId === currentChatTargetBarberUserId) {
+                    // Notify if it's from the barber
+                    if (newMsg.sender_id !== session.user.id) {
                         playSound(messageNotificationSound);
-
-                        setChatMessagesFromBarber(prev => [...prev, incomingMessage]);
-                        setIsChatOpen(currentIsOpen => {
-                            if (!currentIsOpen) { 
-                                setHasUnreadFromBarber(true); 
+                        setIsChatOpen(current => {
+                            if (!current) {
+                                setHasUnreadFromBarber(true);
                                 localStorage.setItem('hasUnreadFromBarber', 'true');
                             }
-                            return currentIsOpen;
+                            return current;
                         });
                     }
-                };
-                socket.on('chat message', messageListener);
-                socket.on('connect_error', (err) => { console.error("[Customer] WebSocket Connection Error:", err); });
-                socket.on('disconnect', (reason) => { console.log("[Customer] WebSocket disconnected:", reason); socketRef.current = null; });
-            }
-        } else {
-            if (socketRef.current) {
-                console.log("[Customer] Disconnecting WebSocket due to state change.");
-                socketRef.current.disconnect();
-                socketRef.current = null;
-            }
-        }
+                }
+            )
+            .subscribe();
 
         return () => {
-            if (socketRef.current) {
-                socketRef.current.disconnect();
-                socketRef.current = null;
-            }
+            supabase.removeChannel(chatChannel);
         };
-    }, [session, joinedBarberId, myQueueEntryId, currentChatTargetBarberUserId, fetchChatHistory]);
+    }, [session, joinedBarberId, myQueueEntryId, fetchChatHistory]);
 
+    // --- UPDATE SEND FUNCTION ---
+    const sendCustomerMessage = async (recipientId, messageText) => {
+        if (!messageText.trim()) return;
+        
+        // Optimistic UI Update (Show immediately)
+        const tempMsg = { senderId: session.user.id, message: messageText };
+        setChatMessagesFromBarber(prev => [...prev, tempMsg]);
+
+        try {
+            await axios.post(`${API_URL}/chat/send`, {
+                senderId: session.user.id,
+                queueId: myQueueEntryId,
+                message: messageText
+            });
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            setMessage("Failed to send message. Profanity?");
+            // Rollback UI if needed, or just show error
+        }
+    };
+    
     useEffect(() => { // EWT Preview
         if (selectedBarberId) {
             console.log(`[EWT Preview] Fetching queue for barber ${selectedBarberId}`);
@@ -3375,6 +3360,68 @@ function CustomerAppLayout({ session }) {
     );
 }
 
+function LandingPage({ onGetStarted, onLogin }) {
+    const { theme, toggleTheme } = useTheme(); // Assuming you moved ThemeProvider higher or pass props
+
+    return (
+        <div className="landing-container">
+            <nav className="landing-nav">
+                <div className="landing-logo">
+                    <span style={{fontSize: '2rem'}}>⚡</span> Dash-Q
+                </div>
+                <div style={{display: 'flex', gap: '15px', alignItems: 'center'}}>
+                    <ThemeToggleButton />
+                    <button onClick={onLogin} className="btn btn-link" style={{color: 'var(--text-primary)', fontWeight: 600}}>
+                        Login
+                    </button>
+                </div>
+            </nav>
+
+            <header className="hero-section">
+                <h1 className="hero-title">
+                    Queue Smarter,<br /> <span>Look Sharper.</span>
+                </h1>
+                <p className="hero-subtitle">
+                    Skip the long wait. Join the live queue from anywhere, book appointments, and get notified when it's your turn.
+                </p>
+                <div className="hero-buttons">
+                    <button onClick={onGetStarted} className="btn btn-primary btn-hero">
+                        Get Started Now
+                    </button>
+                    <button onClick={onLogin} className="btn btn-secondary btn-hero">
+                        Barber Login
+                    </button>
+                </div>
+            </header>
+
+            <section className="features-section">
+                <div className="features-grid">
+                    <div className="feature-card">
+                        <div className="feature-icon"><IconNext /></div>
+                        <h3>Live Queue Tracking</h3>
+                        <p>See exactly how many people are ahead of you and your estimated wait time.</p>
+                    </div>
+                    <div className="feature-card">
+                        <div className="feature-icon"><IconChat /></div>
+                        <h3>Direct Chat</h3>
+                        <p>Message your barber directly to clarify styles or delays without leaving the app.</p>
+                    </div>
+                    <div className="feature-card">
+                        <div className="feature-icon"><IconCheck /></div>
+                        <h3>Hybrid Booking</h3>
+                        <p>Join the queue now for a quick cut or schedule an appointment for later.</p>
+                    </div>
+                </div>
+            </section>
+
+            <footer className="landing-footer">
+                <p>&copy; 2025 Dash-Q. University of the Cordilleras.</p>
+                <p style={{fontSize: '0.8rem', marginTop: '10px'}}>Developed by Aquino, Galima & Saldivar</p>
+            </footer>
+        </div>
+    );
+}
+
 // ##############################################
 // ##           MAIN APP COMPONENT           ##
 // ##############################################
@@ -3384,6 +3431,9 @@ function App() {
     const [barberProfile, setBarberProfile] = useState(null);
     const [loadingRole, setLoadingRole] = useState(true);
     const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+    
+    // --- NEW STATE: Controls Landing Page visibility ---
+    const [showLanding, setShowLanding] = useState(true); 
 
     // --- OneSignal Setup ---
     useEffect(() => {
@@ -3398,11 +3448,9 @@ function App() {
                 });
             });
         }
-        return () => { /* Cleanup if needed */ };
     }, []);
 
-   // --- Helper to Check Role (DEBUG VERSION) ---
-    // --- Helper to Check Role (UPDATED FOR ADMIN) ---
+    // --- Helper to Check Role ---
     const checkUserRole = useCallback(async (user) => {
         if (!user || !user.id) {
             setUserRole('customer');
@@ -3414,31 +3462,24 @@ function App() {
         console.log(`Checking role for user: ${user.id}`);
         setLoadingRole(true);
         try {
-            // STEP 1: Check the 'profiles' table for the explicit role
             const { data: profileData } = await supabase
                 .from('profiles')
                 .select('role')
                 .eq('id', user.id)
                 .single();
             
-            // If the database says 'admin', we stop here and set the role!
             if (profileData && profileData.role === 'admin') {
-                console.log("Role check: ADMIN confirmed.");
                 setUserRole('admin');
                 setBarberProfile(null);
                 setLoadingRole(false);
                 return; 
             }
 
-            // STEP 2: If not admin, check if they are a barber
             const response = await axios.get(`${API_URL}/barber/profile/${user.id}`);
-            console.log("Role check: BARBER confirmed.");
             setUserRole('barber');
             setBarberProfile(response.data);
 
         } catch (error) {
-            // STEP 3: Default to Customer
-            console.log("Role check: Not Admin/Barber. Defaulting to CUSTOMER.");
             setUserRole('customer');
             setBarberProfile(null);
         } finally {
@@ -3446,35 +3487,32 @@ function App() {
         }
     }, []);
 
-    // --- Auth State Change Listener (FIXED TO PREVENT RACE CONDITION) ---
+    // --- Auth Listener ---
     useEffect(() => {
         if (!supabase?.auth) {
-            console.error("Supabase auth not initialized.");
             setLoadingRole(false);
             return;
         }
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-            console.log("Auth State Change Detected:", _event, currentSession);
-
             if (_event === 'PASSWORD_RECOVERY') {
-                console.log("Password recovery event detected!");
                 setIsUpdatingPassword(true);
             }
 
             setSession(currentSession);
 
             if (currentSession?.user) {
-                console.log("Valid user session found, checking role...");
+                // User is logged in, hide landing page immediately
+                setShowLanding(false); 
                 checkUserRole(currentSession.user);
             } else {
-                console.log("No user session. Setting role to customer.");
                 setUserRole('customer');
                 setBarberProfile(null);
                 setLoadingRole(false);
                 setIsUpdatingPassword(false);
+                // Note: We do NOT reset showLanding to true here. 
+                // If they logout, we show AuthForm (Login) by default, unless they refresh.
             }
-
         });
 
         return () => subscription?.unsubscribe();
@@ -3482,16 +3520,53 @@ function App() {
     
     // --- Render Logic ---
     const renderAppContent = () => {
+        // 1. Loading State
         if (loadingRole) return <div className="loading-fullscreen"><Spinner /><span>Loading...</span></div>;
-        if (isUpdatingPassword) return <UpdatePasswordForm onPasswordUpdated={() => setIsUpdatingPassword(false)} />;
-        if (!session) return <AuthForm />;
         
-        if (userRole === 'admin') {
-            return <AdminAppLayout session={session} />;
+        // 2. Password Reset View
+        if (isUpdatingPassword) return <UpdatePasswordForm onPasswordUpdated={() => setIsUpdatingPassword(false)} />;
+        
+        // 3. Authenticated View (Dashboard)
+        if (session) {
+            if (userRole === 'admin') return <AdminAppLayout session={session} />;
+            if (userRole === 'barber' && barberProfile) return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />;
+            return <CustomerAppLayout session={session} />;
         }
 
-        if (userRole === 'barber' && barberProfile) return <BarberAppLayout session={session} barberProfile={barberProfile} setBarberProfile={setBarberProfile} />;
-        return <CustomerAppLayout session={session} />;
+        // 4. Unauthenticated Views
+        if (showLanding) {
+            return <LandingPage onGetStarted={() => setShowLanding(false)} onLogin={() => setShowLanding(false)} />;
+        }
+
+        // 5. Login/Signup Form (Unified Design)
+        return (
+            <div className="auth-page-container">
+                {/* Navigation Bar (Top Left) */}
+                <nav className="auth-nav">
+                    <button 
+                        onClick={() => setShowLanding(true)} 
+                        className="btn btn-link btn-back-home"
+                    >
+                        ← Back to Home
+                    </button>
+                </nav>
+                
+                {/* Centered Content */}
+                <div className="auth-content">
+                    <AuthForm />
+                    
+                    {/* Optional: Small branding footer under the card */}
+                    <p style={{
+                        marginTop: '20px', 
+                        color: 'var(--text-secondary)', 
+                        fontSize: '0.85rem', 
+                        opacity: 0.7
+                    }}>
+                        Dash-Q &copy; 2025
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     return (

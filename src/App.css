@@ -1881,6 +1881,234 @@ button .spinner {
   background: rgba(255, 59, 48, 0.2);
   color: var(--error-color);
 }
+<<<<<<< HEAD
+=======
+/* ===================================================================
+   LANDING PAGE STYLES (NEW)
+   =================================================================== */
+
+.landing-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+/* Navigation */
+.landing-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  background: transparent;
+  position: absolute;
+  width: 100%;
+  top: 0;
+  z-index: 10;
+}
+
+.landing-logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--primary-orange);
+  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Hero Section */
+.hero-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 120px 20px 60px;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 149, 0, 0.15), transparent 60%);
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 20px;
+  background: linear-gradient(to right, #fff, #aaa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  max-width: 800px;
+}
+
+.hero-title span {
+  background: linear-gradient(to right, var(--primary-orange), var(--primary-orange-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin-bottom: 40px;
+  line-height: 1.6;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 15px;
+}
+
+.btn-hero {
+  padding: 15px 30px;
+  font-size: 1.1rem;
+  border-radius: 30px;
+}
+
+/* Features Grid */
+.features-section {
+  padding: 60px 20px;
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  padding: 25px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--primary-orange);
+}
+
+.feature-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--primary-orange);
+  margin-bottom: 15px;
+}
+
+.feature-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+}
+
+.feature-card p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Footer */
+.landing-footer {
+  padding: 40px 20px;
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Responsive Tweaks */
+@media (max-width: 768px) {
+  .landing-nav { padding: 20px; }
+  .hero-title { font-size: 2.5rem; }
+  .hero-buttons { flex-direction: column; width: 100%; max-width: 300px; }
+}
+
+/* Light Mode Overrides */
+:root.light-mode .hero-title {
+  background: linear-gradient(to right, #000, #555);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:root.light-mode .hero-section {
+  background: radial-gradient(circle at 50% 30%, rgba(255, 149, 0, 0.1), transparent 60%);
+}
+/* ===================================================================
+   AUTH PAGE STYLES (UNIFIED WITH LANDING PAGE)
+   =================================================================== */
+
+.auth-page-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-dark);
+  /* Reuse the Landing Page "Glow" for consistency */
+  background-image: radial-gradient(circle at 50% 20%, rgba(255, 149, 0, 0.15), transparent 60%);
+  position: relative;
+}
+
+.auth-nav {
+  padding: 20px 30px;
+  position: absolute; /* Keep it fixed at top */
+  top: 0;
+  width: 100%;
+  z-index: 10;
+}
+
+.auth-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px 40px; /* Top padding clears the nav */
+  z-index: 5;
+}
+
+/* Enhance the Auth Card to pop against the new background */
+.auth-card {
+  /* Remove the old margins since flexbox centers it now */
+  margin: 0; 
+  width: 100%;
+  max-width: 450px;
+  
+  /* Add depth to match the landing page vibe */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  background: var(--surface-color); /* Keep surface color opaque */
+}
+
+/* Back Button Styling */
+.btn-back-home {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color 0.2s, transform 0.2s;
+  padding: 10px 0;
+}
+
+.btn-back-home:hover {
+  color: var(--primary-orange);
+  transform: translateX(-5px); /* Slight nudge left */
+  text-decoration: none;
+}
+
+.btn-back-home .icon {
+  margin-right: 8px;
+}
+
+/* Light Mode Override for Auth Page */
+:root.light-mode .auth-page-container {
+  background-image: radial-gradient(circle at 50% 20%, rgba(255, 149, 0, 0.1), transparent 60%);
+}
+:root.light-mode .auth-card {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+}
+>>>>>>> b5af3b4c225dcfcda82da98e21115154642e4695
 /* --- TABLET & MOBILE (Max Width 768px) --- */
 @media (max-width: 768px) {
   /* Layout Adjustments */
