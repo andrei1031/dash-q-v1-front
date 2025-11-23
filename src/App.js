@@ -2012,6 +2012,39 @@ function CustomerView({ session }) {
     };
 
     // --- Effects ---
+    // RECOVERY SYSTEM: Restore session if LocalStorage was wiped but DB entry exists
+    useEffect(() => {
+        const restoreSession = async () => {
+            // Only run if we don't have a local ID but we DO have a logged-in user
+            if (!myQueueEntryId && session?.user?.id) {
+                console.log("[Recovery] Checking for lost tickets...");
+                try {
+                    const { data: activeEntry, error } = await supabase
+                        .from('queue_entries')
+                        .select('id, barber_id, reference_image_url')
+                        .eq('user_id', session.user.id)
+                        .in('status', ['Waiting', 'Up Next', 'In Progress'])
+                        .maybeSingle();
+
+                    if (!error && activeEntry) {
+                        console.log(`[Recovery] Found active ticket #${activeEntry.id}. Restoring...`);
+                        // RESTORE STATE
+                        localStorage.setItem('myQueueEntryId', activeEntry.id.toString());
+                        localStorage.setItem('joinedBarberId', activeEntry.barber_id.toString());
+                        setMyQueueEntryId(activeEntry.id.toString());
+                        setJoinedBarberId(activeEntry.barber_id.toString());
+                        setReferenceImageUrl(activeEntry.reference_image_url || '');
+                        setIsChatOpen(true);
+                        fetchPublicQueue(activeEntry.barber_id.toString());
+                    }
+                } catch (err) {
+                    console.error("[Recovery] Failed to restore session:", err);
+                }
+            }
+        };
+        restoreSession();
+    }, [session, myQueueEntryId, fetchPublicQueue]);
+    
     useEffect(() => {
         if (joinMode === 'later' && selectedBarberId && selectedServiceId && selectedDate) {
             setAvailableSlots([]); // Clear old slots while loading
@@ -2574,7 +2607,6 @@ return (
             </button>
         </div>
 
-        {/* A. JOIN FORM (SHOWS WHEN IN JOIN MODE AND NOT IN QUEUE) */}
         {/* A. JOIN / BOOKING SECTION */}
         {viewMode === 'join' && !myQueueEntryId && (
             <div className="card-body">
