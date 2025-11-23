@@ -755,7 +755,13 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
     const dailyDataSafe = Array.isArray(analytics.dailyData) ? analytics.dailyData : [];
     const chartData = { labels: dailyDataSafe.map(d => { try { return new Date(d.day + 'T00:00:00Z').toLocaleString(undefined, { month: 'numeric', day: 'numeric' }); } catch (e) { return '?'; } }), datasets: [{ label: 'Daily Earnings (₱)', data: dailyDataSafe.map(d => d.daily_earnings ?? 0), backgroundColor: 'rgba(52, 199, 89, 0.6)', borderColor: 'rgba(52, 199, 89, 1)', borderWidth: 1 }] };
     const carbonSavedTotal = analytics.carbonSavedTotal || 0;
-    const carbonSavedToday = analytics.totalCutsToday > 0 ? 5 : 0;  
+    const carbonSavedToday = analytics.carbonSavedToday || 0;
+
+    // Logic: If today is 5, it means SOMEONE (maybe you, maybe another barber) did a cut.
+    const carbonStatusMessage = carbonSavedToday > 0 
+        ? "✅ Daily Goal Reached!" 
+        : "⏳ Waiting for first cut...";
+
     const renderSkeletons = () => (
         <>
             <div className="analytics-grid">
@@ -810,19 +816,25 @@ function AnalyticsDashboard({ barberId, refreshSignal }) {
             )}
             
             <div className="carbon-footprint-section">
-                <h3 className="analytics-subtitle">Carbon Footprint Reduced</h3>
+                <h3 className="analytics-subtitle">🌱 Shop Carbon Savings</h3>
                 <div className="analytics-grid carbon-grid">
                     <div className="analytics-item">
-                        <span className="analytics-label">Today</span>
+                        <span className="analytics-label">Today's Impact</span>
                         <span className="analytics-value carbon">
-                            {carbonSavedToday}g <span className="carbon-unit">(Active)</span>
+                            +{carbonSavedToday}g
                         </span>
+                        <small style={{color: 'var(--text-secondary)', fontSize: '0.8rem'}}>
+                            {carbonStatusMessage}
+                        </small>
                     </div>
                     <div className="analytics-item">
-                        <span className="analytics-label">All Time</span>
+                        <span className="analytics-label">All-Time Reduced</span>
                         <span className="analytics-value carbon">
-                            {carbonSavedTotal}g <span className="carbon-unit">(Total)</span>
+                            {carbonSavedTotal}g
                         </span>
+                        <small style={{color: 'var(--text-secondary)', fontSize: '0.8rem'}}>
+                            Dynamic Shop Total
+                        </small>
                     </div>
                 </div>
             </div>
