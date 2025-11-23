@@ -2044,7 +2044,7 @@ function CustomerView({ session }) {
         };
         restoreSession();
     }, [session, myQueueEntryId, fetchPublicQueue]);
-    
+
     useEffect(() => {
         if (joinMode === 'later' && selectedBarberId && selectedServiceId && selectedDate) {
             setAvailableSlots([]); // Clear old slots while loading
@@ -3031,46 +3031,144 @@ function AdminAppLayout({ session }) {
     // --- FETCHERS ---
 
     // IN AdminAppLayout -> ReportsView Component
+    // IN AdminAppLayout -> ReportsView Component
     const ReportsView = () => {
         const [reports, setReports] = useState([]);
+        // NEW: State to track notes for each specific report ID
+        const [adminNotes, setAdminNotes] = useState({}); 
         
         const fetchReports = async () => {
-            const res = await axios.get(`${API_URL}/admin/reports`);
-            setReports(res.data);
+            try {
+                const res = await axios.get(`${API_URL}/admin/reports`);
+                setReports(res.data);
+            } catch (error) {
+                console.error("Failed to load reports", error);
+            }
         };
 
         useEffect(() => { fetchReports(); }, []);
 
         const handleAction = async (reportId, targetId, action) => {
-            if(!window.confirm(`Are you sure you want to ${action} this user?`)) return;
-            await axios.put(`${API_URL}/admin/reports/resolve`, { reportId, targetUserId: targetId, action });
-            fetchReports();
+            const note = adminNotes[reportId] || ''; // Get the note for this specific report
+            
+            // Confirm action with the admin
+            if(!window.confirm(`Are you sure you want to ${action.toUpperCase()} this user?`)) return;
+            
+            try {
+                // Send the action AND the note to the backend
+                await axios.put(`${API_URL}/admin/reports/resolve`, { 
+                    reportId, 
+                    targetUserId: targetId, 
+                    action,
+                    adminNotes: note 
+                });
+                
+                alert(`Action taken: ${action}`);
+                
+                // Clear the note from state and refresh list
+                setAdminNotes(prev => {
+                    const newState = { ...prev };
+                    delete newState[reportId];
+                    return newState;
+                });
+                fetchReports();
+            } catch (error) {
+                alert("Failed to process report.");
+            }
+        };
+
+        // Helper to update notes state
+        const handleNoteChange = (id, text) => {
+            setAdminNotes(prev => ({ ...prev, [id]: text }));
         };
 
         return (
             <div className="card">
                 <div className="card-header"><h2>🚨 Incident Reports</h2></div>
                 <div className="card-body">
-                    {reports.length === 0 ? <p className="empty-text">No reports found.</p> : (
+                    {reports.length === 0 ? <p className="empty-text">No active reports.</p> : (
                         <ul className="queue-list">
                             {reports.map(r => (
-                                <li key={r.id} style={{display:'block', border: r.status === 'Pending' ? '1px solid var(--error-color)' : '1px solid var(--border-color)'}}>
+                                <li key={r.id} style={{
+                                    display:'block', 
+                                    border: r.status === 'Pending' ? '1px solid var(--error-color)' : '1px solid var(--border-color)',
+                                    marginBottom: '15px',
+                                    padding: '15px'
+                                }}>
                                     <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
-                                        <strong>{r.reason}</strong>
-                                        <span className={`status-badge`} style={{background: r.status==='Pending'?'var(--error-color)':'var(--success-color)'}}>{r.status}</span>
+                                        <strong style={{fontSize: '1.1rem'}}>{r.reason}</strong>
+                                        <span className={`status-badge`} style={{
+                                            background: r.status==='Pending'?'var(--error-color)':'var(--success-color)',
+                                            color: '#fff', padding: '4px 8px', borderRadius: '4px'
+                                        }}>
+                                            {r.status}
+                                        </span>
                                     </div>
-                                    <p style={{fontSize:'0.9rem', color:'var(--text-secondary)'}}>
-                                        <strong>{r.reporter?.full_name}</strong> reported <strong>{r.reported?.full_name}</strong>
-                                    </p>
-                                    <p style={{background:'var(--bg-dark)', padding:'10px', borderRadius:'5px', fontStyle:'italic'}}>"{r.description}"</p>
                                     
+                                    <p style={{fontSize:'0.9rem', color:'var(--text-secondary)', marginBottom: '10px'}}>
+                                        <strong>{r.reporter?.full_name || 'Unknown'}</strong> reported <strong>{r.reported?.full_name || 'Unknown'}</strong>
+                                    </p>
+                                    
+                                    <div style={{
+                                        background:'var(--bg-dark)', 
+                                        padding:'12px', 
+                                        borderRadius:'6px', 
+                                        fontStyle:'italic',
+                                        borderLeft: '3px solid var(--primary-orange)',
+                                        marginBottom: '15px'
+                                    }}>
+                                        "{r.description}"
+                                    </div>
+                                    
+                                    {/* NEW: Display Admin Notes if resolved */}
+                                    {r.status !== 'Pending' && r.admin_notes && (
+                                        <p style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>
+                                            <strong>Admin Note:</strong> {r.admin_notes}
+                                        </p>
+                                    )}
+
+                                    {/* Action Area (Only for Pending Reports) */}
                                     {r.status === 'Pending' && (
-                                        <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
-                                            <button onClick={() => handleAction(r.id, r.reported_id, 'ban')} className="btn btn-danger btn-full-width">🔨 Ban User</button>
-                                            <button onClick={() => handleAction(r.id, r.reported_id, 'dismiss')} className="btn btn-secondary btn-full-width">Dismiss</button>
+                                        <div style={{marginTop:'10px'}}>
+                                            {/* NEW: Admin Note Input Area */}
+                                            <textarea 
+                                                placeholder="Enter resolution notes here (e.g., 'Verified via CCTV', 'First warning')..." 
+                                                value={adminNotes[r.id] || ''}
+                                                onChange={(e) => handleNoteChange(r.id, e.target.value)}
+                                                style={{
+                                                    width: '100%', 
+                                                    padding: '10px', 
+                                                    marginBottom: '10px', 
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-dark)',
+                                                    color: 'var(--text-primary)',
+                                                    minHeight: '60px'
+                                                }}
+                                            />
+                                            
+                                            <div style={{display:'flex', gap:'10px'}}>
+                                                <button 
+                                                    onClick={() => handleAction(r.id, r.reported_id, 'ban')} 
+                                                    className="btn btn-danger btn-full-width"
+                                                >
+                                                    🔨 Ban User
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleAction(r.id, r.reported_id, 'dismiss')} 
+                                                    className="btn btn-secondary btn-full-width"
+                                                >
+                                                    Dismiss Report
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
-                                    {r.reported?.is_banned && <p className="error-message small" style={{marginTop:'5px'}}>User is currently BANNED.</p>}
+                                    
+                                    {r.reported?.is_banned && (
+                                        <p className="error-message small" style={{marginTop:'10px'}}>
+                                            ⚠️ This user is currently BANNED.
+                                        </p>
+                                    )}
                                 </li>
                             ))}
                         </ul>
