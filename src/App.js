@@ -922,7 +922,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
             supabase.removeChannel(chatChannel);
         };
     }, [openChatQueueId, openChatCustomerId, session]);
-    
+
     // --- UPDATE SEND FUNCTION ---
     const sendBarberMessage = async (recipientId, messageText) => {
         if (!messageText.trim() || !openChatQueueId) return;
@@ -1578,6 +1578,42 @@ function CustomerView({ session }) {
         localStorage.setItem('hasSeenInstructions_v1', 'true');
         setIsInstructionsModalOpen(false);
     };
+
+    const handleReturnToJoin = useCallback(async (userInitiated = false) => {
+        console.log("[handleReturnToJoin] Function called.");
+        if (userInitiated && myQueueEntryId) {
+            setIsLoading(true);
+            try {
+                await axios.delete(`${API_URL}/queue/${myQueueEntryId}`, {
+                    data: { userId: session.user.id }
+                });
+                setMessage("You left the queue.");
+            }
+            catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
+            finally { setIsLoading(false); }
+        }
+        setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false);
+        stopBlinking();
+        localStorage.removeItem('myQueueEntryId'); 
+        localStorage.removeItem('joinedBarberId');
+        localStorage.removeItem('displayWait');
+        localStorage.removeItem('targetFinishTime'); // <-- ADD THIS
+        setMyQueueEntryId(null); setJoinedBarberId(null);
+        setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
+        setSelectedServiceId(''); setMessage('');
+        setIsChatOpen(false);
+        setChatMessagesFromBarber([]); setDisplayWait(0);
+        setReferenceImageUrl('');
+        setSelectedFile(null);
+        setIsUploading(false);
+
+        setFeedbackText('');
+        setFeedbackSubmitted(false);
+        setBarberFeedback([]);
+
+        console.log("[handleReturnToJoin] State reset complete.");
+    }, [myQueueEntryId, session]);
+    
     const fetchPublicQueue = useCallback(async (barberId) => {
         if (!barberId) {
             setLiveQueue([]);
@@ -1626,30 +1662,38 @@ function CustomerView({ session }) {
                 if (!amIInActiveQueue && !isServiceCompleteModalOpen && !isCancelledModalOpen) {
     
                     const investigateDisappearance = async () => {
-                        console.log("[Catcher] Entry missing. Investigating...");
-                        
-                        // 1. Check if Transferred (Active but different barber)
-                        const { data: movedEntry } = await supabase
+                        console.log("[Catcher] Entry missing from public list. Verifying with server...");
+
+                        // 1. SAFETY NET: Ask Supabase specifically for MY entry ID
+                        // This bypasses the public list "replication lag"
+                        const { data: myEntry, error } = await supabase
                             .from('queue_entries')
-                            .select('barber_id, status')
-                            .eq('id', currentQueueId)
+                            .select('status, barber_id')
+                            .eq('id', myQueueEntryId)
                             .maybeSingle();
 
-                        // If entry exists and is still active (Waiting/Up Next/In Progress)
-                        if (movedEntry && ['Waiting', 'Up Next', 'In Progress'].includes(movedEntry.status)) {
-                            const currentStoredBarber = localStorage.getItem('joinedBarberId');
-                            
-                            // If the barber ID changed, it was a transfer!
-                            if (movedEntry.barber_id.toString() !== currentStoredBarber) {
-                                console.log(`[Transfer] Moved to Barber ${movedEntry.barber_id}.`);
-                                localStorage.setItem('joinedBarberId', movedEntry.barber_id.toString());
-                                setJoinedBarberId(movedEntry.barber_id.toString()); // Trigger refresh
-                                setMessage("🔄 You have been transferred to another barber.");
-                                return; // STOP HERE. Do not show cancelled modal.
-                            }
+                        if (error) {
+                            console.warn("Network error checking status. Assuming safe.", error);
+                            return; // If internet is flaky, DO NOT kick the user out.
                         }
 
-                        // STEP B: If not transferred, check for "Done" or "Cancelled" events (Old Logic)
+                        // 2. IF ENTRY EXISTS & ACTIVE: It was just lag. Do nothing.
+                        if (myEntry && ['Waiting', 'Up Next', 'In Progress'].includes(myEntry.status)) {
+                            console.log("Entry still exists in DB. Ignoring public list lag.");
+                            
+                            // Optional: If the barber ID changed on the server but not locally, update it now
+                            const currentStoredBarber = localStorage.getItem('joinedBarberId');
+                            if (myEntry.barber_id.toString() !== currentStoredBarber) {
+                                console.log(`[Transfer] Detected move to Barber ${myEntry.barber_id}. Updating local state.`);
+                                localStorage.setItem('joinedBarberId', myEntry.barber_id.toString());
+                                setJoinedBarberId(myEntry.barber_id.toString());
+                                setMessage("🔄 You have been transferred to another barber.");
+                            }
+                            return; 
+                        }
+
+                        // 3. IF WE ARE HERE: The entry is genuinely gone (Deleted) or Finished.
+                        // Check if it was a "Done" or "Cancelled" event we missed.
                         const userId = session?.user?.id;
                         if (!userId) return;
 
@@ -1670,21 +1714,15 @@ function CustomerView({ session }) {
                                 localStorage.removeItem('joinedBarberId');
                                 localStorage.removeItem('stickyModal');
                             } else {
-                                // Fallback: If it's just gone from DB completely
-                                if (!movedEntry) {
-                                    console.warn("[Catcher] Entry disappeared completely.");
-                                    setQueueMessage("Your queue entry was removed.");
-                                    localStorage.removeItem('myQueueEntryId');
-                                    localStorage.removeItem('joinedBarberId');
-                                    localStorage.removeItem('stickyModal');
-                                    setMyQueueEntryId(null); // Reset state
-                                }
+                                // 4. FALLBACK: It was deleted manually (e.g. by Admin/Barber) without a status change
+                                console.warn("[Catcher] Entry disappeared completely.");
+                                setQueueMessage("Your queue entry was removed.");
+                                handleReturnToJoin(false); // Clean up local state
                             }
                         } catch (error) {
                             console.error("[Catcher] Error checking event:", error.message);
                         }
                     };
-                    
                     investigateDisappearance();
                 }
             }
@@ -1697,7 +1735,18 @@ function CustomerView({ session }) {
         } finally {
             setIsQueueLoading(false);
         }
-    }, [session, isServiceCompleteModalOpen, isCancelledModalOpen, setLiveQueue, setQueueMessage, setIsServiceCompleteModalOpen, setIsCancelledModalOpen, setJoinedBarberId]);
+    }, [
+    session, 
+    isServiceCompleteModalOpen, 
+    isCancelledModalOpen, 
+    setLiveQueue, 
+    setQueueMessage, 
+    setIsServiceCompleteModalOpen, 
+    setIsCancelledModalOpen, 
+    setJoinedBarberId,
+    handleReturnToJoin,
+    myQueueEntryId
+    ]);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -1844,41 +1893,6 @@ function CustomerView({ session }) {
     } finally { 
         setIsLoading(false); 
     }
-    };
-
-    const handleReturnToJoin = async (userInitiated = false) => {
-        console.log("[handleReturnToJoin] Function called.");
-        if (userInitiated && myQueueEntryId) {
-            setIsLoading(true);
-            try {
-                await axios.delete(`${API_URL}/queue/${myQueueEntryId}`, {
-                    data: { userId: session.user.id }
-                });
-                setMessage("You left the queue.");
-            }
-            catch (error) { console.error("Failed to leave queue:", error); setMessage("Error leaving queue."); }
-            finally { setIsLoading(false); }
-        }
-        setIsServiceCompleteModalOpen(false); setIsCancelledModalOpen(false);
-        stopBlinking();
-        localStorage.removeItem('myQueueEntryId'); 
-        localStorage.removeItem('joinedBarberId');
-        localStorage.removeItem('displayWait');
-        localStorage.removeItem('targetFinishTime'); // <-- ADD THIS
-        setMyQueueEntryId(null); setJoinedBarberId(null);
-        setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
-        setSelectedServiceId(''); setMessage('');
-        setIsChatOpen(false);
-        setChatMessagesFromBarber([]); setDisplayWait(0);
-        setReferenceImageUrl('');
-        setSelectedFile(null);
-        setIsUploading(false);
-
-        setFeedbackText('');
-        setFeedbackSubmitted(false);
-        setBarberFeedback([]);
-
-        console.log("[handleReturnToJoin] State reset complete.");
     };
 
     const handleBooking = async (e) => {
