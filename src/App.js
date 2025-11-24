@@ -2089,28 +2089,32 @@ function CustomerView({ session }) {
         
         // --- START: HANDLE 409 CONFLICT (AUTO-RECOVER) ---
         if (error.response && error.response.status === 409) {
-            // The server sends back the existing entry in 'details'
+            // Check if 'details' actually exists before trying to read it
             const existing = error.response.data.details;
             
-            setMessage(`⚠️ Found active booking! Recovering your spot (ID: #${existing.id})...`);
-            
-            // 1. Save to LocalStorage (So it persists on reload)
-            localStorage.setItem('myQueueEntryId', existing.id.toString());
-            localStorage.setItem('joinedBarberId', existing.barber_id.toString());
+            if (existing && existing.id) {
+                // Scenario A: User is already in queue (Recovery)
+                setMessage(`⚠️ Found active booking! Recovering your spot (ID: #${existing.id})...`);
+                
+                localStorage.setItem('myQueueEntryId', existing.id.toString());
+                localStorage.setItem('joinedBarberId', existing.barber_id.toString());
 
-            // 2. Update State immediately (Triggers the "Live Queue" view)
-            setMyQueueEntryId(existing.id.toString());
-            setJoinedBarberId(existing.barber_id.toString());
-            setIsChatOpen(true);
-            
-            // 3. Clear the "Join" form inputs
-            setSelectedBarberId('');
-            setSelectedServiceId('');
-            setReferenceImageUrl(existing.reference_image_url || '');
+                setMyQueueEntryId(existing.id.toString());
+                setJoinedBarberId(existing.barber_id.toString());
+                setIsChatOpen(true);
+                
+                setSelectedBarberId('');
+                setSelectedServiceId('');
+                setReferenceImageUrl(existing.reference_image_url || '');
 
-            // 4. Fetch the queue data so the UI updates instantly
-            fetchPublicQueue(existing.barber_id.toString());
-        } 
+                fetchPublicQueue(existing.barber_id.toString());
+            } else {
+                // Scenario B: Database Error or Generic Conflict (Prevent Crash)
+                const errorMsg = error.response.data.error || "A conflict occurred.";
+                console.error("409 Error without details:", errorMsg);
+                setMessage(`Error: ${errorMsg}`);
+            }
+        }
         // --- END: HANDLE 409 CONFLICT ---
         else {
             const errorMessage = error.response?.data?.error || error.message;
