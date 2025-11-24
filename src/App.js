@@ -1124,11 +1124,20 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         const entry = modalState.data;
         if (!entry) return;
 
+        // --- NEW GROUP LOGIC ---
         const queueId = entry.id;
+        const heads = entry.head_count || 1; // Default to 1 if missing
         const servicePrice = parseFloat(entry.services?.price_php) || 0;
+        
+        // Calculate Base: Price x Heads
+        const baseTotal = servicePrice * heads;
+        
         const isVIP = entry.is_vip === true;
         const vipCharge = isVIP ? 100 : 0;
-        const subtotalDue = servicePrice + vipCharge;
+        
+        // Total before tip
+        const subtotalDue = baseTotal + vipCharge;
+        
         const parsedTip = parseInt(tipInput || '0');
 
         if (isNaN(parsedTip) || parsedTip < 0) {
@@ -1145,13 +1154,15 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                 barber_id: barberId,
                 tip_amount: parsedTip,
                 vip_charge: vipCharge,
+                // The backend server.js will handle the (Price * Heads) math 
+                // using the head_count stored in the DB, as we discussed.
             });
             onCutComplete();
             setModalState({ 
                 type: 'alert', 
                 data: { 
                     title: 'Cut Completed!', 
-                    message: `Total logged profit: ₱${finalLoggedProfit.toFixed(2)}` 
+                    message: `Total logged profit: ₱${finalLoggedProfit.toFixed(2)} (Group of ${heads})` 
                 } 
             });
         } catch (err) {
@@ -1277,6 +1288,7 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                                 <li className={`in-progress ${queueDetails.inProgress.is_vip ? 'vip-entry' : ''}`}>
                                     <div className="queue-item-info">
                                         <strong>#{queueDetails.inProgress.daily_number || queueDetails.inProgress.id} - {queueDetails.inProgress.customer_name}</strong>
+
                                         <DistanceBadge meters={queueDetails.inProgress.current_distance_meters} />
                                         <PhotoDisplay entry={queueDetails.inProgress} label="In Chair" />
                                         <button 
@@ -1323,6 +1335,11 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                             <li key={c.id} className={c.is_vip ? 'vip-entry' : ''}>
                                 <div className="queue-item-info">
                                     <span>#{c.id} - {c.customer_name}</span>
+                                    {(c.head_count && c.head_count > 1) && (
+                                    <span className="badge-confirmed" style={{background: '#7c4dff', color: 'white', border: 'none'}}>
+                                        👥 Group of {c.head_count}
+                                    </span>
+    )}
                                     <DistanceBadge meters={c.current_distance_meters} />
                                     {c.reference_image_url && <PhotoDisplay entry={c} label="Waiting" />}
                                 </div>
@@ -1400,16 +1417,26 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                                 <h2>Complete Cut</h2>
                                 <p className="modal-form-details">
                                     <strong>Customer:</strong> {modalState.data.customer_name} (#{modalState.data.id})<br/>
-                                    <strong>Service:</strong> {modalState.data.services?.name || 'Service'} (₱{parseFloat(modalState.data.services?.price_php || 0).toFixed(2)})<br/>
+                                    
+                                    {/* --- NEW: GROUP DISPLAY --- */}
+                                    <strong>Heads:</strong> {modalState.data.head_count || 1}<br/> 
+                                    
+                                    <strong>Service:</strong> {modalState.data.services?.name || 'Service'} 
+                                    {' '}(₱{parseFloat(modalState.data.services?.price_php || 0).toFixed(2)} x {modalState.data.head_count || 1})<br/>
+
                                     {modalState.data.is_vip && (
                                         <>
                                             <strong>VIP Fee:</strong> ₱100.00<br/>
                                         </>
                                     )}
-                                    <strong>Subtotal: ₱{(
-                                        (parseFloat(modalState.data.services?.price_php || 0)) + 
-                                        (modalState.data.is_vip ? 100 : 0)
-                                    ).toFixed(2)}</strong>
+                                    
+                                    {/* --- NEW: TOTAL DUE CALCULATION --- */}
+                                    <strong style={{fontSize: '1.2rem', color: 'var(--success-color)'}}>
+                                        Total Due: ₱{(
+                                            ((parseFloat(modalState.data.services?.price_php || 0)) * (modalState.data.head_count || 1)) + 
+                                            (modalState.data.is_vip ? 100 : 0)
+                                        ).toFixed(2)}
+                                    </strong>
                                 </p>
                                 
                                 <div className="form-group">
@@ -1629,6 +1656,7 @@ function CustomerView({ session }) {
     const [isReportModalOpen, setReportModalOpen] = useState(false);
     const [freeBarber, setFreeBarber] = useState(null);
     const [myAppointments, setMyAppointments] = useState([]);
+    const [headCount, setHeadCount] = useState(1);
 
     const fetchMyAppointments = useCallback(async () => {
         if (!session?.user?.id) return;
@@ -1936,6 +1964,7 @@ function CustomerView({ session }) {
                 player_id: player_id,
                 user_id: session.user.id,
                 is_vip: isVIPToggled,
+                head_count: headCount,
             });
             const newEntry = response.data;
             if (newEntry && newEntry.id) {
@@ -2428,28 +2457,21 @@ function CustomerView({ session }) {
 
             // --- THE NEW LOGIC ---
             const dbWaitMinutes = peopleAheadNew.reduce((sum, entry) => {
-                // 1. Get the standard duration for this service (default 30)
-                const duration = entry.services?.duration_minutes || 30;
+            const duration = entry.services?.duration_minutes || 30;
+            const heads = entry.head_count || 1; // <--- Get group size
+            const totalDuration = duration * heads; // <--- Multiply!
 
-                // 2. If this person is "In Progress", they are partly done!
-                if (entry.status === 'In Progress' && entry.updated_at) {
-                    const startTime = new Date(entry.updated_at).getTime();
-                    const minutesElapsed = (now - startTime) / 60000;
-                    
-                    // Calculate remaining time (e.g., 30m total - 10m elapsed = 20m left)
-                    // We use Math.max(5, ...) to ensure we never assume less than 5 mins remains (Safety Buffer)
-                    const minutesRemaining = Math.max(5, duration - minutesElapsed);
-                    
-                    return sum + minutesRemaining;
-                }
+            // If In Progress, we assume (Total Duration - Time Elapsed)
+            if (entry.status === 'In Progress' && entry.updated_at) {
+                const startTime = new Date(entry.updated_at).getTime();
+                const minutesElapsed = (now - startTime) / 60000;
+                const minutesRemaining = Math.max(5, totalDuration - minutesElapsed);
+                return sum + minutesRemaining;
+            }
 
-                // 3. If "Waiting" or "Up Next", count the full duration
-                if (['Waiting', 'Up Next'].includes(entry.status)) { 
-                    return sum + duration; 
-                }
-                
-                return sum;
-            }, 0);
+            // If waiting, add full duration
+            return sum + totalDuration;
+        }, 0);
             // ---------------------
 
             const calculatedTarget = now + (dbWaitMinutes * 60000);
@@ -2733,7 +2755,27 @@ return (
                 {joinMode === 'now' && (
                     <form onSubmit={handleJoinQueue}>
                         <div className="form-group"><label>Select Service:</label><select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} required><option value="">-- Choose service --</option>{services.map((service) => (<option key={service.id} value={service.id}>{service.name} ({service.duration_minutes} min / ₱{service.price_php})</option>))}</select></div>
-                        
+                        <div className="form-group">
+                            <label>Group Size (Number of Heads):</label>
+                            <div className="role-toggle"> {/* Reusing your toggle styling */}
+                                {[1, 2, 3].map(num => (
+                                    <button 
+                                        key={num} 
+                                        type="button" 
+                                        className={headCount === num ? 'active' : ''} 
+                                        onClick={() => setHeadCount(num)}
+                                    >
+                                        {num} {num === 1 ? 'Person' : 'People'}
+                                    </button>
+                                ))}
+                            </div>
+                            {headCount > 1 && (
+                                <p className="message warning small">
+                                    Note: This will book <strong>{headCount} slots</strong> back-to-back. 
+                                    Estimated duration: {services.find(s => s.id.toString() === selectedServiceId)?.duration_minutes * headCount} mins.
+                                </p>
+                            )}
+                        </div>
                         {/* VIP Toggle */}
                         {selectedServiceId && (
                             <div className="form-group vip-toggle-group">
