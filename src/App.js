@@ -1717,7 +1717,8 @@ function CustomerView({ session }) {
         localStorage.removeItem('myQueueEntryId'); 
         localStorage.removeItem('joinedBarberId');
         localStorage.removeItem('displayWait');
-        localStorage.removeItem('targetFinishTime'); // <-- ADD THIS
+        localStorage.removeItem('targetFinishTime'); 
+        localStorage.removeItem('pendingFeedback');// <-- ADD THIS
         setMyQueueEntryId(null); setJoinedBarberId(null);
         setLiveQueue([]); setQueueMessage(''); setSelectedBarberId('');
         setSelectedServiceId(''); setMessage('');
@@ -1823,6 +1824,10 @@ function CustomerView({ session }) {
 
                             if (eventType === 'Done') {
                                 console.log("[Catcher] Confirmed 'Done'.");
+                                localStorage.setItem('pendingFeedback', JSON.stringify({
+                                    barberId: joinedBarberId, // Use the current state ID
+                                    timestamp: Date.now()
+                                }));
                                 setIsServiceCompleteModalOpen(true);
                                 localStorage.removeItem('myQueueEntryId');
                                 localStorage.removeItem('joinedBarberId');
@@ -1865,7 +1870,8 @@ function CustomerView({ session }) {
     setIsCancelledModalOpen, 
     setJoinedBarberId,
     handleReturnToJoin,
-    myQueueEntryId
+    myQueueEntryId,
+    joinedBarberId
     ]);
 
     const handleFileChange = (e) => {
@@ -2233,6 +2239,14 @@ function CustomerView({ session }) {
     useEffect(() => { // First Time Instructions
         const hasSeen = localStorage.getItem('hasSeenInstructions_v1');
         if (!hasSeen) { setIsInstructionsModalOpen(true); }
+        const pendingFeedback = localStorage.getItem('pendingFeedback');
+        if (pendingFeedback) {
+            const data = JSON.parse(pendingFeedback);
+            // Restore necessary state to submit the feedback
+            setJoinedBarberId(data.barberId); 
+            // We don't set myQueueEntryId because the queue is technically done
+            setIsServiceCompleteModalOpen(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -2324,8 +2338,19 @@ function CustomerView({ session }) {
                             localStorage.setItem('stickyModal', 'yourTurn');
                             if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
                         }
-                        else if (newStatus === 'Done') { setIsServiceCompleteModalOpen(true); stopBlinking(); }
-                        else if (newStatus === 'Cancelled') { setIsCancelledModalOpen(true); stopBlinking(); }
+                        else if (newStatus === 'Done') { 
+                            localStorage.setItem('pendingFeedback', JSON.stringify({
+                            barberId: joinedBarberId,
+                            timestamp: Date.now()
+                        }));
+                        // --- FIX END ---
+                        setIsServiceCompleteModalOpen(true); 
+                        stopBlinking();
+                        }
+                        else if (newStatus === 'Cancelled') { 
+                            setIsCancelledModalOpen(true); 
+                            stopBlinking(); 
+                        }
                     }
                     fetchPublicQueue(joinedBarberId);
                 })
