@@ -47,6 +47,33 @@ if (supabaseUrl && supabaseAnonKey) {
         storage: { from: () => ({ upload: () => { throw new Error('Supabase storage not configured') }, getPublicUrl: () => ({ data: { publicUrl: null } }) }) }
     };
 }
+// --- iOS Install Modal Component ---
+// Apple requires users to "Add to Home Screen" to receive notifications.
+function IOSInstallPrompt({ onClose }) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    // Only show if on iOS AND NOT yet installed (in browser mode)
+    if (!isIOS || isStandalone) return null;
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content">
+                <div className="modal-body">
+                    <h2 style={{color: 'var(--primary-orange)'}}>📲 Enable Notifications</h2>
+                    <p>To get notified when it's your turn, you <strong>must</strong> add this app to your Home Screen.</p>
+                    <ol style={{textAlign:'left', margin:'20px 0', lineHeight:'1.8'}}>
+                        <li>Tap the <strong>Share</strong> button <span style={{fontSize:'1.2rem'}}>⎋</span> below.</li>
+                        <li>Scroll down and select <strong>"Add to Home Screen"</strong> <span style={{fontSize:'1.2rem'}}>⊞</span>.</li>
+                    </ol>
+                </div>
+                <div className="modal-footer single-action">
+                    <button onClick={onClose} className="btn btn-secondary">I'll do it later</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ##############################################
 // ##              SVG ICONS                   ##
@@ -1657,6 +1684,7 @@ function CustomerView({ session }) {
     const [freeBarber, setFreeBarber] = useState(null);
     const [myAppointments, setMyAppointments] = useState([]);
     const [headCount, setHeadCount] = useState(1);
+    const [showIOSPrompt, setShowIOSPrompt] = useState(true);
 
     const fetchMyAppointments = useCallback(async () => {
         if (!session?.user?.id) return;
@@ -2264,11 +2292,44 @@ function CustomerView({ session }) {
         fetchServices();
     }, []);
 
-    useEffect(() => { // OneSignal Setup
-        if (window.OneSignal) {
-            window.OneSignal.push(function () { window.OneSignal.showSlidedownPrompt(); });
-            window.OneSignal.push(function () { window.OneSignal.getUserId(function (userId) { console.log("OneSignal Player ID:", userId); setPlayerId(userId); }); });
-        }
+    useEffect(() => { // ROBUST OneSignal Setup
+        window.OneSignal = window.OneSignal || [];
+        
+        // 1. Initialize
+        window.OneSignal.push(function() {
+            window.OneSignal.init({
+                appId: process.env.REACT_APP_ONESIGNAL_APP_ID, 
+                allowLocalhostAsSecureOrigin: true,
+                notifyButton: { enable: false },
+            });
+            // Try to prompt immediately (Works on Android/Desktop)
+            window.OneSignal.showSlidedownPrompt();
+        });
+
+        // 2. Helper to capture ID securely
+        const updatePlayerId = () => {
+            window.OneSignal.push(function() {
+                window.OneSignal.getUserId(function(userId) {
+                    if (userId) {
+                        console.log("✅ OneSignal Player ID captured:", userId);
+                        setPlayerId(userId); // Saves to state, which is sent when Joining Queue
+                    }
+                });
+            });
+        };
+
+        // 3. Check immediately
+        updatePlayerId();
+
+        // 4. LISTEN for "Allow" click (This fixes the timing bug!)
+        window.OneSignal.push(function() {
+            window.OneSignal.on('subscriptionChange', function (isSubscribed) {
+                console.log("🔔 Notification Permission Changed:", isSubscribed);
+                if (isSubscribed) {
+                    updatePlayerId();
+                }
+            });
+        });
     }, []);
 
     useEffect(() => { // Fetch Available Barbers
@@ -2583,7 +2644,7 @@ function CustomerView({ session }) {
 
 return (
     <div className="card">
-        {/* --- MODALS (Placed outside main flow) --- */}
+        {showIOSPrompt && <IOSInstallPrompt onClose={() => setShowIOSPrompt(false)} />}
         
         {/* Instructions Modal */}
         <div className="modal-overlay" style={{ display: isInstructionsModalOpen ? 'flex' : 'none' }}>
