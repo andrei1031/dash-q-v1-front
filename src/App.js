@@ -1244,23 +1244,21 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     };
 
     const handleNextCustomer = async () => {
-        const nextAppt = queueDetails.nextAppointment; // This comes from our updated API
+        // --- 1. NEW SAFETY GAP CHECK ---
+        const nextAppt = queueDetails.nextAppointment; 
         if (nextAppt) {
             const apptTime = new Date(nextAppt.scheduled_time);
             const now = new Date();
             const diffInMinutes = Math.floor((apptTime - now) / 60000);
 
-            // If appointment is within 30 minutes (or fits your service duration logic)
+            // Warn if appointment is within 30 minutes
             if (diffInMinutes <= 30 && diffInMinutes >= -10) {
-                // Play a warning sound? (Optional)
-                // Show Confirmation
                 const confirmMsg = `⚠️ SAFETY WARNING ⚠️\n\nYou have an appointment with ${nextAppt.customer_name} at ${apptTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} (in ${diffInMinutes} mins).\n\nTaking a walk-in now might make you late. Are you sure?`;
-                
-                if (!window.confirm(confirmMsg)) {
-                    return; // Barber cancelled action
-                }
+                if (!window.confirm(confirmMsg)) return; 
             }
         }
+        // -------------------------------
+
         const next = queueDetails.upNext || (queueDetails.waiting.length > 0 ? queueDetails.waiting[0] : null);
         if (!next) {
             setModalState({ type: 'alert', data: { title: 'Queue Empty', message: 'There are no customers waiting to be called.' } });
