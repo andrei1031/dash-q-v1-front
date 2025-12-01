@@ -1850,6 +1850,7 @@ function CustomerView({ session }) {
     const [headCount, setHeadCount] = useState(1);
     const [showIOSPrompt, setShowIOSPrompt] = useState(true);
     const [isMyReportsOpen, setIsMyReportsOpen] = useState(false);
+    const [viewProduct, setViewProduct] = useState(null);
 
     const fetchMyAppointments = useCallback(async () => {
         if (!session?.user?.id) return;
@@ -2256,6 +2257,60 @@ function CustomerView({ session }) {
             setIsLoading(false);
         }
     };
+
+    const AD_INVENTORY = [
+        {
+            id: 'sea-salt',
+            title: "Sea Salt Spray",
+            description: "Achieve that messy, beach-vibes texture instantly.",
+            price: "₱200.00",
+            badge: "BEST SELLER",
+            image: "https://placehold.co/100x100/png?text=Spray", // REPLACE THIS URL
+            theme: { 
+                background: 'linear-gradient(135deg, #fffbeb 0%, #fff3cd 100%)', // Gold Gradient
+                text: '#856404', 
+                border: '#ffeeba',
+                badgeBg: '#ff3b30' // Red Badge
+            }
+        },
+        {
+            id: 'pomade',
+            title: "Pomade Water Based/Oil Based",
+            description: "Slick back style with high shine and all-day control.",
+            price: "₱200.00",
+            badge: "BARBER'S CHOICE",
+            image: "https://placehold.co/100x100/png?text=Wax", // REPLACE THIS URL
+            theme: { 
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)', // Blue Gradient
+                text: '#0d47a1', 
+                border: '#90caf9',
+                badgeBg: '#2962ff' // Dark Blue Badge
+            }
+        },
+        {
+            id: 'powder',
+            title: "Textured Powder",
+            description: "Slick back style with high shine and all-day control.",
+            price: "₱100.00",
+            badge: "NEW ARRIVAL",
+            image: "https://placehold.co/100x100/png?text=Pomade", // REPLACE THIS URL
+            theme: { 
+                background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', // Green Gradient
+                text: '#1b5e20', 
+                border: '#a5d6a7',
+                badgeBg: '#2e7d32' // Dark Green Badge
+            }
+        }
+    ];
+
+    const CAFE_AD = {
+    name: "Safehouse Cafe",
+    pitch: "Tired of standing? Wait here instead! nearby cafe",
+    perks: "☕ Free WiFi  •   ₱150 Buy1Take1 Milktea  •  Board Games",
+    image: "https://placehold.co/400x120/3e2723/ffffff?text=Coffee+Break", // Replace with real cafe photo
+    // REPLACE WITH CAFE COORDINATES or Google Maps Link
+    locationLink: "https://maps.app.goo.gl/ETUu5bxPA6t2yuSs6" 
+};
 
     // --- Effects ---
 
@@ -2842,19 +2897,17 @@ return (
                             setMessage('Please select a star rating.'); 
                             return; 
                         }
-                        if (feedbackText.trim().length < 1) { // Changed minLength to 1
+                        if (feedbackText.trim().length < 1) { 
                             setMessage('Please leave a short comment.'); 
                             return; 
                         }
                         
                         try { 
-                            // API CALL: Sending both the required rating and required comment.
-                            // The server will now use 'rating' directly for the score.
                             await axios.post(`${API_URL}/feedback`, { 
                                 barber_id: joinedBarberId, 
                                 customer_name: customerName, 
-                                comments: feedbackText.trim(), // Required comment
-                                rating: customerRating // Required star rating (1-5)
+                                comments: feedbackText.trim(), 
+                                rating: customerRating 
                             }); 
                         } catch (err) { 
                             console.error("Failed to submit feedback", err); 
@@ -2880,6 +2933,81 @@ return (
                                 ))}
                             </div>
                             {/* END NEW STAR RATING INPUT */}
+
+                            {/* --- 💰 PRODUCT SHOWCASE (CLICKABLE) --- */}
+                            <div style={{
+                                margin: '20px 0',
+                                padding: '12px',
+                                background: 'rgb(30,30,30) ',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '10px',
+                                textAlign: 'center',
+                                boxShadow: 'rgb(30,30,30)'
+                            }}>
+                                <div style={{fontSize: '1rem', marginBottom: '10px', color: 'var(--text-primary)'}}>
+                                    🔥 <strong>Maintain your fresh look!</strong>
+                                </div>
+
+                                <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                                    {AD_INVENTORY.map((product) => (
+                                        <div 
+                                            key={product.id} 
+                                            onClick={() => setViewProduct(product)} // <--- CLICK HANDLER
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                background: product.theme.background,
+                                                border: `1px solid ${product.theme.border}`,
+                                                borderRadius: '8px',
+                                                padding: '8px',
+                                                position: 'relative',
+                                                overflow: 'hidden',
+                                                cursor: 'pointer', // <--- HAND CURSOR
+                                                transition: 'transform 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        >
+                                            <div style={{
+                                                position: 'absolute', top: 0, right: 0,
+                                                background: product.theme.badgeBg, color: 'white',
+                                                fontSize: '0.55rem', fontWeight: 'bold', padding: '2px 6px',
+                                                borderBottomLeftRadius: '6px'
+                                            }}>
+                                                {product.badge}
+                                            </div>
+
+                                            <img 
+                                                src={product.image} 
+                                                alt={product.title}
+                                                style={{
+                                                    width: '50px', height: '50px', borderRadius: '6px', 
+                                                    objectFit: 'cover', border: '1px solid rgba(0,0,0,0.1)', 
+                                                    flexShrink: 0, backgroundColor: '#fff'
+                                                }} 
+                                            />
+
+                                            <div style={{marginLeft: '12px', textAlign: 'left', flex: 1}}>
+                                                <div style={{fontSize: '0.9rem', fontWeight: 'bold', color: product.theme.text, lineHeight: '1.2'}}>
+                                                    {product.title}
+                                                </div>
+                                                <div style={{fontSize: '0.75rem', color: 'black', opacity: 0.8}}>
+                                                    Click for details...
+                                                </div>
+                                            </div>
+
+                                            <div style={{fontWeight: '800', fontSize: '0.95rem', color: product.theme.text, marginLeft: '8px'}}>
+                                                {product.price}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p style={{margin: '10px 0 0 0', fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--text-secondary)'}}>
+                                    Tap a product to view details
+                                </p>
+                            </div>
+                            {/* ---------------------------------- */}
+                            {/* ▲▲▲ END AD ▲▲▲ */}
 
                             <textarea 
                                 value={feedbackText} 
@@ -3278,6 +3406,71 @@ return (
                     <div className="ewt-item"><span>Currently waiting</span><strong>{peopleWaiting} {peopleWaiting === 1 ? 'person' : 'people'}</strong></div>
                     <div className="ewt-item"><span>Expected Time</span><strong>{finishTime > 0 ? new Date(finishTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Calculating...'}</strong></div>
                 </div>
+                <div 
+                onClick={() => window.open(CAFE_AD.locationLink, '_blank')}
+                style={{
+                    margin: '15px 0',
+                    background: 'linear-gradient(to right, #3e2723, #5d4037)', // Coffee Brown Gradient
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    cursor: 'pointer',
+                    border: '1px solid #795548',
+                    position: 'relative'
+                }}
+            >
+                {/* "Partner" Badge */}
+                <div style={{
+                    position: 'absolute', top: 10, right: 10,
+                    background: '#ffc107', color: 'black',
+                    fontSize: '0.65rem', fontWeight: 'bold',
+                    padding: '2px 6px', borderRadius: '4px',
+                    zIndex: 2
+                }}>
+                    WAITING AREA PARTNER
+                </div>
+
+                <div style={{display: 'flex', alignItems: 'center'}}>
+                    {/* Left: Icon/Image */}
+                    <div style={{
+                        width: '100px', 
+                        height: '100px', 
+                        background: `url(${CAFE_AD.image}) center/cover no-repeat`,
+                        flexShrink: 0
+                    }}></div>
+
+                    {/* Right: Text */}
+                    <div style={{padding: '10px 15px', textAlign: 'left', flex: 1}}>
+                        <h4 style={{margin: '0 0 4px 0', color: '#fff', fontSize: '1rem'}}>
+                            ☕ {CAFE_AD.name}
+                        </h4>
+                        <p style={{margin: 0, fontSize: '0.8rem', color: '#d7ccc8', lineHeight: '1.3'}}>
+                            {CAFE_AD.pitch}
+                        </p>
+                        <div style={{
+                            marginTop: '6px', 
+                            fontSize: '0.7rem', 
+                            color: '#ffc107', 
+                            fontWeight: '600'
+                        }}>
+                            {CAFE_AD.perks}
+                        </div>
+                        
+                        {/* CTA Button Lookalike */}
+                        <div style={{
+                            marginTop: '8px', 
+                            display: 'inline-block',
+                            background: 'rgba(255,255,255,0.2)', 
+                            padding: '4px 8px', 
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            color: 'white'
+                        }}>
+                            📍 Tap for Location
+                        </div>
+                    </div>
+                </div>
+            </div>
                 <ul className="queue-list live">
                     {isQueueLoading ? (
                         <>
@@ -3576,6 +3769,88 @@ return (
                 onClose={() => setIsMyReportsOpen(false)} 
                 userId={session.user.id} 
             />
+        {/* --- PRODUCT DETAIL MODAL (POPS OVER EVERYTHING) --- */}
+        {viewProduct && (
+            <div className="modal-overlay" style={{zIndex: 2000}} onClick={() => setViewProduct(null)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{maxWidth: '350px'}}>
+                    
+                    {/* Header / Image Area */}
+                    <div style={{
+                        background: viewProduct.theme.background, 
+                        padding: '20px', 
+                        textAlign: 'center',
+                        borderBottom: `1px solid ${viewProduct.theme.border}`,
+                        borderTopLeftRadius: '12px',
+                        borderTopRightRadius: '12px'
+                    }}>
+                        <img 
+                            src={viewProduct.image} 
+                            alt={viewProduct.title} 
+                            style={{
+                                width: '120px', 
+                                height: '120px', 
+                                borderRadius: '10px', 
+                                objectFit: 'cover', 
+                                border: '4px solid white',
+                                boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                                backgroundColor: '#fff'
+                            }} 
+                        />
+                        <h2 style={{
+                            margin: '15px 0 5px 0', 
+                            color: viewProduct.theme.text,
+                            fontSize: '1.5rem'
+                        }}>
+                            {viewProduct.title}
+                        </h2>
+                        <span style={{
+                            background: viewProduct.theme.badgeBg,
+                            color: 'white',
+                            padding: '4px 10px',
+                            borderRadius: '20px',
+                            fontSize: '0.8rem',
+                            fontWeight: 'bold'
+                        }}>
+                            {viewProduct.badge}
+                        </span>
+                    </div>
+
+                    {/* Details Body */}
+                    <div className="modal-body" style={{textAlign: 'left', padding: '20px'}}>
+                        <p style={{fontSize: '1rem', lineHeight: '1.6', color: 'var(--text-primary)'}}>
+                            {viewProduct.description}
+                        </p>
+                        
+                        <div style={{
+                            marginTop: '20px', 
+                            padding: '15px', 
+                            background: 'var(--bg-dark)', 
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <span style={{color: 'var(--text-secondary)'}}>Price:</span>
+                            <strong style={{fontSize: '1.4rem', color: 'var(--primary-orange)'}}>
+                                {viewProduct.price}
+                            </strong>
+                        </div>
+                        
+                        <p style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '15px', textAlign: 'center'}}>
+                            To buy this, simply show this screen to the barber at the counter.
+                        </p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="modal-footer single-action">
+                        <button onClick={() => setViewProduct(null)} className="btn btn-primary btn-full-width">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
 );
 }
