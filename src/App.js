@@ -1073,6 +1073,22 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
         }
     };
 
+    const handleRejectAppointment = async (apptId) => {
+        const reason = prompt("Reason for cancellation? (e.g., Emergency, Shop Closed)");
+        if (!reason) return; // Stop if they cancel the prompt
+
+        try {
+            await axios.put(`${API_URL}/appointments/reject`, {
+                appointmentId: apptId,
+                reason: reason
+            });
+            alert("Appointment cancelled. Customer has been notified.");
+            fetchBarberAppointments(); // Refresh the list
+        } catch (err) {
+            alert("Failed to cancel appointment.");
+        }
+    };
+
     const handleLoyaltyCheck = async (customer) => {
         if (!customer.customer_email) {
             setModalState({ 
@@ -1792,38 +1808,52 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                                         
                                         return (
                                             <li key={appt.id} style={{
-                                                display: 'flex', 
-                                                flexDirection: 'column', 
-                                                gap: '5px',
-                                                borderLeft: isToday ? '4px solid var(--primary-orange)' : '4px solid var(--text-secondary)',
-                                                opacity: appt.is_converted_to_queue ? 0.6 : 1,
-                                                padding: '10px',
-                                                marginBottom: '10px',
-                                                background: 'var(--bg-dark)',
-                                                borderRadius: '6px'
-                                            }}>
-                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                                    <strong style={{fontSize:'1.1rem', color: isToday ? 'var(--primary-orange)' : 'var(--text-primary)'}}>
-                                                        {dateObj.toLocaleDateString([], {weekday: 'short', month:'short', day:'numeric'})}
-                                                    </strong>
-                                                    <span style={{fontSize:'1.1rem', fontWeight:'bold'}}>
-                                                        {dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            display: 'flex', 
+                                            flexDirection: 'column', 
+                                            gap: '10px',
+                                            borderLeft: isToday ? '4px solid var(--primary-orange)' : '4px solid var(--text-secondary)',
+                                            opacity: appt.is_converted_to_queue ? 0.6 : 1,
+                                            padding: '10px',
+                                            marginBottom: '10px',
+                                            background: 'var(--bg-dark)',
+                                            borderRadius: '6px',
+                                            textAlign: 'center'
+                                        }}>
+                                            {/* Date & Time */}
+                                            <div style={{display:'flex', justifyContent:'center', alignItems:'center', gap: '10px'}}>
+                                                <strong style={{fontSize:'1.1rem', color: isToday ? 'var(--primary-orange)' : 'var(--text-primary)'}}>
+                                                    {dateObj.toLocaleDateString([], {weekday: 'short', month:'short', day:'numeric'})}
+                                                </strong>
+                                                <span style={{fontSize:'1.1rem', fontWeight:'bold'}}>
+                                                    {dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* Customer Name */}
+                                            <div style={{fontSize:'1rem'}}>
+                                                👤 <strong>{appt.customer_name}</strong>
+                                            </div>
+                                            
+                                            {/* Service & Action Row */}
+                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'5px', gap:'10px'}}>
+                                                <span style={{fontSize:'0.9rem', color:'var(--text-secondary)'}}>✂️ {appt.services?.name}</span>
+                                                
+                                                {appt.is_converted_to_queue ? (
+                                                    <span style={{color: 'var(--success-color)', fontWeight:'bold', fontSize:'0.75rem'}}>
+                                                        (IN QUEUE)
                                                     </span>
-                                                </div>
-                                                
-                                                <div style={{fontSize:'1rem'}}>
-                                                    👤 <strong>{appt.customer_name}</strong>
-                                                </div>
-                                                
-                                                <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.9rem', color:'var(--text-secondary)'}}>
-                                                    <span>✂️ {appt.services?.name}</span>
-                                                    {appt.is_converted_to_queue && (
-                                                        <span style={{color: 'var(--success-color)', fontWeight:'bold', fontSize:'0.75rem'}}>
-                                                            IN QUEUE ✅
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </li>
+                                                ) : (
+                                                    /* ▼▼▼ REJECT BUTTON ▼▼▼ */
+                                                    <button 
+                                                        onClick={() => handleRejectAppointment(appt.id)}
+                                                        className="btn btn-danger"
+                                                        style={{padding: '4px 10px', fontSize: '0.75rem', minHeight: '30px'}}
+                                                    >
+                                                        ❌ Reject
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </li>
                                         );
                                     })}
                                 </ul>
