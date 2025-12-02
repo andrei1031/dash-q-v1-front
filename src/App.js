@@ -1870,19 +1870,37 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     );
 }
 const handleLogout = async (userId) => {
-    try {
-        await axios.put(`${API_URL}/logout/flag`, { userId });
-        console.log("Server status updated successfully.");
-    } catch (error) {
-        console.error("Warning: Failed to clear barber availability status on server.", error.message);
+    // 1. Clear Server Availability Flag (Barbers only)
+    if (userId) {
+        try {
+            await axios.put(`${API_URL}/logout/flag`, { userId });
+            console.log("Server status updated successfully.");
+        } catch (error) {
+            console.warn("Warning: Failed to clear barber availability status on server.", error.message);
+        }
     }
 
-    const { error: signOutError } = await supabase.auth.signOut();
+    // 2. CHECK SESSION BEFORE SIGNING OUT
+    // This prevents the "403 Forbidden" error if the token is already dead.
+    const { data: { session } } = await supabase.auth.getSession();
 
-    if (signOutError) {
-        console.warn("Standard Supabase signout failed (403 Forbidden). Forcing local session clear.");
-        await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
+    if (session) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+            console.warn("Supabase signout warning:", signOutError.message);
+        }
+    } else {
+        console.log("Session already expired. Clearing local state only.");
     }
+
+    // 3. Force Local Cleanup (Always do this)
+    localStorage.clear(); // Clear all app state (IDs, queue position, etc)
+    
+    // Force a "hard" session clear in Supabase client just in case
+    await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
+    
+    // Reload to reset all React states cleanly
+    window.location.reload();
 };
 // ##############################################
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
