@@ -3058,7 +3058,7 @@ return (
                     }}>
                         <div className="modal-body">
                             <h2>Service Complete!</h2>
-                            <p>Thank you! Please rate your experience with **{currentBarberName}**:</p>
+                            <p>Thank you! Please rate your experience with {currentBarberName}:</p>
                             
                             {/* NEW: Star Rating Input */}
                             <div className="star-rating-input" style={{fontSize: '2rem', marginBottom: '15px'}}>
