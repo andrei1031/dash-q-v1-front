@@ -5,12 +5,13 @@ import { getMessaging } from "firebase/messaging";
 // REPLACE THE VALUES BELOW WITH YOUR FIREBASE PROJECT SETTINGS
 // You can find these in Firebase Console > Project Settings > General > Your Apps > SDK Setup and Configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAR8TbEXRuYTX8_6UAx2DBa9BD1a7LK6U0",
+  authDomain: "dash-q.firebaseapp.com",
+  projectId: "dash-q",
+  storageBucket: "dash-q.firebasestorage.app",
+  messagingSenderId: "172404162598",
+  appId: "1:172404162598:web:f086600da40973430a66e7",
+  measurementId: "G-017W5GCMWL"
 };
 
 // Initialize Firebase

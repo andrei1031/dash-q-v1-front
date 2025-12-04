@@ -1924,7 +1924,6 @@ function CustomerView({ session }) {
     const [customerName] = useState(() => session.user?.user_metadata?.full_name || '');
     const [customerEmail] = useState(() => session.user?.email || '');
     const [message, setMessage] = useState('');
-    const [player_id, setPlayerId] = useState(null);
     const [myQueueEntryId, setMyQueueEntryId] = useState(() => localStorage.getItem('myQueueEntryId') || null);
     const [joinedBarberId, setJoinedBarberId] = useState(() => localStorage.getItem('joinedBarberId') || null);
     const [liveQueue, setLiveQueue] = useState([]);
@@ -2304,7 +2303,6 @@ function CustomerView({ session }) {
                 barber_id: selectedBarberId,
                 reference_image_url: referenceImageUrl || null,
                 service_id: selectedServiceId,
-                player_id: player_id,
                 user_id: session.user.id,
                 is_vip: isVIPToggled,
                 head_count: headCount,
@@ -2657,37 +2655,6 @@ function CustomerView({ session }) {
             catch (error) { console.error('Failed to fetch services:', error); }
         };
         fetchServices();
-    }, []);
-
-    useEffect(() => { // ROBUST OneSignal Setup
-        window.OneSignal = window.OneSignal || [];
-        
-        // --- REMOVED .init() FROM HERE (It is handled in App function) ---
-
-        // 2. Helper to capture ID securely
-        const updatePlayerId = () => {
-            window.OneSignal.push(function() {
-                window.OneSignal.getUserId(function(userId) {
-                    if (userId) {
-                        console.log("✅ OneSignal Player ID captured:", userId);
-                        setPlayerId(userId); // Saves to state
-                    }
-                });
-            });
-        };
-
-        // 3. Check immediately
-        updatePlayerId();
-
-        // 4. LISTEN for "Allow" click
-        window.OneSignal.push(function() {
-            window.OneSignal.on('subscriptionChange', function (isSubscribed) {
-                console.log("🔔 Notification Permission Changed:", isSubscribed);
-                if (isSubscribed) {
-                    updatePlayerId();
-                }
-            });
-        });
     }, []);
 
     useEffect(() => { // Fetch Available Barbers
