@@ -3,14 +3,15 @@ importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
 
 // REPLACE WITH YOUR FIREBASE CONFIG (From Step 1.4)
-firebase.initializeApp({
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-});
+const firebaseConfig = {
+  apiKey: "AIzaSyAR8TbEXRuYTX8_6UAx2DBa9BD1a7LK6U0",
+  authDomain: "dash-q.firebaseapp.com",
+  projectId: "dash-q",
+  storageBucket: "dash-q.firebasestorage.app",
+  messagingSenderId: "172404162598",
+  appId: "1:172404162598:web:f086600da40973430a66e7",
+  measurementId: "G-017W5GCMWL"
+};
 
 const messaging = firebase.messaging();
 
