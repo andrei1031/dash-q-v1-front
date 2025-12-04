@@ -1993,6 +1993,7 @@ function CustomerView({ session }) {
     const [showIOSPrompt, setShowIOSPrompt] = useState(true);
     const [isMyReportsOpen, setIsMyReportsOpen] = useState(false);
     const [viewProduct, setViewProduct] = useState(null);
+    const [fcmToken, setFcmToken] = useState(null);
 
     const fetchMyAppointments = useCallback(async () => {
         if (!session?.user?.id) return;
@@ -2301,9 +2302,10 @@ function CustomerView({ session }) {
                 customer_name: customerName,
                 customer_email: customerEmail,
                 barber_id: selectedBarberId,
-                reference_image_url: referenceImageUrl || null,
                 service_id: selectedServiceId,
                 user_id: session.user.id,
+                player_id: fcmToken, 
+                
                 is_vip: isVIPToggled,
                 head_count: headCount,
             });
@@ -2454,6 +2456,36 @@ function CustomerView({ session }) {
 };
 
     // --- Effects ---
+
+    useEffect(() => {
+        const enablePushNotifications = async () => {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    const currentToken = await getToken(messaging, { 
+                        vapidKey: "YOUR_VAPID_KEY_HERE" 
+                    });
+                    if (currentToken) {
+                        console.log("FCM Token:", currentToken);
+                        setFcmToken(currentToken); // <--- SAVE THIS TO STATE
+                    }
+                }
+            } catch (error) {
+                console.error("Error getting token:", error);
+            }
+        };
+        enablePushNotifications();
+        
+        // Add Listener for Foreground messages (App is open)
+        const unsubscribe = onMessage(messaging, (payload) => {
+            console.log('Foreground Message:', payload);
+            alert(`${payload.notification.title}: ${payload.notification.body}`);
+        });
+        
+        return () => {
+            unsubscribe();
+        }
+    }, []);
 
     useEffect(() => {
     // Only run if we are already in a queue and waiting
