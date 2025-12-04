@@ -1056,6 +1056,38 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
     const [modalError, setModalError] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [reportTargetId, setReportTargetId] = useState(null);
+    const [isApptListOpen, setIsApptListOpen] = useState(false);
+    const [barberAppointments, setBarberAppointments] = useState([]);
+    const [loadingAppts, setLoadingAppts] = useState(false);
+
+    const fetchBarberAppointments = async () => {
+        setLoadingAppts(true);
+        try {
+            const res = await axios.get(`${API_URL}/appointments/barber/${barberId}`);
+            setBarberAppointments(res.data || []);
+            setIsApptListOpen(true);
+        } catch (err) {
+            alert("Failed to load appointments.");
+        } finally {
+            setLoadingAppts(false);
+        }
+    };
+
+    const handleRejectAppointment = async (apptId) => {
+        const reason = prompt("Reason for cancellation? (e.g., Emergency, Shop Closed)");
+        if (!reason) return; // Stop if they cancel the prompt
+
+        try {
+            await axios.put(`${API_URL}/appointments/reject`, {
+                appointmentId: apptId,
+                reason: reason
+            });
+            alert("Appointment cancelled. Customer has been notified.");
+            fetchBarberAppointments(); // Refresh the list
+        } catch (err) {
+            alert("Failed to cancel appointment.");
+        }
+    };
 
     const handleLoyaltyCheck = async (customer) => {
         if (!customer.customer_email) {
@@ -1544,9 +1576,12 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                     </>
                 )}
             </div>
-            <div className="card-footer">
-                 <button onClick={fetchQueueDetails} className="btn btn-secondary btn-full-width btn-icon-label">
-                    <IconRefresh /> Refresh Queue
+            <div className="card-footer" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <button onClick={fetchBarberAppointments} className="btn btn-primary btn-icon-label" disabled={loadingAppts}>
+                    {loadingAppts ? <Spinner /> : '📅 Bookings'}
+                </button>
+                <button onClick={fetchQueueDetails} className="btn btn-secondary btn-icon-label">
+                    <IconRefresh /> Refresh
                 </button>
             </div>
 
@@ -1603,17 +1638,26 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
 
                                     {modalState.data.is_vip && (
                                         <>
-                                            <strong>VIP Fee:</strong> ₱100.00<br/>
+                                            {/* Updated Label for clarity */}
+                                            <div style={{display:'flex', justifyContent:'space-between', color:'var(--primary-orange)'}}>
+                                                <span>VIP / Appointment Fee:</span>
+                                                <span>+ ₱100.00</span>
+                                            </div>
                                         </>
                                     )}
-                                    
-                                    {/* --- NEW: TOTAL DUE CALCULATION --- */}
-                                    <strong style={{fontSize: '1.2rem', color: 'var(--success-color)'}}>
-                                        Total Due: ₱{(
-                                            ((parseFloat(modalState.data.services?.price_php || 0)) * (modalState.data.head_count || 1)) + 
-                                            (modalState.data.is_vip ? 100 : 0)
-                                        ).toFixed(2)}
-                                    </strong>
+
+                                    <hr style={{borderColor:'var(--border-color)', margin:'10px 0'}} />
+
+                                    {/* Total Due Calculation */}
+                                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize: '1.2rem', fontWeight:'bold'}}>
+                                        <span>Total Due:</span>
+                                        <span style={{color: 'var(--success-color)'}}>
+                                            ₱{(
+                                                ((parseFloat(modalState.data.services?.price_php || 0)) * (modalState.data.head_count || 1)) + 
+                                                (modalState.data.is_vip ? 100 : 0)
+                                            ).toFixed(2)}
+                                        </span>
+                                    </div>
                                 </p>
                                 
                                 <div className="form-group">
@@ -1753,23 +1797,119 @@ function BarberDashboard({ barberId, barberName, onCutComplete, session }) {
                     reportedId={reportTargetId}         // <--- Uses reportTargetId
                     userRole="barber"
                 />
+            {isApptListOpen && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'15px'}}>
+                            <h2 style={{margin:0}}>📅 Upcoming Bookings</h2>
+                            <button onClick={() => setIsApptListOpen(false)} className="btn btn-icon"><IconX /></button>
+                        </div>
+                        
+                        <div className="modal-body" style={{textAlign:'left', maxHeight: '60vh', overflowY: 'auto'}}>
+                            {barberAppointments.length === 0 ? (
+                                <p className="empty-text">No upcoming appointments found.</p>
+                            ) : (
+                                <ul className="queue-list">
+                                    {barberAppointments.map((appt) => {
+                                        const dateObj = new Date(appt.scheduled_time);
+                                        // Highlight "Today"
+                                        const isToday = new Date().toDateString() === dateObj.toDateString();
+                                        
+                                        return (
+                                            <li key={appt.id} style={{
+                                            display: 'flex', 
+                                            flexDirection: 'column', 
+                                            gap: '10px',
+                                            borderLeft: isToday ? '4px solid var(--primary-orange)' : '4px solid var(--text-secondary)',
+                                            opacity: appt.is_converted_to_queue ? 0.6 : 1,
+                                            padding: '10px',
+                                            marginBottom: '10px',
+                                            background: 'var(--bg-dark)',
+                                            borderRadius: '6px',
+                                            textAlign: 'center'
+                                        }}>
+                                            {/* Date & Time */}
+                                            <div style={{display:'flex', justifyContent:'center', alignItems:'center', gap: '10px'}}>
+                                                <strong style={{fontSize:'1.1rem', color: isToday ? 'var(--primary-orange)' : 'var(--text-primary)'}}>
+                                                    {dateObj.toLocaleDateString([], {weekday: 'short', month:'short', day:'numeric'})}
+                                                </strong>
+                                                <span style={{fontSize:'1.1rem', fontWeight:'bold'}}>
+                                                    {dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* Customer Name */}
+                                            <div style={{fontSize:'1rem'}}>
+                                                👤 <strong>{appt.customer_name}</strong>
+                                            </div>
+                                            
+                                            {/* Service & Action Row */}
+                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'5px', gap:'10px'}}>
+                                                <span style={{fontSize:'0.9rem', color:'var(--text-secondary)'}}>✂️ {appt.services?.name}</span>
+                                                
+                                                {appt.is_converted_to_queue ? (
+                                                    <span style={{color: 'var(--success-color)', fontWeight:'bold', fontSize:'0.75rem'}}>
+                                                        (IN QUEUE)
+                                                    </span>
+                                                ) : (
+                                                    /* ▼▼▼ REJECT BUTTON ▼▼▼ */
+                                                    <button 
+                                                        onClick={() => handleRejectAppointment(appt.id)}
+                                                        className="btn btn-danger"
+                                                        style={{padding: '4px 10px', fontSize: '0.75rem', minHeight: '30px'}}
+                                                    >
+                                                        ❌ Reject
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </div>
+                        
+                        <div className="modal-footer single-action">
+                            <button onClick={() => setIsApptListOpen(false)} className="btn btn-secondary">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 const handleLogout = async (userId) => {
-    try {
-        await axios.put(`${API_URL}/logout/flag`, { userId });
-        console.log("Server status updated successfully.");
-    } catch (error) {
-        console.error("Warning: Failed to clear barber availability status on server.", error.message);
+    // 1. Clear Server Availability Flag (Barbers only)
+    if (userId) {
+        try {
+            await axios.put(`${API_URL}/logout/flag`, { userId });
+            console.log("Server status updated successfully.");
+        } catch (error) {
+            console.warn("Warning: Failed to clear barber availability status on server.", error.message);
+        }
     }
 
-    const { error: signOutError } = await supabase.auth.signOut();
+    // 2. CHECK SESSION BEFORE SIGNING OUT
+    // This prevents the "403 Forbidden" error if the token is already dead.
+    const { data: { session } } = await supabase.auth.getSession();
 
-    if (signOutError) {
-        console.warn("Standard Supabase signout failed (403 Forbidden). Forcing local session clear.");
-        await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
+    if (session) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+            console.warn("Supabase signout warning:", signOutError.message);
+        }
+    } else {
+        console.log("Session already expired. Clearing local state only.");
     }
+
+    // 3. Force Local Cleanup (Always do this)
+    localStorage.clear(); // Clear all app state (IDs, queue position, etc)
+    
+    // Force a "hard" session clear in Supabase client just in case
+    await supabase.auth.setSession({ access_token: 'expired', refresh_token: 'expired' });
+    
+    // Reload to reset all React states cleanly
+    window.location.reload();
 };
 // ##############################################
 // ##    CUSTOMER-SPECIFIC COMPONENTS        ##
@@ -2265,7 +2405,7 @@ function CustomerView({ session }) {
             description: "Achieve that messy, beach-vibes texture instantly.",
             price: "₱200.00",
             badge: "BEST SELLER",
-            image: "https://placehold.co/100x100/png?text=Spray", // REPLACE THIS URL
+            image: "/IMG_0616.PNG", // REPLACE THIS URL
             theme: { 
                 background: 'linear-gradient(135deg, #fffbeb 0%, #fff3cd 100%)', // Gold Gradient
                 text: '#856404', 
@@ -2279,7 +2419,7 @@ function CustomerView({ session }) {
             description: "Slick back style with high shine and all-day control.",
             price: "₱200.00",
             badge: "BARBER'S CHOICE",
-            image: "https://placehold.co/100x100/png?text=Wax", // REPLACE THIS URL
+            image: "/IMG_0614.PNG", // REPLACE THIS URL
             theme: { 
                 background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)', // Blue Gradient
                 text: '#0d47a1', 
@@ -2290,10 +2430,10 @@ function CustomerView({ session }) {
         {
             id: 'powder',
             title: "Textured Powder",
-            description: "Slick back style with high shine and all-day control.",
+            description: "Instant Volume & Stronghold matte finish.",
             price: "₱100.00",
             badge: "NEW ARRIVAL",
-            image: "https://placehold.co/100x100/png?text=Pomade", // REPLACE THIS URL
+            image: "/IMG_0615.PNG", // REPLACE THIS URL
             theme: { 
                 background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', // Green Gradient
                 text: '#1b5e20', 
@@ -2306,7 +2446,7 @@ function CustomerView({ session }) {
     const CAFE_AD = {
     name: "Safehouse Cafe",
     pitch: "Tired of standing? Wait here instead! nearby cafe",
-    perks: "☕ Free WiFi  •   ₱150 Buy1Take1 Milktea  •  Board Games",
+    perks: "☕ Free WiFi  •   ₱159 Buy1Take1 Milktea  •  Board Games",
     image: "https://placehold.co/400x120/3e2723/ffffff?text=Coffee+Break", // Replace with real cafe photo
     // REPLACE WITH CAFE COORDINATES or Google Maps Link
     locationLink: "https://maps.app.goo.gl/ETUu5bxPA6t2yuSs6" 
@@ -2515,6 +2655,7 @@ function CustomerView({ session }) {
         };
         fetchServices();
     }, []);
+
 
     useEffect(() => { // Fetch Available Barbers
         const loadBarbers = async () => {
@@ -2878,7 +3019,7 @@ return (
                     }}>
                         <div className="modal-body">
                             <h2>Service Complete!</h2>
-                            <p>Thank you! Please rate your experience with **{currentBarberName}**:</p>
+                            <p>Thank you! Please rate your experience with {currentBarberName}:</p>
                             
                             {/* NEW: Star Rating Input */}
                             <div className="star-rating-input" style={{fontSize: '2rem', marginBottom: '15px'}}>
@@ -2972,7 +3113,31 @@ return (
                             <textarea 
                                 value={feedbackText} 
                                 onChange={(e) => setFeedbackText(e.target.value)} 
-                                placeholder="Leave optional comments... (e.g., great service!)"
+                                placeholder="How was your cut? (Optional - e.g. 'Great fade!')"
+                                style={{
+                                    width: '100%',
+                                    minHeight: '120px', /* Reasonable height for typing */
+                                    padding: '15px',
+                                    marginTop: '15px',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border-color)',
+                                    background: 'var(--bg-dark)', /* Blends with theme */
+                                    color: 'var(--text-primary)',
+                                    fontSize: '1rem',
+                                    lineHeight: '1.5',
+                                    resize: 'none', /* Prevents user from breaking layout */
+                                    fontFamily: 'inherit',
+                                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.2)', /* Inner shadow depth */
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = 'var(--primary-orange)';
+                                    e.target.style.boxShadow = '0 0 0 3px rgba(255, 149, 0, 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = 'var(--border-color)';
+                                    e.target.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.2)';
+                                }}
                             />
                             {message && <p className="message error small">{message}</p>}
                         </div>
@@ -3271,7 +3436,37 @@ return (
                                 </div>
                             )}
                         </div>
-
+                        {selectedServiceId && (
+                            <div style={{
+                                marginTop: '15px',
+                                padding: '12px',
+                                background: 'rgba(255, 149, 0, 0.1)', // Orange background
+                                border: '1px solid var(--primary-orange)',
+                                borderRadius: '8px',
+                                color: 'var(--primary-orange)',
+                                fontSize: '0.9rem',
+                                textAlign: 'center'
+                            }}>
+                                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px'}}>
+                                    <span>Service Price:</span>
+                                    <strong>₱{services.find(s => s.id.toString() === selectedServiceId)?.price_php}</strong>
+                                </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px'}}>
+                                    <span>Appointment Fee:</span>
+                                    <strong>+ ₱100.00</strong>
+                                </div>
+                                <hr style={{borderColor: 'rgba(255, 149, 0, 0.3)', margin: '5px 0'}} />
+                                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem'}}>
+                                    <strong>Total Estimate:</strong>
+                                    <strong>
+                                        ₱{(parseFloat(services.find(s => s.id.toString() === selectedServiceId)?.price_php || 0) + 100).toFixed(2)}
+                                    </strong>
+                                </div>
+                                <p style={{margin: '8px 0 0 0', fontSize: '0.75rem', opacity: 0.8}}>
+                                    *Fee guarantees your time slot. Payable at the shop.
+                                </p>
+                            </div>
+                        )}
                         <button type="submit" disabled={isLoading || !selectedSlot} className="btn btn-primary btn-full-width" style={{marginTop: '20px'}}>
                             {isLoading ? <Spinner /> : 'Confirm Booking'}
                         </button>
@@ -3280,7 +3475,10 @@ return (
                 
                 {/* FIX: improved message coloring logic */}
                 {message && (
-                    <p className={`message ${/failed|error|required|taken|invalid|missing|please|cannot/i.test(message) ? 'error' : 'success'}`}>
+                    <p className={`message ${
+                        message.toLowerCase().includes('success') ? 'success' : 
+                        /failed|error|required|taken|invalid|missing|please|cannot/i.test(message) ? 'error' : 'success'
+                    }`}>
                         {message}
                     </p>
                 )}
@@ -4002,18 +4200,32 @@ function AdminAppLayout({ session }) {
                                         <div style={{marginTop:'10px'}}>
                                             {/* NEW: Admin Note Input Area */}
                                             <textarea 
-                                                placeholder="Enter resolution notes here (e.g., 'Verified via CCTV', 'First warning')..." 
                                                 value={adminNotes[r.id] || ''}
                                                 onChange={(e) => handleNoteChange(r.id, e.target.value)}
+                                                placeholder="Enter resolution notes here (e.g., 'Verified via CCTV', 'First warning')..."
                                                 style={{
-                                                    width: '100%', 
-                                                    padding: '10px', 
-                                                    marginBottom: '10px', 
-                                                    borderRadius: '6px',
+                                                    width: '100%',
+                                                    minHeight: '120px', /* Reasonable height for typing */
+                                                    padding: '15px',
+                                                    marginTop: '15px',
+                                                    borderRadius: '12px',
                                                     border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-dark)',
+                                                    background: 'var(--bg-dark)', /* Blends with theme */
                                                     color: 'var(--text-primary)',
-                                                    minHeight: '60px'
+                                                    fontSize: '1rem',
+                                                    lineHeight: '1.5',
+                                                    resize: 'none', /* Prevents user from breaking layout */
+                                                    fontFamily: 'inherit',
+                                                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.2)', /* Inner shadow depth */
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                onFocus={(e) => {
+                                                    e.target.style.borderColor = 'var(--primary-orange)';
+                                                    e.target.style.boxShadow = '0 0 0 3px rgba(255, 149, 0, 0.1)';
+                                                }}
+                                                onBlur={(e) => {
+                                                    e.target.style.borderColor = 'var(--border-color)';
+                                                    e.target.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.2)';
                                                 }}
                                             />
                                             
