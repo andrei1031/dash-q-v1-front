@@ -3599,7 +3599,14 @@ return (
 
                     {/* Right: Text */}
                     <div style={{padding: '10px 15px', textAlign: 'left', flex: 1}}>
-                        <h4 style={{margin: '0 0 4px 0', color: '#fff', fontSize: '1rem'}}>
+                        <h4 style={{
+                            margin: '0 0 4px 0', 
+                            color: '#fff', 
+                            fontSize: '1.4rem', /* Increased size because Blanka is naturally small */
+                            fontFamily: 'Blanka, sans-serif', /* <--- APPLY FONT HERE ONLY */
+                            letterSpacing: '2px', /* Blanka looks better with spacing */
+                            textTransform: 'uppercase'
+                        }}>
                             ☕ {CAFE_AD.name}
                         </h4>
                         <p style={{margin: 0, fontSize: '0.8rem', color: '#d7ccc8', lineHeight: '1.3'}}>

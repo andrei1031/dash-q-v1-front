@@ -3,6 +3,13 @@
    =================================================================== */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
+@font-face {
+  font-family: 'Blanka';
+  src: url('./fonts/Blanka-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 /* ===================================================================
    GLOBAL STYLES (Color Variables)
    =================================================================== */
