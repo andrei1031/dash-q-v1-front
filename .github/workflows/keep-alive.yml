@@ -1,0 +1,24 @@
+name: Keep Services Alive
+
+on:
+  schedule:
+    # Runs every 14 minutes (Render sleeps at 15 mins)
+    - cron: "*/14 * * * *"
+  workflow_dispatch: # Allows you to click a button to test it manually
+
+jobs:
+  ping_services:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Wake up n8n (CRITICAL)
+      # We ping the webhook URL because it loads faster than the dashboard
+      # CHANGE THIS URL to your actual n8n webhook URL
+      - name: Wake n8n
+        run: curl -I -A "Mozilla/5.0" --max-time 30 https://n8n-service-9ee1.onrender.com/webhook/dash-queue
+
+      # 2. Wake up Backend (OPTIONAL - READ WARNING BELOW)
+      # WARNING: If you uncomment the line below, you will hit your 750-hour limit in 15 days.
+      # Only do this if you have a Paid Plan or a Separate Render Account for the backend.
+
+      # - name: Wake Backend
+      #   run: curl -I -A "Mozilla/5.0" --max-time 30 https://your-backend-url.onrender.com/api/barbers
