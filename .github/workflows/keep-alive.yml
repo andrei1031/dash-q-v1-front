@@ -14,7 +14,7 @@ jobs:
       # We ping the webhook URL because it loads faster than the dashboard
       # CHANGE THIS URL to your actual n8n webhook URL
       - name: Wake n8n
-        run: curl -I -A "Mozilla/5.0" --max-time 30 https://n8n-service-9ee1.onrender.com/webhook/dash-queue
+        run: curl -I -A "Mozilla/5.0" --max-time 120 https://n8n-service-9ee1.onrender.com/webhook/dash-queue
 
       # 2. Wake up Backend (OPTIONAL - READ WARNING BELOW)
       # WARNING: If you uncomment the line below, you will hit your 750-hour limit in 15 days.
